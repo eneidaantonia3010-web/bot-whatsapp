@@ -1,0 +1,76 @@
+// ============================================
+// WhatsApp Service (Evolution API)
+// ============================================
+
+const WHATSAPP_PHONE_ID = process.env.WHATSAPP_PHONE_ID || '';
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || '';
+
+interface SendMessageOptions {
+  to: string;
+  message: string;
+}
+
+export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): Promise<boolean> {
+  if (!WHATSAPP_PHONE_ID || !WHATSAPP_TOKEN) {
+    console.warn('⚠️ Meta WhatsApp API no configurada. Mensaje no enviado.');
+    console.log(`📱 [DRY RUN] WhatsApp a ${to}: ${message}`);
+    return false;
+  }
+
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_ID}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: to.replace(/[^0-9]/g, ''),
+          type: 'text',
+          text: {
+            preview_url: false,
+            body: message,
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('❌ Meta WhatsApp API error:', error);
+      return false;
+    }
+
+    console.log(`✅ Mensaje de WhatsApp enviado a ${to}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Falló el envío del mensaje de WhatsApp:', error);
+    return false;
+  }
+}
+
+export async function sendWhatsAppNotification(data: {
+  customerName: string;
+  serviceName: string;
+  dateTime: string;
+}): Promise<boolean> {
+  const salonPhone = process.env.SALON_WHATSAPP || '5411555544444';
+  const message = `🔔 *Nuevo turno reservado*\n\n👤 ${data.customerName}\n💇 ${data.serviceName}\n📅 ${data.dateTime}\n\n_Reservado desde la web de Glow Studio_`;
+
+  return sendWhatsAppMessage({ to: salonPhone, message });
+}
+
+export async function sendBookingConfirmation(data: {
+  customerPhone: string;
+  customerName: string;
+  serviceName: string;
+  dateTime: string;
+}): Promise<boolean> {
+  const message = `✨ *¡Hola ${data.customerName}!*\n\nTu turno en *Glow Studio* fue confirmado:\n\n💇 ${data.serviceName}\n📅 ${data.dateTime}\n📍 Av. Corrientes 1234, Buenos Aires\n\n¡Te esperamos! 💕\n\n_Si necesitás cancelar o reprogramar, escribinos por acá._`;
+
+  return sendWhatsAppMessage({ to: data.customerPhone, message });
+}

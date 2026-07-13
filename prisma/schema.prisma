@@ -1,0 +1,138 @@
+// ============================================
+// Glow Studio by Sofia — Prisma Schema
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- ENUMS ----
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum Platform {
+  INSTAGRAM
+  WHATSAPP
+  WEB
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+// ---- MODELS ----
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  role      Role     @default(ADMIN)
+  image     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Service {
+  id           String        @id @default(cuid())
+  name         String
+  description  String?
+  price        Int           // Price in ARS (integer, e.g. 25000)
+  duration     Int           // Duration in minutes
+  category     String        // cabello, unas, facial, tratamientos
+  imageUrl     String?       @map("image_url")
+  active       Boolean       @default(true)
+  order        Int           @default(0)
+  appointments Appointment[]
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@map("services")
+}
+
+model Customer {
+  id           String        @id @default(cuid())
+  name         String
+  phone        String?
+  email        String?
+  instagram    String?
+  notes        String?
+  appointments Appointment[]
+  messages     MessageLog[]
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@map("customers")
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  date          DateTime
+  endDate       DateTime          @map("end_date")
+  status        AppointmentStatus @default(PENDING)
+  notes         String?
+  customerId    String            @map("customer_id")
+  customer      Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId     String            @map("service_id")
+  service       Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  calendarEventId String?         @map("calendar_event_id")
+  source        Platform          @default(WEB)
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  @@index([date])
+  @@index([customerId])
+  @@index([serviceId])
+  @@index([status])
+  @@map("appointments")
+}
+
+model MessageLog {
+  id         String           @id @default(cuid())
+  platform   Platform
+  senderId   String           @map("sender_id")
+  senderName String?          @map("sender_name")
+  message    String
+  response   String?
+  direction  MessageDirection
+  customerId String?          @map("customer_id")
+  customer   Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  metadata   Json?
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  @@index([senderId])
+  @@index([platform])
+  @@index([createdAt])
+  @@map("message_logs")
+}
+
+model GalleryImage {
+  id        String   @id @default(cuid())
+  url       String
+  alt       String?
+  category  String?  // salon, unas, facial, cabello, ambiente
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("gallery_images")
+}

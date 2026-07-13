@@ -1,0 +1,54 @@
+services:
+  # --- Express API (Node.js) ---
+  - type: web
+    name: glow-studio-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: cd apps/api && npm install && npx prisma generate --schema=../../prisma/schema.prisma && npm run build
+    startCommand: cd apps/api && npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: DATABASE_URL
+        sync: false
+      - key: WHATSAPP_PHONE_ID
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WEBHOOK_VERIFY_TOKEN
+        sync: false
+      - key: META_PAGE_ACCESS_TOKEN
+        sync: false
+      - key: BOT_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: GOOGLE_CREDENTIALS
+        sync: false
+      - key: GOOGLE_CALENDAR_ID
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+  # --- Python Bot (FastAPI) ---
+  - type: web
+    name: glow-studio-bot
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: cd apps/bot && pip install -r requirements.txt
+    startCommand: cd apps/bot && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: WHATSAPP_PHONE_ID
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: SALON_WHATSAPP
+        sync: false

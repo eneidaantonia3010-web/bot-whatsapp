@@ -1,0 +1,32 @@
+{
+  "name": "glow-studio-by-sofia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Glow Studio by Sofia — Premium Beauty Salon Web Application",
+  "scripts": {
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:api": "cd apps/api && npm run dev",
+    "dev:bot": "cd apps/bot && python main.py",
+    "build:web": "cd apps/web && npm run build",
+    "build:api": "cd apps/api && npm run build",
+    "install:web": "cd apps/web && npm install",
+    "install:api": "cd apps/api && npm install",
+    "install:bot": "cd apps/bot && pip install -r requirements.txt",
+    "install:all": "npm run install:web && npm run install:api",
+    "db:generate": "npx prisma generate",
+    "db:push": "npx prisma db push",
+    "db:seed": "npx tsx prisma/seed.ts",
+    "db:studio": "npx prisma studio",
+    "db:migrate": "npx prisma migrate dev",
+    "db:reset": "npx prisma migrate reset",
+    "postinstall": "npx prisma generate"
+  },
+  "dependencies": {
+    "prisma": "^6.9.0",
+    "@prisma/client": "^6.9.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

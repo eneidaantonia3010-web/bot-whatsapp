@@ -146,7 +146,7 @@ appointmentsRouter.patch('/:id', async (req: Request, res: Response) => {
     const { status, notes } = req.body;
 
     const appointment = await prisma.appointment.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: { status, notes },
       include: {
         customer: true,

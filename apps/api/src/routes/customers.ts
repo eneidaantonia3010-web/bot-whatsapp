@@ -43,7 +43,7 @@ customersRouter.get('/', async (req: Request, res: Response) => {
 customersRouter.get('/:id', async (req: Request, res: Response) => {
   try {
     const customer = await prisma.customer.findUnique({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       include: {
         appointments: {
           include: { service: true },

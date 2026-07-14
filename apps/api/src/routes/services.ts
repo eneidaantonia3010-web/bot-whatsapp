@@ -25,7 +25,7 @@ servicesRouter.get('/', async (_req: Request, res: Response) => {
 servicesRouter.get('/:id', async (req: Request, res: Response) => {
   try {
     const service = await prisma.service.findUnique({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
     });
     if (!service) {
       return res.status(404).json({ error: 'Service not found' });
@@ -55,7 +55,7 @@ servicesRouter.post('/', async (req: Request, res: Response) => {
 servicesRouter.patch('/:id', async (req: Request, res: Response) => {
   try {
     const service = await prisma.service.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: req.body,
     });
     res.json(service);

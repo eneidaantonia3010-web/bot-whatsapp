@@ -5,5 +5,5 @@
   "installCommand": "npm install && cd apps/web && npm install",
   "buildCommand": "cd apps/web && npm run build",
   "devCommand": "cd apps/web && npm run dev",
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- apps/web/"
+  "ignoreCommand": "exit 1"
 }

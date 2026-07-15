@@ -207,7 +207,7 @@ appointmentsRouter.get('/availability', async (req: Request, res: Response) => {
         }
 
         // Check against existing appointments
-        const hasConflict = existing.some((apt) => {
+        const hasConflict = existing.some((apt: any) => {
           const aptStart = new Date(apt.date);
           const aptEnd = new Date(apt.endDate);
           return slotStart < aptEnd && slotEnd > aptStart;

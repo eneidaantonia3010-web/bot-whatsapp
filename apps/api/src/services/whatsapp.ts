@@ -74,3 +74,25 @@ export async function sendBookingConfirmation(data: {
 
   return sendWhatsAppMessage({ to: data.customerPhone, message });
 }
+
+export async function sendSalonUpcomingAlert(data: {
+  customerName: string;
+  serviceName: string;
+  timeStr: string;
+}): Promise<boolean> {
+  const salonPhone = process.env.SALON_WHATSAPP || '5411555544444';
+  const message = `⏳ *¡Turno en 45 minutos!*\n\n👤 ${data.customerName}\n💇 ${data.serviceName}\n⏰ ${data.timeStr}\n\n_El sistema le acaba de enviar un mensaje automático a la clienta para que confirme su asistencia._`;
+
+  return sendWhatsAppMessage({ to: salonPhone, message });
+}
+
+export async function sendCustomerReminder(data: {
+  customerPhone: string;
+  customerName: string;
+  serviceName: string;
+  timeStr: string;
+}): Promise<boolean> {
+  const message = `✨ *¡Hola ${data.customerName}!*\n\nTe recordamos que en aprox. 45 minutos tenés tu turno en *Glow Studio*:\n\n💇 ${data.serviceName}\n⏰ ${data.timeStr}\n\n👉 *Por favor, respondé este mensaje con un "Sí" para confirmar tu asistencia*, o avisanos si tenés algún inconveniente.\n\n¡Te esperamos! 💕`;
+
+  return sendWhatsAppMessage({ to: data.customerPhone, message });
+}

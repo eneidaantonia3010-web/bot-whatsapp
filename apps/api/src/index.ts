@@ -14,6 +14,7 @@ import { messagesRouter } from './routes/messages';
 import { adminRouter } from './routes/admin';
 import { instagramWebhookRouter } from './routes/webhooks/instagram';
 import { whatsappWebhookRouter } from './routes/webhooks/whatsapp';
+import { initCronJobs } from './services/cron';
 
 dotenv.config({ path: '../../.env' });
 dotenv.config({ path: '../../.env.local' });
@@ -65,6 +66,9 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 app.listen(PORT, () => {
   console.log(`\n✨ Glow Studio API running on http://localhost:${PORT}`);
   console.log(`📋 Health check: http://localhost:${PORT}/api/health\n`);
+  
+  // Initialize scheduled tasks
+  initCronJobs();
 });
 
 export default app;

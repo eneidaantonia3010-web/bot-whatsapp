@@ -37,7 +37,7 @@ adminRouter.get('/metrics', async (_req: Request, res: Response) => {
       },
       include: { service: true },
     });
-    const revenueThisMonth = revenueAppointments.reduce((sum, apt) => sum + apt.service.price, 0);
+    const revenueThisMonth = revenueAppointments.reduce((sum: number, apt: any) => sum + apt.service.price, 0);
 
     // Pending appointments
     const pendingAppointments = await prisma.appointment.count({

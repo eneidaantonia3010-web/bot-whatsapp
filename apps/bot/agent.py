@@ -268,8 +268,8 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                 name = conv["customer_name"]
                 phone = conv["customer_phone"]
 
-                # Create appointment via API
-                appointment_date = f"{date_str}T{time_str}:00"
+                # Create appointment via API (Adding -03:00 for Argentina Timezone)
+                appointment_date = f"{date_str}T{time_str}:00-03:00"
                 result = await create_appointment_via_api(
                     date=appointment_date,
                     service_id=service["id"],

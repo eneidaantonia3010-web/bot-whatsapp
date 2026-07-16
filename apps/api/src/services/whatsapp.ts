@@ -64,15 +64,78 @@ export async function sendWhatsAppNotification(data: {
   return sendWhatsAppMessage({ to: salonPhone, message });
 }
 
+interface SendTemplateOptions {
+  to: string;
+  templateName: string;
+  languageCode: string;
+  components: any[];
+}
+
+export async function sendWhatsAppTemplate({ to, templateName, languageCode, components }: SendTemplateOptions): Promise<boolean> {
+  if (!WHATSAPP_PHONE_ID || !WHATSAPP_TOKEN) {
+    console.warn('⚠️ Meta WhatsApp API no configurada. Plantilla no enviada.');
+    return false;
+  }
+
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_ID}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: to.replace(/[^0-9]/g, ''),
+          type: 'template',
+          template: {
+            name: templateName,
+            language: {
+              code: languageCode
+            },
+            components: components
+          }
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('❌ Meta WhatsApp Template error:', error);
+      return false;
+    }
+
+    console.log(`✅ Plantilla de WhatsApp enviada a ${to}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Falló el envío de la plantilla de WhatsApp:', error);
+    return false;
+  }
+}
+
 export async function sendBookingConfirmation(data: {
   customerPhone: string;
   customerName: string;
   serviceName: string;
   dateTime: string;
 }): Promise<boolean> {
-  const message = `✨ *¡Hola ${data.customerName}!*\n\nTu turno en *Glow Studio* fue confirmado:\n\n💇 ${data.serviceName}\n📅 ${data.dateTime}\n📍 Av. Corrientes 1234, Buenos Aires\n\n¡Te esperamos! 💕\n\n_Si necesitás cancelar o reprogramar, escribinos por acá._`;
-
-  return sendWhatsAppMessage({ to: data.customerPhone, message });
+  return sendWhatsAppTemplate({
+    to: data.customerPhone,
+    templateName: 'confirmacion_turno',
+    languageCode: 'es',
+    components: [
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: data.customerName },
+          { type: 'text', text: data.serviceName },
+          { type: 'text', text: data.dateTime }
+        ]
+      }
+    ]
+  });
 }
 
 export async function sendSalonUpcomingAlert(data: {

@@ -2,8 +2,9 @@
 // WhatsApp Service (Evolution API)
 // ============================================
 
-const WHATSAPP_PHONE_ID = process.env.WHATSAPP_PHONE_ID || '';
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || '';
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || '';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+const INSTANCE_NAME = process.env.INSTANCE_NAME || 'GlowStudio';
 
 interface SendMessageOptions {
   to: string;
@@ -11,41 +12,35 @@ interface SendMessageOptions {
 }
 
 export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): Promise<boolean> {
-  if (!WHATSAPP_PHONE_ID || !WHATSAPP_TOKEN) {
-    console.warn('⚠️ Meta WhatsApp API no configurada. Mensaje no enviado.');
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+    console.warn('⚠️ Evolution API no configurada. Mensaje no enviado.');
     console.log(`📱 [DRY RUN] WhatsApp a ${to}:\n${message}`);
     return false;
   }
 
   try {
     const response = await fetch(
-      `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_ID}/messages`,
+      `${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+          'apikey': EVOLUTION_API_KEY,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: to.replace(/[^0-9]/g, ''),
-          type: 'text',
-          text: {
-            preview_url: false,
-            body: message,
-          },
+          number: to.replace(/[^0-9]/g, ''),
+          text: message,
         }),
       }
     );
 
     if (!response.ok) {
       const error = await response.text();
-      console.error('❌ Meta WhatsApp API error:', error);
+      console.error('❌ Evolution API error:', error);
       return false;
     }
 
-    console.log(`✅ Mensaje de WhatsApp enviado a ${to}`);
+    console.log(`✅ Mensaje enviado a ${to}`);
     return true;
   } catch (error) {
     console.error('❌ Falló el envío del mensaje de WhatsApp:', error);
@@ -64,77 +59,17 @@ export async function sendWhatsAppNotification(data: {
   return sendWhatsAppMessage({ to: salonPhone, message });
 }
 
-interface SendTemplateOptions {
-  to: string;
-  templateName: string;
-  languageCode: string;
-  components: any[];
-}
-
-export async function sendWhatsAppTemplate({ to, templateName, languageCode, components }: SendTemplateOptions): Promise<boolean> {
-  if (!WHATSAPP_PHONE_ID || !WHATSAPP_TOKEN) {
-    console.warn('⚠️ Meta WhatsApp API no configurada. Plantilla no enviada.');
-    return false;
-  }
-
-  try {
-    const response = await fetch(
-      `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_ID}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: to.replace(/[^0-9]/g, ''),
-          type: 'template',
-          template: {
-            name: templateName,
-            language: {
-              code: languageCode
-            },
-            components: components
-          }
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('❌ Meta WhatsApp Template error:', error);
-      return false;
-    }
-
-    console.log(`✅ Plantilla de WhatsApp enviada a ${to}`);
-    return true;
-  } catch (error) {
-    console.error('❌ Falló el envío de la plantilla de WhatsApp:', error);
-    return false;
-  }
-}
-
 export async function sendBookingConfirmation(data: {
   customerPhone: string;
   customerName: string;
   serviceName: string;
   dateTime: string;
 }): Promise<boolean> {
-  return sendWhatsAppTemplate({
+  const message = `✨ *¡Hola ${data.customerName}!*\n\nTu turno en *Glow Studio* está confirmado:\n\n💇 *Servicio:* ${data.serviceName}\n📅 *Fecha y Hora:* ${data.dateTime}\n\n¡Te esperamos con muchas ganas! 💕`;
+  
+  return sendWhatsAppMessage({
     to: data.customerPhone,
-    templateName: 'confirmacion_turno',
-    languageCode: 'es',
-    components: [
-      {
-        type: 'body',
-        parameters: [
-          { type: 'text', text: data.customerName },
-          { type: 'text', text: data.serviceName },
-          { type: 'text', text: data.dateTime }
-        ]
-      }
-    ]
+    message
   });
 }
 

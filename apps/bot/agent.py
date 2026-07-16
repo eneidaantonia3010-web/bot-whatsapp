@@ -283,10 +283,25 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                 response = "Escribí *sí* para confirmar o *no* para cambiar algo 😊"
 
         else:
-            # Fallback to Gemini for any other stage
-            chat = model.start_chat(history=chat_history[:-1])
-            ai_response = chat.send_message(message)
-            response = ai_response.text
+            # Fallback to Groq for any other stage
+            system_msg = "Sos un asistente de salón de belleza. Respondé a la consulta amablemente, de forma muy breve y en español de Argentina."
+            ai_response = None
+            groq_keys = [k.strip() for k in os.getenv("GROQ_API_KEY", os.getenv("GEMINI_API_KEY", "")).split(",") if k.strip()]
+            if not groq_keys: groq_keys = [""]
+            
+            for key in groq_keys:
+                try:
+                    client = Groq(api_key=key)
+                    msgs = [{"role": "system", "content": system_msg}] + [
+                        {"role": m["role"], "content": m["parts"][0]} for m in chat_history[-3:]
+                    ]
+                    comp = client.chat.completions.create(messages=msgs, model="llama-3.1-8b-instant")
+                    ai_response = comp.choices[0].message.content
+                    break
+                except Exception:
+                    continue
+                    
+            response = ai_response if ai_response else "¡Hola! ¿En qué te puedo ayudar? 💕"
 
     except Exception as e:
         print(f"❌ Agent error: {e}")

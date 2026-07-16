@@ -2,8 +2,9 @@
 // WhatsApp Service (Evolution API)
 // ============================================
 
-const WHATSAPP_PHONE_ID = process.env.WHATSAPP_PHONE_ID || '';
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || '';
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || '';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || 'Restrepo';
 
 interface SendMessageOptions {
   to: string;
@@ -11,37 +12,37 @@ interface SendMessageOptions {
 }
 
 export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): Promise<boolean> {
-  if (!WHATSAPP_PHONE_ID || !WHATSAPP_TOKEN) {
-    console.warn('⚠️ Meta WhatsApp API no configurada. Mensaje no enviado.');
-    console.log(`📱 [DRY RUN] WhatsApp a ${to}: ${message}`);
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+    console.warn('⚠️ Evolution API no configurada. Mensaje no enviado.');
+    console.log(`📱 [DRY RUN] WhatsApp a ${to}:\n${message}`);
     return false;
   }
 
   try {
-    const response = await fetch(
-      `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_ID}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
-          'Content-Type': 'application/json',
+    const baseUrl = EVOLUTION_API_URL.replace(/\/$/, '');
+    const endpoint = `${baseUrl}/message/sendText/${EVOLUTION_INSTANCE}`;
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'apikey': EVOLUTION_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        number: to.replace(/[^0-9]/g, ''),
+        options: {
+          delay: 1200,
+          presence: "composing"
         },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: to.replace(/[^0-9]/g, ''),
-          type: 'text',
-          text: {
-            preview_url: false,
-            body: message,
-          },
-        }),
-      }
-    );
+        textMessage: {
+          text: message
+        }
+      }),
+    });
 
     if (!response.ok) {
       const error = await response.text();
-      console.error('❌ Meta WhatsApp API error:', error);
+      console.error('❌ Evolution API error:', error);
       return false;
     }
 

@@ -7,49 +7,12 @@ import json
 import re
 from datetime import datetime, timedelta
 from typing import Optional
-
-import google.generativeai as genai
+from groq import Groq
 
 from services.database import get_services, get_service_by_name, get_service_by_index
 from services.calendar import create_appointment_via_api, get_availability
 from services.whatsapp import send_whatsapp_notification
 
-
-# Configure Gemini
-genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
-
-model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
-    system_instruction="""Sos el asistente virtual de Glow Studio by Sofia, un salón de belleza premium en Buenos Aires (Av. Corrientes 1234).
-
-PERSONALIDAD:
-- Cálida, profesional y empática
-- Usás emojis sutiles (✨💇‍♀️💅🧖‍♀️💕📅)
-- Tratás de "vos" (español argentino)
-- Sos vendedora pero no agresiva
-- Si no entendés algo, derivás a humano
-
-INFORMACIÓN DEL SALÓN:
-- Nombre: Glow Studio by Sofia
-- Dirección: Av. Corrientes 1234, Buenos Aires
-- Horarios: Lunes a Sábado de 9:00 a 19:00. Domingos cerrado.
-- WhatsApp: +54 11 5555-4444
-
-FLUJO DE RESERVA:
-1. Saludás y ofrecés el catálogo de servicios
-2. El cliente elige un servicio (por nombre o número)
-3. Preguntás qué día y horario prefiere
-4. Preguntás el nombre completo
-5. Preguntás el teléfono/WhatsApp
-6. Confirmás todos los datos y reservás
-
-REGLAS:
-- Siempre mostrá precios en formato $XX.000
-- Siempre mencioná la duración del servicio
-- Si te preguntan por algo que no es del salón, redirigí amablemente
-- Si el cliente parece frustrado, ofrecé hablar con una persona: "Podés escribirnos por WhatsApp al +54 11 5555-4444 y te atendemos personalmente 💕"
-- Respondé SIEMPRE en español argentino""",
-)
 
 # In-memory conversation state per sender
 conversations: dict[str, dict] = {}
@@ -217,25 +180,27 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
             
             ai_response = None
             last_error = None
-            gemini_keys = [k.strip() for k in os.getenv("GEMINI_API_KEY", "").split(",") if k.strip()]
-            if not gemini_keys:
-                gemini_keys = [""]
+            
+            # Buscamos las llaves de Groq (o si no, GEMINI_API_KEY como fallback temporal)
+            groq_keys = [k.strip() for k in os.getenv("GROQ_API_KEY", os.getenv("GEMINI_API_KEY", "")).split(",") if k.strip()]
+            if not groq_keys:
+                groq_keys = [""]
                 
-            for key in gemini_keys:
+            for key in groq_keys:
                 try:
-                    genai.configure(api_key=key)
-                    temp_model = genai.GenerativeModel(model_name="gemini-2.0-flash")
-                    chat = temp_model.start_chat()
-                    ai_response = chat.send_message(
-                        prompt, 
-                        generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
+                    client = Groq(api_key=key)
+                    chat_completion = client.chat.completions.create(
+                        messages=[{"role": "user", "content": prompt}],
+                        model="llama-3.1-8b-instant",
+                        response_format={"type": "json_object"}
                     )
+                    ai_response = chat_completion.choices[0].message.content
                     break # Success!
                 except Exception as e:
                     error_msg = str(e).lower()
                     print(f"❌ Error with key {key[:8]}...: {e}")
                     last_error = e
-                    if "429" in error_msg or "quota" in error_msg:
+                    if "429" in error_msg or "quota" in error_msg or "rate limit" in error_msg:
                         time.sleep(2)
                         continue
                     else:
@@ -243,14 +208,14 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
 
             if not ai_response:
                 error_msg = str(last_error).lower() if last_error else ""
-                if "429" in error_msg or "quota" in error_msg:
+                if "429" in error_msg or "quota" in error_msg or "rate limit" in error_msg:
                     response = "¡Ups! Me estoy quedando sin energía por un ratito por exceso de mensajes rápidos. 🥺 Por favor, intentá escribirme de nuevo en unos segunditos."
                 else:
                     response = "No logré entender todos los datos. Por favor, decime tu día, hora, nombre y teléfono de nuevo de forma clara 😊"
             else:
                 try:
-                    # Limpiar backticks de markdown por si Gemini los devuelve
-                    raw_text = ai_response.text.strip()
+                    # Limpiar backticks de markdown por si Groq los devuelve
+                    raw_text = ai_response.strip()
                     if raw_text.startswith("```"):
                         raw_text = raw_text.split("\n", 1)[-1]
                         if raw_text.endswith("```"):

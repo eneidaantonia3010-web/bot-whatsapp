@@ -136,12 +136,41 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                 duration_min = service["duration"]
                 if duration_min >= 60:
                     hours = duration_min // 60
-                    f"mostrá el catálogo de nuevo si es necesario. "
-                    f"Servicios: 1.Corte Signature $25.000, 2.Corte Hombre $15.000, "
-                    f"3.Uñas Gel $28.000, 4.Esmaltado Semi $18.000, "
-                    f"5.Facial Glow $35.000, 6.Keratina $45.000"
+                    mins = duration_min % 60
+                    duration = f"{hours}h" + (f" {mins}min" if mins else "")
+                else:
+                    duration = f"{duration_min}min"
+
+                response = (
+                    f"¡Excelente elección! ✨ *{service['name']}* — {price} ({duration})\n\n"
+                    f"Nuestros horarios son Lunes a Sábado de 9:00 a 19:00.\n\n"
+                    f"Podés decirme algo como: _\"martes 14hs\"_ o _\"mañana a las 10\"_"
                 )
-                response = ai_response.text
+                conv["stage"] = "date_selection"
+            else:
+                # Use Groq to understand what they want
+                system_msg = (
+                    "El cliente está intentando elegir un servicio de belleza pero no fue claro. "
+                    "Preguntale amablemente qué servicio quiere del catálogo o ayudalo a elegir. "
+                    "Respondé corto, cálido y en argentino."
+                )
+                ai_response = None
+                groq_keys = [k.strip() for k in os.getenv("GROQ_API_KEY", os.getenv("GEMINI_API_KEY", "")).split(",") if k.strip()]
+                if not groq_keys: groq_keys = [""]
+                
+                for key in groq_keys:
+                    try:
+                        client = Groq(api_key=key)
+                        msgs = [{"role": "system", "content": system_msg}] + [
+                            {"role": m["role"], "content": m["parts"][0]} for m in chat_history[-3:]
+                        ]
+                        comp = client.chat.completions.create(messages=msgs, model="llama-3.1-8b-instant")
+                        ai_response = comp.choices[0].message.content
+                        break
+                    except Exception:
+                        continue
+                
+                response = ai_response if ai_response else "No te entendí bien, ¿me repetís qué servicio buscás? 💕"
 
         elif stage == "date_selection":
             parsed = parse_date(message)

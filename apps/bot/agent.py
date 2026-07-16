@@ -219,7 +219,15 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                     prompt, 
                     generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
                 )
-                data = json.loads(ai_response.text)
+                # Limpiar backticks de markdown por si Gemini los devuelve
+                raw_text = ai_response.text.strip()
+                if raw_text.startswith("```"):
+                    raw_text = raw_text.split("\n", 1)[-1]
+                    if raw_text.endswith("```"):
+                        raw_text = raw_text[:-3]
+                raw_text = raw_text.strip()
+                
+                data = json.loads(raw_text)
                 
                 # Check if all fields are present
                 missing = []
@@ -258,8 +266,12 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                     )
                     conv["stage"] = "confirmation"
             except Exception as e:
-                print(f"❌ Error parsing JSON from Gemini: {e}")
-                response = "No logré entender todos los datos. Por favor, decime tu día, hora, nombre y teléfono de nuevo de forma clara 😊"
+                error_msg = str(e).lower()
+                print(f"❌ Error in details_input: {e}")
+                if "429" in error_msg or "quota" in error_msg:
+                    response = "¡Ups! Me estoy quedando sin energía por un ratito por exceso de mensajes rápidos. 🥺 Por favor, intentá escribirme de nuevo en unos segunditos."
+                else:
+                    response = "No logré entender todos los datos. Por favor, decime tu día, hora, nombre y teléfono de nuevo de forma clara 😊"
 
         elif stage == "confirmation":
             lower = message.lower().strip()

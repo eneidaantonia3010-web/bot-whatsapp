@@ -202,6 +202,7 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
         elif stage == "details_input":
             # Use Gemini to extract date, time, name, and phone
             today_str = datetime.now().strftime("%Y-%m-%d")
+            import time
             prompt = (
                 f"Extrae la fecha, hora, nombre y teléfono del siguiente mensaje del cliente: '{message}'.\n"
                 f"Hoy es {today_str}. Interpreta referencias como 'mañana', 'el viernes', etc., en base a hoy.\n"
@@ -213,70 +214,95 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                 f"  \"phone\": \"Número de teléfono\" (o null)\n"
                 f"}}"
             )
-            chat = model.start_chat()
-            try:
-                ai_response = chat.send_message(
-                    prompt, 
-                    generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
-                )
-                # Limpiar backticks de markdown por si Gemini los devuelve
-                raw_text = ai_response.text.strip()
-                if raw_text.startswith("```"):
-                    raw_text = raw_text.split("\n", 1)[-1]
-                    if raw_text.endswith("```"):
-                        raw_text = raw_text[:-3]
-                raw_text = raw_text.strip()
+            
+            ai_response = None
+            last_error = None
+            gemini_keys = [k.strip() for k in os.getenv("GEMINI_API_KEY", "").split(",") if k.strip()]
+            if not gemini_keys:
+                gemini_keys = [""]
                 
-                data = json.loads(raw_text)
-                
-                # Check if all fields are present
-                missing = []
-                if not data.get("date") or not data.get("time"):
-                    missing.append("qué día y horario te queda mejor")
-                if not data.get("name"):
-                    missing.append("tu nombre completo")
-                if not data.get("phone") or len(str(data.get("phone"))) < 6:
-                    missing.append("un número de teléfono válido")
-                
-                if missing:
-                    missing_text = " y ".join(missing)
-                    response = f"Me faltó un detallito. ¿Me podrías decir {missing_text}? 😊"
-                else:
-                    conv["selected_date"] = data["date"]
-                    conv["selected_time"] = data["time"]
-                    conv["customer_name"] = data["name"]
-                    
-                    # Limpiar el teléfono y agregar el +54 si no lo tiene
-                    phone_str = str(data["phone"])
-                    phone_str = "".join(filter(str.isdigit, phone_str))
-                    if not phone_str.startswith("54"):
-                        phone_str = "54" + phone_str
-                    conv["customer_phone"] = phone_str
-                    
-                    service = conv["selected_service"]
-                    date_obj = datetime.strptime(data["date"], "%Y-%m-%d")
-                    day_names = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-                    month_names = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
-                                   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
-                    display_date = f"{day_names[date_obj.weekday()]} {date_obj.day} de {month_names[date_obj.month - 1]}"
-                    price = f"${service['price']:,}".replace(",", ".")
-
-                    response = (
-                        f"✨ *Resumen de tu turno:*\n\n"
-                        f"💇 Servicio: *{service['name']}*\n"
-                        f"💰 Precio: {price}\n"
-                        f"📅 Fecha: *{display_date} a las {data['time']}hs*\n"
-                        f"👤 Nombre: *{data['name']}*\n"
-                        f"📱 Teléfono: *{data['phone']}*\n\n"
-                        f"¿Confirmamos? Escribí *sí* para reservar 💕"
+            for key in gemini_keys:
+                try:
+                    genai.configure(api_key=key)
+                    temp_model = genai.GenerativeModel(model_name="gemini-2.0-flash")
+                    chat = temp_model.start_chat()
+                    ai_response = chat.send_message(
+                        prompt, 
+                        generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
                     )
-                    conv["stage"] = "confirmation"
-            except Exception as e:
-                error_msg = str(e).lower()
-                print(f"❌ Error in details_input: {e}")
+                    break # Success!
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    print(f"❌ Error with key {key[:8]}...: {e}")
+                    last_error = e
+                    if "429" in error_msg or "quota" in error_msg:
+                        time.sleep(2)
+                        continue
+                    else:
+                        break # Non-quota error, don't retry
+
+            if not ai_response:
+                error_msg = str(last_error).lower() if last_error else ""
                 if "429" in error_msg or "quota" in error_msg:
                     response = "¡Ups! Me estoy quedando sin energía por un ratito por exceso de mensajes rápidos. 🥺 Por favor, intentá escribirme de nuevo en unos segunditos."
                 else:
+                    response = "No logré entender todos los datos. Por favor, decime tu día, hora, nombre y teléfono de nuevo de forma clara 😊"
+            else:
+                try:
+                    # Limpiar backticks de markdown por si Gemini los devuelve
+                    raw_text = ai_response.text.strip()
+                    if raw_text.startswith("```"):
+                        raw_text = raw_text.split("\n", 1)[-1]
+                        if raw_text.endswith("```"):
+                            raw_text = raw_text[:-3]
+                    raw_text = raw_text.strip()
+                    
+                    data = json.loads(raw_text)
+                    
+                    # Check if all fields are present
+                    missing = []
+                    if not data.get("date") or not data.get("time"):
+                        missing.append("qué día y horario te queda mejor")
+                    if not data.get("name"):
+                        missing.append("tu nombre completo")
+                    if not data.get("phone") or len(str(data.get("phone"))) < 6:
+                        missing.append("un número de teléfono válido")
+                    
+                    if missing:
+                        missing_text = " y ".join(missing)
+                        response = f"Me faltó un detallito. ¿Me podrías decir {missing_text}? 😊"
+                    else:
+                        conv["selected_date"] = data["date"]
+                        conv["selected_time"] = data["time"]
+                        conv["customer_name"] = data["name"]
+                        
+                        # Limpiar el teléfono y agregar el +54 si no lo tiene
+                        phone_str = str(data["phone"])
+                        phone_str = "".join(filter(str.isdigit, phone_str))
+                        if not phone_str.startswith("54"):
+                            phone_str = "54" + phone_str
+                        conv["customer_phone"] = phone_str
+                        
+                        service = conv["selected_service"]
+                        date_obj = datetime.strptime(data["date"], "%Y-%m-%d")
+                        day_names = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+                        month_names = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                                       "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+                        display_date = f"{day_names[date_obj.weekday()]} {date_obj.day} de {month_names[date_obj.month - 1]}"
+                        price = f"${service['price']:,}".replace(",", ".")
+    
+                        response = (
+                            f"✨ *Resumen de tu turno:*\n\n"
+                            f"💇 Servicio: *{service['name']}*\n"
+                            f"💰 Precio: {price}\n"
+                            f"📅 Fecha: *{display_date} a las {data['time']}hs*\n"
+                            f"👤 Nombre: *{data['name']}*\n"
+                            f"📱 Teléfono: *{data['phone']}*\n\n"
+                            f"¿Confirmamos? Escribí *sí* para reservar 💕"
+                        )
+                        conv["stage"] = "confirmation"
+                except Exception as e:
+                    print(f"❌ Error in details_input parsing: {e}")
                     response = "No logré entender todos los datos. Por favor, decime tu día, hora, nombre y teléfono de nuevo de forma clara 😊"
 
         elif stage == "confirmation":

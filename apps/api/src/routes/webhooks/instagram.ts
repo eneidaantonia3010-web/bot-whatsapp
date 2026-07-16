@@ -99,8 +99,12 @@ instagramWebhookRouter.post('/', async (req: Request, res: Response) => {
 
 async function sendInstagramReply(recipientId: string, message: string) {
   try {
+    const graphDomain = PAGE_ACCESS_TOKEN.startsWith('IG') 
+      ? 'graph.instagram.com/v21.0' 
+      : 'graph.facebook.com/v18.0';
+
     const response = await fetch(
-      `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+      `https://${graphDomain}/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

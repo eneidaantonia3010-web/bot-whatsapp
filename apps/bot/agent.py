@@ -180,11 +180,12 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
 
                 response = (
                     f"¡Excelente elección! ✨ *{service['name']}* — {price} ({duration})\n\n"
-                    f"📅 ¿Qué día y horario te queda mejor?\n"
-                    f"Nuestros horarios son Lunes a Sábado de 9:00 a 19:00.\n\n"
-                    f"Podés decirme algo como: _\"martes 14hs\"_ o _\"mañana a las 10\"_"
+                    f"Para agilizar tu reserva, por favor decime **en un solo mensaje**:\n"
+                    f"📅 Día y horario (Ej: viernes a las 15hs)\n"
+                    f"👤 Tu nombre completo\n"
+                    f"📱 Tu número de teléfono o WhatsApp"
                 )
-                conv["stage"] = "date_selection"
+                conv["stage"] = "details_input"
             else:
                 # Use Gemini to understand what they want
                 chat = model.start_chat(history=chat_history[:-1])
@@ -198,74 +199,67 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                 )
                 response = ai_response.text
 
-        elif stage == "date_selection":
-            parsed = parse_date(message)
-
-            if parsed:
-                date_str, time_str = parsed
-                conv["selected_date"] = date_str
-                conv["selected_time"] = time_str
-
-                # Format for display
-                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-                day_names = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-                month_names = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
-                               "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
-                display_date = f"{day_names[date_obj.weekday()]} {date_obj.day} de {month_names[date_obj.month - 1]}"
-
-                response = (
-                    f"Perfecto! 📅 *{display_date} a las {time_str}hs*\n\n"
-                    f"Para confirmar tu turno, necesito tu *nombre completo* 😊"
-                )
-                conv["stage"] = "name_input"
-            else:
-                # Use Gemini to help parse or ask again
-                chat = model.start_chat(history=chat_history[:-1])
+        elif stage == "details_input":
+            # Use Gemini to extract date, time, name, and phone
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            prompt = (
+                f"Extrae la fecha, hora, nombre y teléfono del siguiente mensaje del cliente: '{message}'.\n"
+                f"Hoy es {today_str}. Interpreta referencias como 'mañana', 'el viernes', etc., en base a hoy.\n"
+                f"Devuelve ÚNICAMENTE un objeto JSON con esta estructura exacta y claves en inglés:\n"
+                f"{{\n"
+                f"  \"date\": \"YYYY-MM-DD\" (o null si no se entiende),\n"
+                f"  \"time\": \"HH:MM\" (en formato 24h, o null),\n"
+                f"  \"name\": \"Nombre del cliente\" (o null),\n"
+                f"  \"phone\": \"Número de teléfono\" (o null)\n"
+                f"}}"
+            )
+            chat = model.start_chat()
+            try:
                 ai_response = chat.send_message(
-                    f"El cliente escribió: '{message}' para elegir fecha/hora. "
-                    f"No pude parsear la fecha. Pedile amablemente que especifique "
-                    f"el día y horario de otra forma. Ejemplo: 'martes 14hs' o 'mañana a las 10'. "
-                    f"Horarios: Lun-Sáb 9:00-19:00."
+                    prompt, 
+                    generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
                 )
-                response = ai_response.text
+                data = json.loads(ai_response.text)
+                
+                # Check if all fields are present
+                missing = []
+                if not data.get("date") or not data.get("time"):
+                    missing.append("qué día y horario te queda mejor")
+                if not data.get("name"):
+                    missing.append("tu nombre completo")
+                if not data.get("phone") or len(str(data.get("phone"))) < 6:
+                    missing.append("un número de teléfono válido")
+                
+                if missing:
+                    missing_text = " y ".join(missing)
+                    response = f"Me faltó un detallito. ¿Me podrías decir {missing_text}? 😊"
+                else:
+                    conv["selected_date"] = data["date"]
+                    conv["selected_time"] = data["time"]
+                    conv["customer_name"] = data["name"]
+                    conv["customer_phone"] = str(data["phone"])
+                    
+                    service = conv["selected_service"]
+                    date_obj = datetime.strptime(data["date"], "%Y-%m-%d")
+                    day_names = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+                    month_names = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                                   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+                    display_date = f"{day_names[date_obj.weekday()]} {date_obj.day} de {month_names[date_obj.month - 1]}"
+                    price = f"${service['price']:,}".replace(",", ".")
 
-        elif stage == "name_input":
-            name = message.strip()
-            if len(name) >= 2:
-                conv["customer_name"] = name
-                response = (
-                    f"Gracias *{name}* 💕\n\n"
-                    f"Por último, ¿cuál es tu número de teléfono o WhatsApp? 📱\n"
-                    f"_(para enviarte la confirmación)_"
-                )
-                conv["stage"] = "phone_input"
-            else:
-                response = "Necesito tu nombre completo para la reserva. ¿Me lo decís? 😊"
-
-        elif stage == "phone_input":
-            phone = message.strip()
-            if len(phone) >= 6:
-                conv["customer_phone"] = phone
-                service = conv["selected_service"]
-                date_obj = datetime.strptime(conv["selected_date"], "%Y-%m-%d")
-                day_names = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-                month_names = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
-                               "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
-                display_date = f"{day_names[date_obj.weekday()]} {date_obj.day} de {month_names[date_obj.month - 1]}"
-                price = f"${service['price']:,}".replace(",", ".")
-
-                response = (
-                    f"✨ *Resumen de tu turno:*\n\n"
-                    f"💇 Servicio: *{service['name']}*\n"
-                    f"💰 Precio: {price}\n"
-                    f"📅 Fecha: *{display_date} a las {conv['selected_time']}hs*\n"
-                    f"👤 Nombre: *{conv['customer_name']}*\n"
-                    f"📱 Teléfono: *{phone}*\n\n"
-                    f"¿Confirmamos? Escribí *sí* para reservar 💕"
-                )
-                conv["stage"] = "confirmation"
-            else:
-                response = "Necesito un número de teléfono válido. ¿Me lo pasás? 📱"
+                    response = (
+                        f"✨ *Resumen de tu turno:*\n\n"
+                        f"💇 Servicio: *{service['name']}*\n"
+                        f"💰 Precio: {price}\n"
+                        f"📅 Fecha: *{display_date} a las {data['time']}hs*\n"
+                        f"👤 Nombre: *{data['name']}*\n"
+                        f"📱 Teléfono: *{data['phone']}*\n\n"
+                        f"¿Confirmamos? Escribí *sí* para reservar 💕"
+                    )
+                    conv["stage"] = "confirmation"
+            except Exception as e:
+                print(f"❌ Error parsing JSON from Gemini: {e}")
+                response = "No logré entender todos los datos. Por favor, decime tu día, hora, nombre y teléfono de nuevo de forma clara 😊"
 
         elif stage == "confirmation":
             lower = message.lower().strip()

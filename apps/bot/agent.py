@@ -245,7 +245,13 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                     conv["selected_date"] = data["date"]
                     conv["selected_time"] = data["time"]
                     conv["customer_name"] = data["name"]
-                    conv["customer_phone"] = str(data["phone"])
+                    
+                    # Limpiar el teléfono y agregar el +54 si no lo tiene
+                    phone_str = str(data["phone"])
+                    phone_str = "".join(filter(str.isdigit, phone_str))
+                    if not phone_str.startswith("54"):
+                        phone_str = "54" + phone_str
+                    conv["customer_phone"] = phone_str
                     
                     service = conv["selected_service"]
                     date_obj = datetime.strptime(data["date"], "%Y-%m-%d")

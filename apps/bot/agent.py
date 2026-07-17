@@ -234,11 +234,11 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
             phone_str = "".join(filter(str.isdigit, phone))
             
             if len(phone_str) >= 8:
-                # Automáticamente agregar 549 para números de Argentina
-                if phone_str.startswith("54") and not phone_str.startswith("549"):
-                    phone_str = "549" + phone_str[2:]
+                # WhatsApp (Evolution) requiere 54 sin el 9 para Argentina
+                if phone_str.startswith("549"):
+                    phone_str = "54" + phone_str[3:]
                 elif not phone_str.startswith("54"):
-                    phone_str = "549" + phone_str
+                    phone_str = "54" + phone_str
                 
                 conv["customer_phone"] = phone_str
                 service = conv["selected_service"]

@@ -4,7 +4,7 @@
 
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || '';
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
-const INSTANCE_NAME = process.env.INSTANCE_NAME || 'GlowStudioBot';
+const INSTANCE_NAME = process.env.INSTANCE_NAME || 'glowbot';
 
 interface SendMessageOptions {
   to: string;

@@ -13,6 +13,18 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
 
     const body = req.body;
     
+    try {
+      await prisma.messageLog.create({
+        data: {
+          platform: 'WHATSAPP',
+          senderId: 'DEBUG',
+          senderName: 'DEBUG',
+          message: JSON.stringify(body).substring(0, 1000),
+          direction: 'INBOUND',
+        },
+      });
+    } catch(e) {}
+    
     // Solo procesar nuevos mensajes
     if (body.event !== 'messages.upsert') return;
 

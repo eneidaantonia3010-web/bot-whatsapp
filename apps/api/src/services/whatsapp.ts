@@ -18,6 +18,11 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): 
     return false;
   }
 
+  let formattedNumber = to.replace(/[^0-9]/g, '');
+  if (formattedNumber.startsWith('549') && formattedNumber.length >= 12) {
+    formattedNumber = '54' + formattedNumber.substring(3);
+  }
+
   try {
     const response = await fetch(
       `${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`,
@@ -28,7 +33,7 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): 
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          number: to,
+          number: formattedNumber,
           text: message,
         }),
       }

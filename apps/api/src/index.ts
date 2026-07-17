@@ -14,6 +14,7 @@ import { messagesRouter } from './routes/messages';
 import { adminRouter } from './routes/admin';
 import { instagramWebhookRouter } from './routes/webhooks/instagram';
 import { whatsappWebhookRouter } from './routes/webhooks/whatsapp';
+import { evolutionWebhookRouter } from './routes/webhooks/evolution';
 import { initCronJobs } from './services/cron';
 
 dotenv.config({ path: '../../.env' });
@@ -45,6 +46,7 @@ app.use('/api/messages', messagesRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/webhooks/instagram', instagramWebhookRouter);
 app.use('/api/webhooks/whatsapp', whatsappWebhookRouter);
+app.use('/api/webhooks/evolution', evolutionWebhookRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

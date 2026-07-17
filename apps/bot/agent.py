@@ -233,9 +233,12 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
             phone = message.strip()
             phone_str = "".join(filter(str.isdigit, phone))
             
-            if len(phone_str) >= 6:
-                if not phone_str.startswith("54"):
-                    phone_str = "54" + phone_str
+            if len(phone_str) >= 8:
+                # Automáticamente agregar 549 para números de Argentina
+                if phone_str.startswith("54") and not phone_str.startswith("549"):
+                    phone_str = "549" + phone_str[2:]
+                elif not phone_str.startswith("54"):
+                    phone_str = "549" + phone_str
                 
                 conv["customer_phone"] = phone_str
                 service = conv["selected_service"]

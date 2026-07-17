@@ -8,14 +8,11 @@ import os
 import httpx
 
 
-# Credenciales de la API de Meta (WhatsApp Cloud API)
-WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID", "")
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
-SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5411555544444")
-
-# URL base de la API de Meta Graph
-GRAPH_API_URL = f"https://graph.facebook.com/v18.0/{WHATSAPP_PHONE_ID}/messages"
-
+# Credenciales de Evolution API
+EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "")
+EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "")
+INSTANCE_NAME = os.getenv("INSTANCE_NAME", "GlowStudio")
+SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491155554444")
 
 async def send_whatsapp_notification(
     customer_name: str,
@@ -34,35 +31,33 @@ async def send_whatsapp_notification(
 
 
 async def send_message(to: str, text: str) -> bool:
-    """Envía un mensaje de WhatsApp usando la API oficial de Meta (Cloud API)."""
-    if not WHATSAPP_PHONE_ID or not WHATSAPP_TOKEN:
+    """Envía un mensaje usando Evolution API."""
+    if not EVOLUTION_API_URL or not EVOLUTION_API_KEY:
         print(f"📱 [DRY RUN] WA to {to}: {text}")
         return False
 
     # Limpiar el número de destino (solo dígitos)
     clean_number = to.replace("+", "").replace(" ", "").replace("-", "")
+    
+    # Asegurar el formato 549 para Argentina
+    if clean_number.startswith("54") and not clean_number.startswith("549") and len(clean_number) >= 12:
+        clean_number = clean_number[:2] + "9" + clean_number[2:]
 
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                GRAPH_API_URL,
+                f"{EVOLUTION_API_URL}/message/sendText/{INSTANCE_NAME}",
                 headers={
-                    "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+                    "apikey": EVOLUTION_API_KEY,
                     "Content-Type": "application/json",
                 },
                 json={
-                    "messaging_product": "whatsapp",
-                    "recipient_type": "individual",
-                    "to": clean_number,
-                    "type": "text",
-                    "text": {
-                        "preview_url": False,
-                        "body": text,
-                    },
+                    "number": clean_number,
+                    "text": text,
                 },
                 timeout=10.0,
             )
-            if response.status_code == 200:
+            if response.status_code in [200, 201]:
                 print(f"✅ WA message sent to {to}")
                 return True
             else:

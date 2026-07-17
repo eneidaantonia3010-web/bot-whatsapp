@@ -53,7 +53,7 @@ export async function sendWhatsAppNotification(data: {
   serviceName: string;
   dateTime: string;
 }): Promise<boolean> {
-  const salonPhone = process.env.SALON_WHATSAPP || '5411555544444';
+  const salonPhone = process.env.SALON_WHATSAPP || '5491178296781';
   const message = `🔔 *Nuevo turno reservado*\n\n👤 ${data.customerName}\n💇 ${data.serviceName}\n📅 ${data.dateTime}\n\n_Reservado desde la web de Glow Studio_`;
 
   return sendWhatsAppMessage({ to: salonPhone, message });
@@ -78,7 +78,7 @@ export async function sendSalonUpcomingAlert(data: {
   serviceName: string;
   timeStr: string;
 }): Promise<boolean> {
-  const salonPhone = process.env.SALON_WHATSAPP || '5411555544444';
+  const salonPhone = process.env.SALON_WHATSAPP || '5491178296781';
   const message = `⏳ *¡Turno en 45 minutos!*\n\n👤 ${data.customerName}\n💇 ${data.serviceName}\n⏰ ${data.timeStr}\n\n_El sistema le acaba de enviar un mensaje automático a la clienta para que confirme su asistencia._`;
 
   return sendWhatsAppMessage({ to: salonPhone, message });

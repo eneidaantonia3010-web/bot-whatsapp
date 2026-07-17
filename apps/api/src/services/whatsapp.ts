@@ -28,7 +28,7 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): 
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          number: to.replace(/[^0-9]/g, ''),
+          number: to,
           text: message,
         }),
       }

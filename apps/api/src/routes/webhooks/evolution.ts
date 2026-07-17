@@ -16,20 +16,20 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
     // Solo procesar nuevos mensajes
     if (body.event !== 'messages.upsert') return;
 
-    const messageObj = body.data?.message || body.data;
-    if (!messageObj) return;
+    const messageData = body.data;
+    if (!messageData) return;
 
-    const remoteJid = messageObj.key?.remoteJid;
-    const fromMe = messageObj.key?.fromMe;
+    const remoteJid = messageData.key?.remoteJid;
+    const fromMe = messageData.key?.fromMe;
     
     // Ignorar mensajes enviados por el bot o mensajes de grupos
     if (fromMe || !remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') return;
 
     // Extraer texto
-    const textMessage = messageObj.message?.conversation || messageObj.message?.extendedTextMessage?.text || messageObj.text;
+    const textMessage = messageData.message?.conversation || messageData.message?.extendedTextMessage?.text || messageData.text;
     if (!textMessage) return;
 
-    const senderName = messageObj.pushName || body.data?.pushName || remoteJid.split('@')[0];
+    const senderName = messageData.pushName || remoteJid.split('@')[0];
 
     console.log(`📩 WA (Evolution) from ${remoteJid} (${senderName}): ${textMessage}`);
 

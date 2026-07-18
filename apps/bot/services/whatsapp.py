@@ -11,7 +11,8 @@ import httpx
 # Credenciales de Evolution API
 EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "")
 EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "")
-INSTANCE_NAME = os.getenv("INSTANCE_NAME", "GlowStudioBot")
+INSTANCE_NAME = os.getenv("INSTANCE_NAME", "BB3010")
+
 SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491155554444")
 
 async def send_whatsapp_notification(

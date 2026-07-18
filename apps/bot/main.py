@@ -38,6 +38,39 @@ async def health_check():
     return {"status": "ok", "service": "glow-studio-bot", "model": "gemini-2.0-flash"}
 
 
+@app.get("/debug-agent")
+async def debug_agent():
+    import os
+    groq_key = os.getenv("GROQ_API_KEY")
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    
+    groq_prefix = groq_key[:10] if groq_key else "None"
+    gemini_prefix = gemini_key[:10] if gemini_key else "None"
+    
+    groq_test_result = "Not tested"
+    key_to_use = groq_key if groq_key else gemini_key
+    if key_to_use:
+        try:
+            from groq import Groq
+            client = Groq(api_key=key_to_use)
+            comp = client.chat.completions.create(
+                messages=[{"role": "user", "content": "Hola"}],
+                model="llama-3.1-8b-instant"
+            )
+            groq_test_result = f"Success: {comp.choices[0].message.content[:50]}"
+        except Exception as e:
+            groq_test_result = f"Failed: {str(e)}"
+            
+    return {
+        "groq_key_prefix": groq_prefix,
+        "gemini_key_prefix": gemini_prefix,
+        "groq_test_result": groq_test_result,
+        "has_groq_key": groq_key is not None,
+        "has_gemini_key": gemini_key is not None,
+    }
+
+
+
 @app.post("/process-message", response_model=MessageResponse)
 async def handle_message(request: MessageRequest):
     """

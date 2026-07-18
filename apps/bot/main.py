@@ -44,11 +44,12 @@ async def debug_agent():
     groq_key = os.getenv("GROQ_API_KEY")
     gemini_key = os.getenv("GEMINI_API_KEY")
     
-    groq_prefix = groq_key[:10] if groq_key else "None"
+    groq_keys = [k.strip() for k in (groq_key or "").split(",") if k.strip()]
+    groq_prefix = groq_keys[0][:10] if groq_keys else "None"
     gemini_prefix = gemini_key[:10] if gemini_key else "None"
     
     groq_test_result = "Not tested"
-    key_to_use = groq_key if groq_key else gemini_key
+    key_to_use = groq_keys[0] if groq_keys else gemini_key
     if key_to_use:
         try:
             from groq import Groq
@@ -65,9 +66,12 @@ async def debug_agent():
         "groq_key_prefix": groq_prefix,
         "gemini_key_prefix": gemini_prefix,
         "groq_test_result": groq_test_result,
+        "groq_key_raw_length": len(groq_key) if groq_key else 0,
+        "groq_keys_count": len(groq_keys),
         "has_groq_key": groq_key is not None,
         "has_gemini_key": gemini_key is not None,
     }
+
 
 
 

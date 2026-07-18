@@ -162,8 +162,9 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                     try:
                         client = Groq(api_key=key)
                         msgs = [{"role": "system", "content": system_msg}] + [
-                            {"role": m["role"], "content": m["parts"][0]} for m in chat_history[-3:]
+                            {"role": "assistant" if m["role"] == "model" else m["role"], "content": m["parts"][0]} for m in chat_history[-3:]
                         ]
+
                         comp = client.chat.completions.create(messages=msgs, model="llama-3.1-8b-instant")
                         ai_response = comp.choices[0].message.content
                         break
@@ -325,8 +326,9 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                 try:
                     client = Groq(api_key=key)
                     msgs = [{"role": "system", "content": system_msg}] + [
-                        {"role": m["role"], "content": m["parts"][0]} for m in chat_history[-3:]
+                        {"role": "assistant" if m["role"] == "model" else m["role"], "content": m["parts"][0]} for m in chat_history[-3:]
                     ]
+
                     comp = client.chat.completions.create(messages=msgs, model="llama-3.1-8b-instant")
                     ai_response = comp.choices[0].message.content
                     break

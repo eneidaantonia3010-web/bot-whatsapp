@@ -31,8 +31,9 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
     const messageData = body.data;
     if (!messageData) return;
 
-    const remoteJid = messageData.key?.remoteJidAlt || messageData.key?.remoteJid;
+    const remoteJid = messageData.key?.remoteJid;
     const fromMe = messageData.key?.fromMe;
+
 
     
     // Ignorar mensajes enviados por el bot o mensajes de grupos

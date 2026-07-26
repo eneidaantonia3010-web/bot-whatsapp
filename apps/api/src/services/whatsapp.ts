@@ -4,8 +4,8 @@
 
 import { withRetry } from '../utils/retry';
 
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || '';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://evolution-api-latest-yicm.onrender.com';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || 'Disjd12-9';
 const INSTANCE_NAME = process.env.INSTANCE_NAME || 'glow-studio-5491173566392';
 
 

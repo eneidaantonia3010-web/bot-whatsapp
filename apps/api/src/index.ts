@@ -29,6 +29,7 @@ import { appointmentCreationLimiter, publicApiLimiter, webhookLimiter } from './
 import { initCronJobs } from './services/cron';
 import { prisma } from './services/prisma';
 import { ensureAdminUserExists } from './services/seed-user';
+import { initNativeWhatsApp } from './services/whatsapp-native';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -109,6 +110,9 @@ const server = app.listen(PORT, () => {
 
   // Initialize scheduled tasks
   initCronJobs();
+
+  // Initialize Native In-App Baileys WhatsApp Service
+  initNativeWhatsApp();
 });
 
 // Graceful shutdown

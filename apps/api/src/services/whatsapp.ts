@@ -10,25 +10,29 @@ const INSTANCE_NAME = process.env.INSTANCE_NAME || 'glow-studio-5491173566392';
 
 
 
+import { sendNativeWhatsAppMessage, getNativeStatus } from './whatsapp-native';
+
 interface SendMessageOptions {
   to: string;
   message: string;
 }
 
 export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): Promise<boolean> {
+  // Try Native In-App WhatsApp Service first
+  const nativeStatus = getNativeStatus();
+  if (nativeStatus.state === 'open') {
+    const sentNative = await sendNativeWhatsAppMessage(to, message);
+    if (sentNative) return true;
+  }
+
+  // Fallback to Evolution API
   if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
     console.warn('⚠️ Evolution API no configurada. Mensaje no enviado.');
-    console.log(`📱 [DRY RUN] WhatsApp a ${to}:\n${message}`);
     return false;
   }
 
   try {
-    let targetNumber = to;
-    if (to.endsWith('@s.whatsapp.net')) {
-      targetNumber = to.split('@')[0].replace(/[^0-9]/g, '');
-    } else if (!to.includes('@')) {
-      targetNumber = to.replace(/[^0-9]/g, '');
-    }
+    const targetNumber = to;
     return await withRetry(async () => {
       const response = await fetch(
         `${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`,

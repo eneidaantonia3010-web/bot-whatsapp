@@ -8,7 +8,10 @@ import { prisma } from '../../services/prisma';
 export const instagramWebhookRouter = Router();
 
 const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || process.env.WEBHOOK_VERIFY_TOKEN || '';
-const BOT_URL = process.env.BOT_URL || 'http://localhost:8000';
+let BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-7ghr.onrender.com';
+if (process.env.NODE_ENV === 'production' && (!process.env.BOT_URL || BOT_URL.includes('localhost'))) {
+  BOT_URL = 'https://glow-studio-bot-7ghr.onrender.com';
+}
 const PAGE_ACCESS_TOKEN = process.env.META_PAGE_ACCESS_TOKEN || '';
 
 // GET — Webhook verification (Meta challenge)

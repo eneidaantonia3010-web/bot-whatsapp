@@ -78,7 +78,7 @@ usersRouter.post('/', async (req: Request, res: Response) => {
 // PATCH /api/users/:id — Update user details or role
 usersRouter.patch('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const userId = req.params.id as string;
     const { email, name, password, role } = req.body;
 
     const dataToUpdate: any = {};
@@ -88,7 +88,7 @@ usersRouter.patch('/:id', async (req: Request, res: Response) => {
     if (password) dataToUpdate.password = await bcrypt.hash(password, 10);
 
     const updatedUser = await prisma.user.update({
-      where: { id },
+      where: { id: userId },
       data: dataToUpdate,
       select: {
         id: true,
@@ -109,8 +109,8 @@ usersRouter.patch('/:id', async (req: Request, res: Response) => {
 // DELETE /api/users/:id — Remove a user
 usersRouter.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    await prisma.user.delete({ where: { id } });
+    const userId = req.params.id as string;
+    await prisma.user.delete({ where: { id: userId } });
     res.json({ message: 'Usuario eliminado correctamente' });
   } catch (error) {
     console.error('Error deleting user:', error);

@@ -148,6 +148,10 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
 
     try:
         # Stage-based processing
+        clean_msg = message.strip().lower()
+        if clean_msg in ["hola", "buenas", "buen dia", "buenas noches", "buenas tardes", "inicio", "reset", "menu", "menú"]:
+            conv["stage"] = "greeting"
+
         stage = conv["stage"]
 
         # === GREETING / SERVICE SELECTION ===

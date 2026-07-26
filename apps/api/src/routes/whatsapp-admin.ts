@@ -81,9 +81,9 @@ whatsappAdminRouter.post('/init', async (req: Request, res: Response) => {
         rejectCall: true,
         msgCall: 'Hola! En Glow Studio respondemos únicamente por mensajes de WhatsApp 💕',
         groupsIgnore: true,
-        alwaysOnline: true,
+        alwaysOnline: false,
         readMessages: true,
-        readStatus: true,
+        readStatus: false,
         webhook: {
           url: webhookUrl,
           byEvents: false,

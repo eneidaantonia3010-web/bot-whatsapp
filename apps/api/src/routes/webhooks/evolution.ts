@@ -62,11 +62,7 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
     }
     if (!messageData) return;
 
-    let remoteJid = messageData.key?.remoteJid;
-    if (remoteJid?.endsWith('@lid') && messageData.key?.remoteJidAlt) {
-      console.log(`🔀 LID addressing mode detected. Mapping ${remoteJid} -> ${messageData.key.remoteJidAlt}`);
-      remoteJid = messageData.key.remoteJidAlt;
-    }
+    const remoteJid = messageData.key?.remoteJid;
     const fromMe = messageData.key?.fromMe;
 
     console.log(`📩 [Evolution Webhook Message] remoteJid: ${remoteJid}, fromMe: ${fromMe}`);

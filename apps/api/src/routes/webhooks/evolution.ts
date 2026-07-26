@@ -51,10 +51,14 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    // Solo procesar nuevos mensajes
-    if (body.event !== 'messages.upsert') return;
+    // Solo procesar nuevos mensajes (case-insensitive para MESSAGES_UPSERT y messages.upsert)
+    const eventName = (body.event || '').toLowerCase().replace('_', '.');
+    if (eventName !== 'messages.upsert') return;
 
-    const messageData = body.data;
+    let messageData = body.data;
+    if (Array.isArray(messageData)) {
+      messageData = messageData[0];
+    }
     if (!messageData) return;
 
     const remoteJid = messageData.key?.remoteJid;
@@ -63,8 +67,13 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
     // Ignorar mensajes enviados por el bot o mensajes de grupos
     if (fromMe || !remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') return;
 
-    // Extraer texto
-    const textMessage = messageData.message?.conversation || messageData.message?.extendedTextMessage?.text || messageData.text;
+    // Extraer texto (soporta conversation, extendedTextMessage, captions e imágenes)
+    const textMessage = 
+      messageData.message?.conversation || 
+      messageData.message?.extendedTextMessage?.text || 
+      messageData.message?.imageMessage?.caption ||
+      messageData.message?.videoMessage?.caption ||
+      messageData.text;
     if (!textMessage) return;
 
     const senderName = messageData.pushName || remoteJid.split('@')[0];

@@ -5,9 +5,12 @@ import { enqueueForSender } from '../../services/message-queue';
 
 export const evolutionWebhookRouter = Router();
 
-const BOT_URL = process.env.BOT_URL || 'http://localhost:8000';
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || '';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+let BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-7ghr.onrender.com';
+if (process.env.NODE_ENV === 'production' && (!process.env.BOT_URL || BOT_URL.includes('localhost'))) {
+  BOT_URL = 'https://glow-studio-bot-7ghr.onrender.com';
+}
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://evolution-api-latest-yicm.onrender.com';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || 'Disjd12-9';
 const INSTANCE_NAME = process.env.INSTANCE_NAME || 'glow-studio-5491173566392';
 
 evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
@@ -17,9 +20,7 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
 
     const body = req.body;
     
-    if (process.env.DEBUG_WEBHOOKS === 'true') {
-      console.log('🔍 [DEBUG Webhook Evolution]:', JSON.stringify(body).substring(0, 300));
-    }
+    console.log('🔍 [DEBUG Webhook Evolution Event]:', body.event, 'Instance:', body.instance);
     
     // Process CONNECTION_UPDATE events
     if (body.event === 'connection.update' || body.event === 'CONNECTION_UPDATE') {
@@ -64,8 +65,13 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
     const remoteJid = messageData.key?.remoteJid;
     const fromMe = messageData.key?.fromMe;
 
+    console.log(`📩 [Evolution Webhook Message] remoteJid: ${remoteJid}, fromMe: ${fromMe}`);
+
     // Ignorar mensajes enviados por el bot o mensajes de grupos
-    if (fromMe || !remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') return;
+    if (fromMe || !remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') {
+      console.log(`⏭️ Ignoring message fromMe: ${fromMe}, remoteJid: ${remoteJid}`);
+      return;
+    }
 
     // Extraer texto (soporta conversation, extendedTextMessage, captions e imágenes)
     const textMessage = 
@@ -74,13 +80,16 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
       messageData.message?.imageMessage?.caption ||
       messageData.message?.videoMessage?.caption ||
       messageData.text;
-    if (!textMessage) return;
+    if (!textMessage) {
+      console.log(`⚠️ No text content found in message from ${remoteJid}`);
+      return;
+    }
 
     const senderName = messageData.pushName || remoteJid.split('@')[0];
 
     // Encolar mensaje por sender JID para evitar condiciones de carrera
     await enqueueForSender(remoteJid, async () => {
-      console.log(`📩 WA (Evolution) from ${remoteJid} (${senderName}): ${textMessage}`);
+      console.log(`📩 Processing WA (Evolution) from ${remoteJid} (${senderName}): ${textMessage}`);
 
       // Check if customer is blocked (Blacklist)
       const cleanPhone = remoteJid.split('@')[0];
@@ -111,6 +120,7 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
       
       // Enviar a la IA (Python)
       try {
+        console.log(`🤖 Calling Python Bot at: ${BOT_URL}/process-message`);
         const agentResponse = await fetch(`${BOT_URL}/process-message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -124,6 +134,7 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
         if (agentResponse.ok) {
            const data = await agentResponse.json() as { response: string };
            const reply = data.response;
+           console.log(`🤖 Bot reply generated for ${remoteJid}: ${reply.substring(0, 100)}...`);
            
            // Guardar respuesta
            await prisma.messageLog.create({
@@ -136,10 +147,14 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
            });
            
            // Enviar de vuelta a Evolution
-           await sendWhatsAppMessage({ to: remoteJid, message: reply });
+           console.log(`📤 Sending reply back to WhatsApp via Evolution API to ${remoteJid}...`);
+           const sent = await sendWhatsAppMessage({ to: remoteJid, message: reply });
+           console.log(`📤 Send WhatsApp result to ${remoteJid}: ${sent}`);
+        } else {
+           console.error(`❌ Bot API returned HTTP status ${agentResponse.status}`);
         }
       } catch (error) {
-        console.error('❌ Error processing WA message with bot:', error);
+        console.error(`❌ Error processing WA message with bot at ${BOT_URL}:`, error);
       }
     });
   } catch (error) {

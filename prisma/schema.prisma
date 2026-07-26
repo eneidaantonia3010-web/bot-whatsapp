@@ -70,19 +70,22 @@ model Service {
 }
 
 model Customer {
-  id           String        @id @default(cuid())
-  name         String
-  phone        String?
-  email        String?
-  instagram    String?
-  notes        String?
-  appointments Appointment[]
-  messages     MessageLog[]
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+  id            String        @id @default(cuid())
+  name          String
+  phone         String?
+  email         String?
+  instagram     String?
+  notes         String?
+  blocked       Boolean       @default(false)
+  blockedReason String?       @map("blocked_reason")
+  appointments  Appointment[]
+  messages      MessageLog[]
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
   @@map("customers")
 }
+
 
 model Appointment {
   id            String            @id @default(cuid())
@@ -94,7 +97,7 @@ model Appointment {
   customer      Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   serviceId     String            @map("service_id")
   service       Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  calendarEventId String?         @map("calendar_event_id")
+  calendarEventId String?         @unique @map("calendar_event_id")
   source        Platform          @default(WEB)
   createdAt     DateTime          @default(now()) @map("created_at")
   updatedAt     DateTime          @updatedAt @map("updated_at")
@@ -120,6 +123,7 @@ model MessageLog {
   createdAt  DateTime         @default(now()) @map("created_at")
 
   @@index([senderId])
+  @@index([customerId])
   @@index([platform])
   @@index([createdAt])
   @@map("message_logs")
@@ -136,3 +140,28 @@ model GalleryImage {
 
   @@map("gallery_images")
 }
+
+model ConversationState {
+  senderId  String   @id @map("sender_id")
+  state     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("conversation_states")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  details   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+

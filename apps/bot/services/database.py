@@ -3,37 +3,71 @@
 # ============================================
 
 import os
+import json
+import logging
+from contextlib import contextmanager
 import psycopg2
+from psycopg2.pool import ThreadedConnectionPool
 from psycopg2.extras import RealDictCursor
 from typing import Optional
 
+logger = logging.getLogger("glow_bot.database")
 
-def get_connection():
-    """Get a database connection to Neon PostgreSQL."""
-    database_url = os.getenv("DATABASE_URL", "")
-    if not database_url:
-        raise ValueError("DATABASE_URL not set")
-    return psycopg2.connect(database_url, cursor_factory=RealDictCursor)
+_pool: Optional[ThreadedConnectionPool] = None
+
+
+def get_pool() -> ThreadedConnectionPool:
+    """Get or initialize the PostgreSQL connection pool."""
+    global _pool
+    if _pool is None or _pool.closed:
+        database_url = os.getenv("DATABASE_URL", "")
+        if not database_url:
+            raise ValueError("DATABASE_URL not set")
+        minconn = int(os.getenv("DB_MIN_CONN", "1"))
+        maxconn = int(os.getenv("DB_MAX_CONN", "10"))
+        _pool = ThreadedConnectionPool(
+            minconn=minconn,
+            maxconn=maxconn,
+            dsn=database_url,
+            cursor_factory=RealDictCursor
+        )
+    return _pool
+
+
+@contextmanager
+def get_db_connection():
+    """Context manager for acquiring and releasing database connections from the pool."""
+    pool = get_pool()
+    conn = pool.getconn()
+    try:
+        if conn.closed != 0:
+            pool.putconn(conn, close=True)
+            conn = pool.getconn()
+        yield conn
+    except psycopg2.OperationalError:
+        if conn:
+            conn.rollback()
+            pool.putconn(conn, close=True)
+        raise
+    finally:
+        if conn and not conn.closed:
+            pool.putconn(conn)
 
 
 def get_services() -> list[dict]:
     """Fetch all active services from the database."""
-    conn = get_connection()
-    try:
+    with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, name, description, price, duration, category "
-                "FROM services WHERE active = true ORDER BY \"order\" ASC"
+                'FROM services WHERE active = true ORDER BY "order" ASC'
             )
             return cur.fetchall()
-    finally:
-        conn.close()
 
 
 def get_service_by_name(name: str) -> Optional[dict]:
     """Find a service by partial name match."""
-    conn = get_connection()
-    try:
+    with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, name, description, price, duration, category "
@@ -41,14 +75,11 @@ def get_service_by_name(name: str) -> Optional[dict]:
                 (f"%{name.lower()}%",),
             )
             return cur.fetchone()
-    finally:
-        conn.close()
 
 
 def get_service_by_index(index: int) -> Optional[dict]:
     """Get a service by its display order (1-based index)."""
-    conn = get_connection()
-    try:
+    with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 'SELECT id, name, description, price, duration, category '
@@ -57,28 +88,22 @@ def get_service_by_index(index: int) -> Optional[dict]:
                 (index - 1,),
             )
             return cur.fetchone()
-    finally:
-        conn.close()
 
 
 def find_customer_by_instagram(ig_id: str) -> Optional[dict]:
     """Find a customer by their Instagram sender ID."""
-    conn = get_connection()
-    try:
+    with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, name, phone, email, instagram FROM customers WHERE instagram = %s",
                 (ig_id,),
             )
             return cur.fetchone()
-    finally:
-        conn.close()
 
 
 def create_customer(name: str, phone: str, instagram: Optional[str] = None) -> dict:
     """Create a new customer record."""
-    conn = get_connection()
-    try:
+    with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO customers (id, name, phone, instagram, created_at, updated_at) "
@@ -87,14 +112,11 @@ def create_customer(name: str, phone: str, instagram: Optional[str] = None) -> d
             )
             conn.commit()
             return cur.fetchone()
-    finally:
-        conn.close()
 
 
 def get_appointments_for_date(date_str: str) -> list[dict]:
     """Get all non-cancelled appointments for a given date."""
-    conn = get_connection()
-    try:
+    with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT a.id, a.date, a.end_date, a.status, "
@@ -106,5 +128,58 @@ def get_appointments_for_date(date_str: str) -> list[dict]:
                 (date_str,),
             )
             return cur.fetchall()
-    finally:
-        conn.close()
+
+
+def get_conversation_state(sender_id: str) -> Optional[dict]:
+    """Fetch stored conversation state for sender_id from PostgreSQL."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT state FROM conversation_states WHERE sender_id = %s",
+                    (sender_id,)
+                )
+                row = cur.fetchone()
+                if row and row.get("state"):
+                    val = row["state"]
+                    return json.loads(val) if isinstance(val, str) else val
+                return None
+    except Exception as e:
+        logger.warning(f"Error reading conversation state from DB: {e}")
+        return None
+
+
+def save_conversation_state(sender_id: str, state: dict) -> bool:
+    """Save or update conversation state in PostgreSQL."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO conversation_states (sender_id, state, updated_at) "
+                    "VALUES (%s, %s, NOW()) "
+                    "ON CONFLICT (sender_id) DO UPDATE SET state = EXCLUDED.state, updated_at = NOW()",
+                    (sender_id, json.dumps(state))
+                )
+                conn.commit()
+                return True
+    except Exception as e:
+        logger.error(f"Error saving conversation state to DB: {e}")
+        return False
+
+
+def delete_conversation_state(sender_id: str) -> bool:
+    """Delete conversation state from PostgreSQL."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM conversation_states WHERE sender_id = %s",
+                    (sender_id,)
+                )
+                conn.commit()
+                return True
+    except Exception as e:
+        logger.warning(f"Error deleting conversation state from DB: {e}")
+        return False
+
+

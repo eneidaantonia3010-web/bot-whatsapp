@@ -7,30 +7,50 @@ import json
 import re
 from datetime import datetime, timedelta
 from typing import Optional
+import pytz
 from groq import Groq
 
-from services.database import get_services, get_service_by_name, get_service_by_index
+from services.database import (
+    get_services,
+    get_service_by_name,
+    get_service_by_index,
+    get_conversation_state,
+    save_conversation_state,
+    delete_conversation_state,
+)
 from services.calendar import create_appointment_via_api, get_availability
 from services.whatsapp import send_whatsapp_notification
+from services.phone_utils import normalize_phone
+from services.llm_pool import llm_pool
 
+import logging
 
-# In-memory conversation state per sender
+logger = logging.getLogger("glow_bot.agent")
+TZ_AR = pytz.timezone('America/Argentina/Buenos_Aires')
+
+# In-memory conversation state cache
 conversations: dict[str, dict] = {}
 
 
 def get_conversation(sender_id: str) -> dict:
-    """Get or create conversation state for a sender."""
-    if sender_id not in conversations:
-        conversations[sender_id] = {
-            "stage": "greeting",  # greeting, service_selection, date_selection, name_input, phone_input, confirmation
-            "selected_service": None,
-            "selected_date": None,
-            "selected_time": None,
-            "customer_name": None,
-            "customer_phone": None,
-            "chat_history": [],
-        }
-    return conversations[sender_id]
+    """Get or create conversation state for a sender, reading from DB."""
+    db_state = get_conversation_state(sender_id)
+    if db_state:
+        conversations[sender_id] = db_state
+        return db_state
+
+    new_state = {
+        "stage": "greeting",  # greeting, service_selection, date_selection, name_input, phone_input, confirmation
+        "selected_service": None,
+        "selected_date": None,
+        "selected_time": None,
+        "customer_name": None,
+        "customer_phone": None,
+        "chat_history": [],
+    }
+    conversations[sender_id] = new_state
+    return new_state
+
 
 
 def format_services_catalog(services: list[dict]) -> str:
@@ -53,40 +73,37 @@ def format_services_catalog(services: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def parse_date(text: str) -> Optional[tuple[str, str]]:
-    """Try to parse a date and time from user text."""
-    text = text.lower().strip()
-    today = datetime.now()
+import dateparser
 
-    # Patterns like "martes 14hs", "lunes a las 10", "mañana 15:00"
+
+def parse_date(text: str) -> Optional[tuple[str, str]]:
+    """Try to parse a date and time from user text using regex first, then dateparser."""
+    text_lower = text.lower().strip()
+    today = datetime.now(TZ_AR)
+
+    # Fast path 1: Custom regex rules
     day_map = {
         "lunes": 0, "martes": 1, "miércoles": 2, "miercoles": 2,
         "jueves": 3, "viernes": 4, "sábado": 5, "sabado": 5,
     }
 
     target_date = None
-
-    # Check for "mañana"
-    if "mañana" in text or "manana" in text:
+    if "mañana" in text_lower or "manana" in text_lower:
         target_date = today + timedelta(days=1)
-    # Check for "pasado" (day after tomorrow)
-    elif "pasado" in text:
+    elif "pasado" in text_lower:
         target_date = today + timedelta(days=2)
-    # Check for "hoy"
-    elif "hoy" in text:
+    elif "hoy" in text_lower:
         target_date = today
     else:
-        # Check for day names
         for day_name, day_num in day_map.items():
-            if day_name in text:
+            if day_name in text_lower:
                 days_ahead = day_num - today.weekday()
                 if days_ahead <= 0:
                     days_ahead += 7
                 target_date = today + timedelta(days=days_ahead)
                 break
 
-    # Parse time
-    time_match = re.search(r'(\d{1,2})[:\s]?(\d{2})?\s*(?:hs|hrs|h)?', text)
+    time_match = re.search(r'(\d{1,2})[:\s]?(\d{2})?\s*(?:hs|hrs|h)?', text_lower)
     hour = None
     minute = 0
     if time_match:
@@ -99,7 +116,26 @@ def parse_date(text: str) -> Optional[tuple[str, str]]:
             time_str = f"{hour:02d}:{minute:02d}"
             return date_str, time_str
 
+    # Fast path 2: dateparser
+    try:
+        parsed_dt = dateparser.parse(
+            text,
+            languages=['es'],
+            settings={
+                'RELATIVE_BASE': today,
+                'PREFER_DATES_FROM': 'future',
+                'TIMEZONE': 'America/Argentina/Buenos_Aires',
+                'RETURN_AS_TIMEZONE_AWARE': True,
+            }
+        )
+        if parsed_dt:
+            if 9 <= parsed_dt.hour <= 19:
+                return parsed_dt.strftime("%Y-%m-%d"), parsed_dt.strftime("%H:%M")
+    except Exception as e:
+        print(f"⚠️ dateparser exception: {e}")
+
     return None
+
 
 
 async def process_message(sender_id: str, message: str, platform: str = "INSTAGRAM") -> str:
@@ -154,24 +190,13 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                     "Preguntale amablemente qué servicio quiere del catálogo o ayudalo a elegir. "
                     "Respondé corto, cálido y en argentino."
                 )
-                ai_response = None
-                groq_keys = [k.strip() for k in os.getenv("GROQ_API_KEY", os.getenv("GEMINI_API_KEY", "")).split(",") if k.strip()]
-                if not groq_keys: groq_keys = [""]
-                
-                for key in groq_keys:
-                    try:
-                        client = Groq(api_key=key)
-                        msgs = [{"role": "system", "content": system_msg}] + [
-                            {"role": "assistant" if m["role"] == "model" else m["role"], "content": m["parts"][0]} for m in chat_history[-3:]
-                        ]
-
-                        comp = client.chat.completions.create(messages=msgs, model="llama-3.1-8b-instant")
-                        ai_response = comp.choices[0].message.content
-                        break
-                    except Exception:
-                        continue
-                
+                msgs = [
+                    {"role": "assistant" if m["role"] == "model" else m["role"], "content": m["parts"][0]}
+                    for m in chat_history[-3:]
+                ]
+                ai_response = llm_pool.get_completion(msgs, system_msg=system_msg)
                 response = ai_response if ai_response else "No te entendí bien, ¿me repetís qué servicio buscás? 💕"
+
 
         elif stage == "date_selection":
             parsed = parse_date(message)
@@ -201,21 +226,9 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                     f"el día y horario de otra forma. Ejemplo: 'martes 14hs' o 'mañana a las 10'. "
                     f"Horarios: Lun-Sáb 9:00-19:00. Respondé corto y en argentino."
                 )
-                ai_response = None
-                groq_keys = [k.strip() for k in os.getenv("GROQ_API_KEY", os.getenv("GEMINI_API_KEY", "")).split(",") if k.strip()]
-                if not groq_keys: groq_keys = [""]
-                
-                for key in groq_keys:
-                    try:
-                        client = Groq(api_key=key)
-                        msgs = [{"role": "system", "content": system_msg}]
-                        comp = client.chat.completions.create(messages=msgs, model="llama-3.1-8b-instant")
-                        ai_response = comp.choices[0].message.content
-                        break
-                    except Exception:
-                        continue
-                        
+                ai_response = llm_pool.get_completion([], system_msg=system_msg)
                 response = ai_response if ai_response else "No logré entender la fecha. ¿Me decís el día y la hora de nuevo? 😊"
+
 
         elif stage == "name_input":
             name = message.strip()
@@ -231,17 +244,11 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                 response = "Necesito tu nombre completo para la reserva. ¿Me lo decís? 😊"
 
         elif stage == "phone_input":
-            phone = message.strip()
-            phone_str = "".join(filter(str.isdigit, phone))
+            phone_str = normalize_phone(message)
             
-            if len(phone_str) >= 8:
-                # WhatsApp (Evolution) requiere 54 sin el 9 para Argentina
-                if phone_str.startswith("549"):
-                    phone_str = "54" + phone_str[3:]
-                elif not phone_str.startswith("54"):
-                    phone_str = "54" + phone_str
-                
+            if phone_str:
                 conv["customer_phone"] = phone_str
+
                 service = conv["selected_service"]
                 date_obj = datetime.strptime(conv["selected_date"], "%Y-%m-%d")
                 day_names = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
@@ -309,6 +316,7 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
 
                 # Reset conversation
                 conversations.pop(sender_id, None)
+                delete_conversation_state(sender_id)
             elif lower in ["no", "cancelar", "cambiar"]:
                 response = "Sin problema! ¿Qué querés cambiar? Podés elegir otro servicio, día u horario 😊"
                 conv["stage"] = "greeting"
@@ -318,27 +326,16 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
         else:
             # Fallback to Groq for any other stage
             system_msg = "Sos un asistente de salón de belleza. Respondé a la consulta amablemente, de forma muy breve y en español de Argentina."
-            ai_response = None
-            groq_keys = [k.strip() for k in os.getenv("GROQ_API_KEY", os.getenv("GEMINI_API_KEY", "")).split(",") if k.strip()]
-            if not groq_keys: groq_keys = [""]
-            
-            for key in groq_keys:
-                try:
-                    client = Groq(api_key=key)
-                    msgs = [{"role": "system", "content": system_msg}] + [
-                        {"role": "assistant" if m["role"] == "model" else m["role"], "content": m["parts"][0]} for m in chat_history[-3:]
-                    ]
-
-                    comp = client.chat.completions.create(messages=msgs, model="llama-3.1-8b-instant")
-                    ai_response = comp.choices[0].message.content
-                    break
-                except Exception:
-                    continue
-                    
+            msgs = [
+                {"role": "assistant" if m["role"] == "model" else m["role"], "content": m["parts"][0]}
+                for m in chat_history[-3:]
+            ]
+            ai_response = llm_pool.get_completion(msgs, system_msg=system_msg)
             response = ai_response if ai_response else "¡Hola! ¿En qué te puedo ayudar? 💕"
 
+
     except Exception as e:
-        print(f"❌ Agent error: {e}")
+        logger.exception(f"Agent error processing message: {e}")
         response = (
             "Disculpá, tuve un problema procesando tu mensaje. 😔\n"
             "Podés intentar de nuevo o escribirnos por WhatsApp al "
@@ -352,4 +349,11 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
     if len(chat_history) > 20:
         chat_history[:] = chat_history[-20:]
 
+    if conv.get("stage") == "completed":
+        conversations.pop(sender_id, None)
+        delete_conversation_state(sender_id)
+    else:
+        save_conversation_state(sender_id, conv)
+
     return response
+

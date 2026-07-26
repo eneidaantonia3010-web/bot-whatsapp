@@ -21,39 +21,47 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS
+# CORS Configuration
+cors_origins_raw = os.getenv("CORS_ORIGINS", "*")
+allowed_origins = [origin.strip() for origin in cors_origins_raw.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+@app.get("/")
+@app.head("/")
+async def root():
+    """Root endpoint for UptimeRobot and health monitoring."""
+    return {"status": "ok", "service": "glow-studio-bot", "model": "groq-llama-3.1-8b-instant"}
+
+
 @app.get("/health")
 @app.head("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "ok", "service": "glow-studio-bot", "model": "gemini-2.0-flash"}
+    return {"status": "ok", "service": "glow-studio-bot", "model": "groq-llama-3.1-8b-instant"}
+
 
 
 @app.get("/debug-agent")
 async def debug_agent():
     import os
     groq_key = os.getenv("GROQ_API_KEY")
-    gemini_key = os.getenv("GEMINI_API_KEY")
     
     groq_keys = [k.strip() for k in (groq_key or "").split(",") if k.strip()]
     groq_prefix = groq_keys[0][:10] if groq_keys else "None"
-    gemini_prefix = gemini_key[:10] if gemini_key else "None"
     
     groq_test_result = "Not tested"
-    key_to_use = groq_keys[0] if groq_keys else gemini_key
-    if key_to_use:
+    if groq_keys:
         try:
             from groq import Groq
-            client = Groq(api_key=key_to_use)
+            client = Groq(api_key=groq_keys[0])
             comp = client.chat.completions.create(
                 messages=[{"role": "user", "content": "Hola"}],
                 model="llama-3.1-8b-instant"
@@ -64,13 +72,12 @@ async def debug_agent():
             
     return {
         "groq_key_prefix": groq_prefix,
-        "gemini_key_prefix": gemini_prefix,
         "groq_test_result": groq_test_result,
         "groq_key_raw_length": len(groq_key) if groq_key else 0,
         "groq_keys_count": len(groq_keys),
-        "has_groq_key": groq_key is not None,
-        "has_gemini_key": gemini_key is not None,
+        "has_groq_key": bool(groq_keys),
     }
+
 
 
 
@@ -95,8 +102,11 @@ async def handle_message(request: MessageRequest):
 async def reset_conversation(sender_id: str):
     """Reset a conversation state for a specific sender."""
     from agent import conversations
+    from services.database import delete_conversation_state
     conversations.pop(sender_id, None)
+    delete_conversation_state(sender_id)
     return {"status": "ok", "message": f"Conversation reset for {sender_id}"}
+
 
 
 if __name__ == "__main__":

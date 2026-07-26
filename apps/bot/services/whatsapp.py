@@ -5,15 +5,18 @@
 # ============================================
 
 import os
+import logging
 import httpx
 
+logger = logging.getLogger("glow_bot.whatsapp")
 
 # Credenciales de Evolution API
 EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "")
 EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "")
-INSTANCE_NAME = os.getenv("INSTANCE_NAME", "BB3010")
+INSTANCE_NAME = os.getenv("INSTANCE_NAME", "glow-studio-5491173566392")
 
-SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491155554444")
+
+SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491173566392")
 
 async def send_whatsapp_notification(
     customer_name: str,
@@ -34,7 +37,7 @@ async def send_whatsapp_notification(
 async def send_message(to: str, text: str) -> bool:
     """Envía un mensaje usando Evolution API."""
     if not EVOLUTION_API_URL or not EVOLUTION_API_KEY:
-        print(f"📱 [DRY RUN] WA to {to}: {text}")
+        logger.info(f"📱 [DRY RUN] WA to {to}: {text}")
         return False
 
     # Limpiar el número de destino (solo dígitos)
@@ -59,11 +62,11 @@ async def send_message(to: str, text: str) -> bool:
                 timeout=10.0,
             )
             if response.status_code in [200, 201]:
-                print(f"✅ WA message sent to {to}")
+                logger.info(f"WA message sent to {to}")
                 return True
             else:
-                print(f"❌ WA error: {response.text}")
+                logger.error(f"WA error ({response.status_code}): {response.text}")
                 return False
     except Exception as e:
-        print(f"❌ WA send failed: {e}")
+        logger.exception(f"WA send failed: {e}")
         return False

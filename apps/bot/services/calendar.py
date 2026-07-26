@@ -3,7 +3,10 @@
 # ============================================
 
 import os
+import logging
 import httpx
+
+logger = logging.getLogger("glow_bot.calendar")
 
 API_URL = os.getenv("API_URL", "http://localhost:3001")
 
@@ -32,13 +35,13 @@ async def create_appointment_via_api(
                 timeout=15.0,
             )
             if response.status_code == 201:
-                print(f"✅ Appointment created via API")
+                logger.info("Appointment created successfully via API")
                 return response.json()
             else:
-                print(f"❌ API error creating appointment: {response.text}")
+                logger.error(f"API error creating appointment ({response.status_code}): {response.text}")
                 return None
     except Exception as e:
-        print(f"❌ Calendar/API error: {e}")
+        logger.exception(f"Calendar/API error: {e}")
         return None
 
 
@@ -53,7 +56,8 @@ async def get_availability(date: str, service_id: str) -> list[dict]:
             )
             if response.status_code == 200:
                 return response.json()
+            logger.warning(f"Availability check non-200 status: {response.status_code}")
             return []
     except Exception as e:
-        print(f"❌ Availability check error: {e}")
+        logger.exception(f"Availability check error: {e}")
         return []

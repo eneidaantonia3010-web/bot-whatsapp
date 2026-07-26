@@ -7,10 +7,13 @@ import { prisma } from '../services/prisma';
 
 export const customersRouter = Router();
 
-// GET /api/customers — List all customers
+// GET /api/customers — List customers with pagination
 customersRouter.get('/', async (req: Request, res: Response) => {
   try {
-    const { search, limit = '50' } = req.query;
+    const { search, page = '1', limit = '20' } = req.query;
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
+    const skip = (pageNum - 1) * limitNum;
 
     const where = search
       ? {
@@ -23,21 +26,27 @@ customersRouter.get('/', async (req: Request, res: Response) => {
         }
       : {};
 
-    const customers = await prisma.customer.findMany({
-      where,
-      include: {
-        _count: { select: { appointments: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: parseInt(limit as string),
-    });
+    const [total, customers] = await Promise.all([
+      prisma.customer.count({ where }),
+      prisma.customer.findMany({
+        where,
+        include: {
+          _count: { select: { appointments: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limitNum,
+      }),
+    ]);
 
-    res.json(customers);
+    res.setHeader('X-Total-Count', total.toString());
+    res.json({ data: customers, pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } });
   } catch (error) {
     console.error('Error fetching customers:', error);
     res.status(500).json({ error: 'Failed to fetch customers' });
   }
 });
+
 
 // GET /api/customers/:id — Get single customer with appointments
 customersRouter.get('/:id', async (req: Request, res: Response) => {

@@ -64,3 +64,18 @@ servicesRouter.patch('/:id', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to update service' });
   }
 });
+
+// DELETE /api/services/:id — Soft delete / deactivate service (admin)
+servicesRouter.delete('/:id', async (req: Request, res: Response) => {
+  try {
+    const service = await prisma.service.update({
+      where: { id: req.params.id as string },
+      data: { active: false },
+    });
+    res.json({ message: 'Service deactivated', service });
+  } catch (error) {
+    console.error('Error deactivating service:', error);
+    res.status(500).json({ error: 'Failed to deactivate service' });
+  }
+});
+

@@ -6,6 +6,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../services/prisma';
 import { createCalendarEvent, getFreeBusy } from '../services/calendar';
 import { sendWhatsAppNotification, sendBookingConfirmation } from '../services/whatsapp';
+import { createAppointmentSchema, updateAppointmentSchema } from '../schemas/appointment';
 
 export const appointmentsRouter = Router();
 
@@ -44,7 +45,13 @@ appointmentsRouter.get('/', async (req: Request, res: Response) => {
 // POST /api/appointments — Create new appointment
 appointmentsRouter.post('/', async (req: Request, res: Response) => {
   try {
-    const { date, serviceId, customerName, customerPhone, customerEmail, notes, source = 'WEB' } = req.body;
+    const parseResult = createAppointmentSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: 'Datos de reserva inválidos', details: parseResult.error.flatten() });
+    }
+
+    const { date, serviceId, customerName, customerPhone, customerEmail, notes, source } = parseResult.data;
+
 
     // Get service for duration
     const service = await prisma.service.findUnique({ where: { id: serviceId } });
@@ -77,7 +84,21 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
     const endDate = new Date(startDate);
     endDate.setMinutes(endDate.getMinutes() + service.duration);
 
+    // Check for overlapping appointments
+    const overlapping = await prisma.appointment.findFirst({
+      where: {
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        date: { lt: endDate },
+        endDate: { gt: startDate },
+      },
+    });
+
+    if (overlapping) {
+      return res.status(409).json({ error: 'El horario seleccionado ya no está disponible.' });
+    }
+
     // Create Google Calendar event
+
     const calendarEventId = await createCalendarEvent({
       summary: `${service.name} — ${customerName}`,
       description: `Cliente: ${customerName}\nTeléfono: ${customerPhone}\n${notes ? `Notas: ${notes}` : ''}`,

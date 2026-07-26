@@ -1,15 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { List, X, Sparkle, Globe } from '@phosphor-icons/react';
 import { SALON } from '@/lib/constants';
 import { useTranslation } from '@/i18n/I18nContext';
 
 export function Navbar() {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const { language, setLanguage, t } = useTranslation();
+
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
+
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);

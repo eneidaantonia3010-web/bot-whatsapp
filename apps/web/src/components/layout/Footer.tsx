@@ -1,12 +1,19 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import { Sparkle, MapPin, Phone, At, EnvelopeSimple } from '@phosphor-icons/react';
 import { SALON } from '@/lib/constants';
 import { useTranslation } from '@/i18n/I18nContext';
 
 export function Footer() {
+  const pathname = usePathname();
   const currentYear = new Date().getFullYear();
   const { t } = useTranslation();
+
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
+
 
   const navItems = [
     { href: '#inicio', label: t('header.navHome') },

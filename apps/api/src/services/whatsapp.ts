@@ -23,12 +23,7 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): 
   }
 
   try {
-    let targetNumber = to;
-    if (to.endsWith('@s.whatsapp.net')) {
-      targetNumber = to.split('@')[0].replace(/[^0-9]/g, '');
-    } else if (!to.includes('@')) {
-      targetNumber = to.replace(/[^0-9]/g, '');
-    }
+    const targetNumber = to;
     return await withRetry(async () => {
       const response = await fetch(
         `${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`,

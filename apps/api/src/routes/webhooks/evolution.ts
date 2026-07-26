@@ -6,6 +6,9 @@ import { enqueueForSender } from '../../services/message-queue';
 export const evolutionWebhookRouter = Router();
 
 const BOT_URL = process.env.BOT_URL || 'http://localhost:8000';
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || '';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+const INSTANCE_NAME = process.env.INSTANCE_NAME || 'glow-studio-5491173566392';
 
 evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
   try {
@@ -18,6 +21,36 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
       console.log('🔍 [DEBUG Webhook Evolution]:', JSON.stringify(body).substring(0, 300));
     }
     
+    // Process CONNECTION_UPDATE events
+    if (body.event === 'connection.update' || body.event === 'CONNECTION_UPDATE') {
+      const connData = body.data;
+      const state = connData?.state || connData?.status;
+      const statusReason = connData?.statusReason;
+
+      console.log(`🔌 [Evolution Connection Webhook] Instance: ${body.instance}, State: ${state}, Reason: ${statusReason}`);
+
+      if (state === 'close') {
+        if (statusReason === 401) {
+          console.error(`🚨 [WhatsApp Alert] Instancia ${body.instance} desvinculada (Error 401 device_removed). Se requiere escanear nuevo QR.`);
+        } else {
+          console.warn(`⚠️ [WhatsApp Reconnect] Instancia ${body.instance} desconectada por razón ${statusReason}. Intentando auto-reconectar...`);
+          if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+            setTimeout(async () => {
+              try {
+                await fetch(`${EVOLUTION_API_URL}/instance/connect/${INSTANCE_NAME}`, {
+                  headers: { 'apikey': EVOLUTION_API_KEY },
+                });
+                console.log(`✅ [WhatsApp Reconnect] Intento de reconexión enviado a Evolution API.`);
+              } catch (err) {
+                console.error(`❌ Error intentando auto-reconectar:`, err);
+              }
+            }, 3000);
+          }
+        }
+      }
+      return;
+    }
+
     // Solo procesar nuevos mensajes
     if (body.event !== 'messages.upsert') return;
 
@@ -68,7 +101,6 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
       });
       
       // Enviar a la IA (Python)
-
       try {
         const agentResponse = await fetch(`${BOT_URL}/process-message`, {
           method: 'POST',
@@ -105,4 +137,3 @@ evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
     console.error('❌ Evolution webhook error:', error);
   }
 });
-

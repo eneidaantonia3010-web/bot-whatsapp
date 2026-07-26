@@ -132,6 +132,10 @@ export const getFinancialAnalytics = () =>
     weeklyRevenue: Array<{ week: string; revenue: number }>;
   }>('/api/analytics/financial');
 
+export const getWhatsAppStatus = () =>
+  fetchAPI<{ configured: boolean; state?: string; phone?: string; instanceName?: string }>('/api/admin/whatsapp/status');
+
+
 
 export const getExportAppointmentsUrl = () => `${API_URL}/api/exports/appointments.csv`;
 export const getExportCustomersUrl = () => `${API_URL}/api/exports/customers.csv`;

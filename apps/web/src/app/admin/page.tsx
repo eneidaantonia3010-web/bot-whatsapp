@@ -55,7 +55,9 @@ import {
   updateService,
   deleteService,
   getCustomers,
+  getWhatsAppStatus,
 } from '@/lib/api';
+
 import { getToken, removeToken } from '@/lib/auth';
 
 const MOCK_METRICS = {
@@ -149,6 +151,8 @@ export default function AdminPage() {
   const [newUserRole, setNewUserRole] = useState<'ADMIN' | 'STAFF'>('STAFF');
   const [userActionError, setUserActionError] = useState<string | null>(null);
 
+  const [waStatus, setWaStatus] = useState<any>({ configured: true, state: 'open' });
+
   // Check auth and load live data
   useEffect(() => {
     async function initAdmin() {
@@ -169,13 +173,17 @@ export default function AdminPage() {
       }
 
       try {
-        const [apts, metrics, financial, srvs, custs] = await Promise.all([
+        const [apts, metrics, financial, srvs, custs, wa] = await Promise.all([
           getAppointments().catch(() => null),
           getDashboardMetrics().catch(() => null),
           getFinancialAnalytics().catch(() => null),
           getServices().catch(() => null),
           getCustomers().catch(() => null),
+          getWhatsAppStatus().catch(() => null),
         ]);
+
+        if (wa) setWaStatus(wa);
+
 
         if (apts && apts.length > 0) {
           setAppointments(
@@ -413,7 +421,24 @@ export default function AdminPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            {waStatus?.state === 'open' ? (
+              <div className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-[var(--radius-md)] shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                WhatsApp Conectado
+              </div>
+            ) : (
+              <a
+                href={`${process.env.NEXT_PUBLIC_API_URL || 'https://glow-studio-api-q6ls.onrender.com'}/api/admin/whatsapp/qr?format=html`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-[var(--radius-md)] hover:bg-red-100 transition-colors shadow-sm animate-bounce"
+              >
+                <span className="w-2 h-2 rounded-full bg-red-500" />
+                ⚠️ WhatsApp Desconectado (Escanear QR)
+              </a>
+            )}
             {currentUser?.role === 'ADMIN' && (
+
               <button
                 onClick={handleOpenUsersModal}
                 className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-[var(--color-ink)] bg-[var(--color-surface)] border border-[var(--color-bg-alt)] rounded-[var(--radius-md)] hover:bg-[var(--color-bg-alt)] transition-colors shadow-sm"

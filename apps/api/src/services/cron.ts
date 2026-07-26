@@ -2,10 +2,44 @@ import cron from 'node-cron';
 import { prisma } from './prisma';
 import { sendSalonUpcomingAlert, sendCustomerReminder } from './whatsapp';
 
-export function initCronJobs() {
-  console.log('⏰ Initializing cron jobs for appointment reminders...');
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || '';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+const INSTANCE_NAME = process.env.INSTANCE_NAME || 'glow-studio-5491173566392';
 
-  // Run every 5 minutes (45-min appointment alerts)
+export function initCronJobs() {
+  console.log('⏰ Initializing cron jobs for appointment reminders and WhatsApp keepalive...');
+
+  // 1. Run every 10 minutes: Evolution API Connection Keepalive & Health Check
+  cron.schedule(
+    '*/10 * * * *',
+    async () => {
+      if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return;
+
+      try {
+        const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${INSTANCE_NAME}`, {
+          headers: { 'apikey': EVOLUTION_API_KEY },
+        });
+
+        if (response.ok) {
+          const data = (await response.json()) as any;
+          const state = data.instance?.state || data.state;
+          if (state === 'open') {
+            console.log(`💚 [Cron Health Check] Evolution API WhatsApp Connection OPEN (${INSTANCE_NAME})`);
+          } else {
+            console.warn(`⚠️ [Cron Health Check] Evolution API WhatsApp State: ${state}. Attempting reconnect...`);
+            await fetch(`${EVOLUTION_API_URL}/instance/connect/${INSTANCE_NAME}`, {
+              headers: { 'apikey': EVOLUTION_API_KEY },
+            });
+          }
+        }
+      } catch (error: any) {
+        console.error('❌ Error checking Evolution API WhatsApp health in cron:', error.message);
+      }
+    },
+    { timezone: 'America/Argentina/Buenos_Aires' }
+  );
+
+  // 2. Run every 5 minutes (45-min appointment alerts)
   cron.schedule(
     '*/5 * * * *',
     async () => {
@@ -64,7 +98,7 @@ export function initCronJobs() {
     }
   );
 
-  // Daily 24-hour appointment confirmation check at 9:00 AM ART
+  // 3. Daily 24-hour appointment confirmation check at 9:00 AM ART
   cron.schedule(
     '0 9 * * *',
     async () => {

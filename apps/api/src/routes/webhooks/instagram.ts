@@ -43,8 +43,13 @@ instagramWebhookRouter.post('/', async (req: Request, res: Response) => {
         for (const messaging of entry.messaging || []) {
           const senderId = messaging.sender?.id;
           const message = messaging.message?.text;
+          const isEcho = messaging.message?.is_echo || false;
 
-          if (!senderId || !message) continue;
+          // Ignore echo messages (messages sent by the Instagram Page itself)
+          if (isEcho || !senderId || !message) {
+            if (isEcho) console.log(`⏭️ Ignoring IG DM echo from ${senderId}`);
+            continue;
+          }
 
           console.log(`📩 IG DM from ${senderId}: ${message}`);
 

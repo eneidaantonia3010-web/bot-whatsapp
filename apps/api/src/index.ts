@@ -33,6 +33,9 @@ import { ensureAdminUserExists } from './services/seed-user';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust Render reverse proxy for rate-limiter IP detection
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(compression());
 app.use(cors({

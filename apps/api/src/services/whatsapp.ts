@@ -23,7 +23,7 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): 
   }
 
   try {
-    const cleanNumber = to.split('@')[0].replace(/[^0-9]/g, '');
+    const targetNumber = to.includes('@') ? to : to.replace(/[^0-9]/g, '');
     return await withRetry(async () => {
       const response = await fetch(
         `${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`,
@@ -34,7 +34,7 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): 
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            number: cleanNumber,
+            number: targetNumber,
             text: message,
           }),
         }

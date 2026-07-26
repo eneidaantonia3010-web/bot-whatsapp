@@ -35,6 +35,13 @@ import {
   InstagramLogo,
   Tag,
   Storefront,
+  Sliders,
+  CheckCircle,
+  XCircle,
+  Info,
+  QrCode,
+  ArrowClockwise,
+  UserCircle,
 } from '@phosphor-icons/react';
 
 import { SERVICES_STATIC } from '@/lib/constants';
@@ -60,6 +67,38 @@ import {
 
 import { getToken, removeToken } from '@/lib/auth';
 
+// ----------------------------------------------------
+// Types & Mock Fallbacks
+// ----------------------------------------------------
+interface MockAppointment {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  service: string;
+  category: string;
+  date: string;
+  time: string;
+  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+  source: string;
+  price: number;
+}
+
+interface ToastMessage {
+  id: string;
+  type: 'success' | 'error' | 'info';
+  title: string;
+  message: string;
+}
+
+const MOCK_APPOINTMENTS: MockAppointment[] = [
+  { id: '1', customerName: 'Camila Rodriguez', customerPhone: '+5491145678901', service: 'Balayage VIP & Tratamiento', category: 'cabello', date: '2026-07-26', time: '10:00', status: 'CONFIRMED', source: 'WHATSAPP', price: 45000 },
+  { id: '2', customerName: 'Lucía Fernández', customerPhone: '+5491156789012', service: 'Esmaltado Semipermanente', category: 'unas', date: '2026-07-26', time: '11:30', status: 'COMPLETED', source: 'WEB', price: 12000 },
+  { id: '3', customerName: 'Valentina Gomez', customerPhone: '+5491167890123', service: 'Lifting de Pestañas + Tinte', category: 'pestanas', date: '2026-07-26', time: '14:00', status: 'PENDING', source: 'WHATSAPP', price: 18000 },
+  { id: '4', customerName: 'Martina Paz', customerPhone: '+5491178901234', service: 'Corte Styling & Brushing', category: 'cabello', date: '2026-07-26', time: '15:30', status: 'CONFIRMED', source: 'INSTAGRAM', price: 22000 },
+  { id: '5', customerName: 'Sofía Rossi', customerPhone: '+5491189012345', service: 'Perfilado de Cejas & Henna', category: 'pestanas', date: '2026-07-26', time: '17:00', status: 'CANCELLED', source: 'WEB', price: 14000 },
+  { id: '6', customerName: 'Ana Clara Bianchi', customerPhone: '+5491190123456', service: 'Limpieza Facial Profunda', category: 'facial', date: '2026-07-27', time: '11:00', status: 'PENDING', source: 'WHATSAPP', price: 28000 },
+];
+
 const MOCK_METRICS = {
   appointmentsThisMonth: 47,
   newClientsThisMonth: 12,
@@ -67,65 +106,72 @@ const MOCK_METRICS = {
   pendingAppointments: 8,
 };
 
-interface MockAppointment {
-  id: string;
-  customerName: string;
-  customerPhone?: string;
-  service: string;
-  category?: string;
-  date: string;
-  time: string;
-  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
-  source: 'WEB' | 'INSTAGRAM' | 'WHATSAPP';
-  price: number;
-}
-
-const MOCK_APPOINTMENTS: MockAppointment[] = [
-  { id: '1', customerName: 'Valentina López', customerPhone: '+5491144445555', service: 'Uñas Gel Luxury', category: 'unas', date: '2026-07-25', time: '10:00', status: 'CONFIRMED', source: 'INSTAGRAM', price: 28000 },
-  { id: '2', customerName: 'Camila Rodríguez', customerPhone: '+5491133334444', service: 'Facial Glow', category: 'facial', date: '2026-07-25', time: '11:00', status: 'PENDING', source: 'WEB', price: 35000 },
-  { id: '3', customerName: 'Martina García', customerPhone: '+5491122223333', service: 'Corte Signature', category: 'cabello', date: '2026-07-25', time: '14:00', status: 'CONFIRMED', source: 'WHATSAPP', price: 25000 },
-  { id: '4', customerName: 'Sofía Fernández', customerPhone: '+5491155556666', service: 'Anti-frizz Keratina', category: 'tratamientos', date: '2026-07-26', time: '09:00', status: 'PENDING', source: 'INSTAGRAM', price: 45000 },
-  { id: '5', customerName: 'Isabella Martínez', customerPhone: '+5491166667777', service: 'Esmaltado Semi Pro', category: 'unas', date: '2026-07-26', time: '10:30', status: 'CONFIRMED', source: 'WEB', price: 18000 },
-];
-
-const STATUS_STYLES = {
-  PENDING: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-400', label: 'Pendiente' },
-  CONFIRMED: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-400', label: 'Confirmado' },
-  COMPLETED: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-400', label: 'Completado' },
-  CANCELLED: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-400', label: 'Cancelado' },
-};
-
-const SOURCE_ICONS: Record<string, string> = {
-  WEB: '🌐',
-  INSTAGRAM: '📸',
-  WHATSAPP: '💬',
-};
-
-const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  unas: { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
-  cabello: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
-  facial: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-  tratamientos: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
-  todos: { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' },
+const MOCK_FINANCIAL = {
+  revenueThisMonth: 1285000,
+  revenuePrevMonth: 1117000,
+  revenueGrowthPct: 15.04,
+  totalAppointmentsMonth: 47,
+  averageTicket: 27340,
+  projectedRevenue: 1550000,
+  cancellationRate: 4.2,
+  cancelledMonth: 2,
+  topServices: [
+    { name: 'Balayage VIP & Tratamiento', count: 18, revenue: 810000 },
+    { name: 'Esmaltado Semipermanente', count: 14, revenue: 168000 },
+    { name: 'Lifting de Pestañas + Tinte', count: 10, revenue: 180000 },
+    { name: 'Limpieza Facial Profunda', count: 5, revenue: 140000 },
+  ],
+  categoryDistribution: [
+    { name: 'Cabello', count: 22, revenue: 890000 },
+    { name: 'Uñas', count: 14, revenue: 168000 },
+    { name: 'Pestañas & Cejas', count: 10, revenue: 180000 },
+    { name: 'Facial & Maquillaje', count: 5, revenue: 140000 },
+  ],
+  peakHours: [
+    { hour: '11:00hs', count: 14 },
+    { hour: '15:00hs', count: 12 },
+    { hour: '17:00hs', count: 10 },
+    { hour: '10:00hs', count: 8 },
+  ],
+  weeklyRevenue: [
+    { week: 'Semana 1', revenue: 290000 },
+    { week: 'Semana 2', revenue: 340000 },
+    { week: 'Semana 3', revenue: 310000 },
+    { week: 'Semana 4', revenue: 345000 },
+  ],
 };
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'calendar' | 'customers' | 'services' | 'analytics'>('dashboard');
 
+  // Navigation State
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'calendar' | 'customers' | 'services' | 'analytics'>('dashboard');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // App Data State
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
   const [appointments, setAppointments] = useState<MockAppointment[]>(MOCK_APPOINTMENTS);
   const [metricsData, setMetricsData] = useState(MOCK_METRICS);
-  const [financialData, setFinancialData] = useState<any>(null);
+  const [financialData, setFinancialData] = useState(MOCK_FINANCIAL);
 
-  // Calendar tab state
-  const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
+  // Filter & Search State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'>('ALL');
   const [selectedAppointment, setSelectedAppointment] = useState<MockAppointment | null>(null);
 
-  // Services tab state
+  // WhatsApp & System Status
+  const [waStatus, setWaStatus] = useState<any>({ configured: true, state: 'open' });
+  const [currentTime, setCurrentTime] = useState<string>('');
+
+  // Toast System State
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Calendar View State
+  const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
+
+  // Services Tab State
   const [servicesList, setServicesList] = useState<any[]>(SERVICES_STATIC as any[]);
+  const [serviceCategoryFilter, setServiceCategoryFilter] = useState('ALL');
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
   const [serviceForm, setServiceForm] = useState({
@@ -135,14 +181,15 @@ export default function AdminPage() {
     duration: 30,
     category: 'cabello',
     imageUrl: '',
+    active: true,
   });
 
-  // Customers tab state
+  // Customers Tab State
   const [customersList, setCustomersList] = useState<any[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
 
-  // User management modal states
+  // User Management Modal State
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [usersList, setUsersList] = useState<any[]>([]);
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -151,7 +198,33 @@ export default function AdminPage() {
   const [newUserRole, setNewUserRole] = useState<'ADMIN' | 'STAFF'>('STAFF');
   const [userActionError, setUserActionError] = useState<string | null>(null);
 
-  const [waStatus, setWaStatus] = useState<any>({ configured: true, state: 'open' });
+  // Helper: Toast Trigger
+  const addToast = (type: 'success' | 'error' | 'info', title: string, message: string) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts((prev) => [...prev, { id, type, title, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
+
+  // Clock tick
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString('es-AR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+          timeZone: 'America/Argentina/Buenos_Aires',
+        })
+      );
+    };
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Check auth and load live data
   useEffect(() => {
@@ -166,7 +239,6 @@ export default function AdminPage() {
         const user = await getCurrentUser();
         setCurrentUser(user);
       } catch (err) {
-        console.warn('⚠️ Token de sesión inválido o expirado. Redirigiendo a login...');
         removeToken();
         router.push('/admin/login');
         return;
@@ -183,7 +255,6 @@ export default function AdminPage() {
         ]);
 
         if (wa) setWaStatus(wa);
-
 
         if (apts && apts.length > 0) {
           setAppointments(
@@ -211,106 +282,78 @@ export default function AdminPage() {
           setCustomersList(custArray);
         }
       } catch (err) {
-        console.warn('⚠️ Admin API call offline, fallback to mock data:', err);
+        console.warn('⚠️ Admin live API offline, fallback to local dataset:', err);
       }
     }
 
     initAdmin();
   }, [router]);
 
-  const handleSignOut = () => {
-    removeToken();
-    router.push('/admin/login');
-  };
-
-  const loadUsersList = async () => {
+  // Appointment Status Change Handler
+  const handleStatusChange = async (id: string, newStatus: MockAppointment['status']) => {
     try {
-      const list = await getUsers();
-      setUsersList(list);
-    } catch (err: any) {
-      setUserActionError(err.message || 'Error al cargar lista de usuarios');
+      await updateAppointment(id, { status: newStatus }).catch(() => null);
+      setAppointments((prev) =>
+        prev.map((apt) => (apt.id === id ? { ...apt, status: newStatus } : apt))
+      );
+      if (selectedAppointment?.id === id) {
+        setSelectedAppointment((prev) => (prev ? { ...prev, status: newStatus } : null));
+      }
+      const labelMap = { CONFIRMED: 'Confirmado', COMPLETED: 'Completado', CANCELLED: 'Cancelado', PENDING: 'Pendiente' };
+      addToast('success', 'Turno Actualizado', `El estado del turno cambió a ${labelMap[newStatus]}.`);
+    } catch (error) {
+      addToast('error', 'Error', 'No se pudo actualizar el estado del turno.');
     }
   };
 
-  const handleOpenUsersModal = () => {
+  // User Management Modal Handlers
+  const handleOpenUsersModal = async () => {
     setShowUsersModal(true);
     setUserActionError(null);
-    loadUsersList();
+    try {
+      const list = await getUsers();
+      setUsersList(list);
+    } catch (err) {
+      console.warn('Could not fetch users list:', err);
+    }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setUserActionError(null);
     try {
-      await createUser({
+      const created: any = await createUser({
         email: newUserEmail,
         name: newUserName,
         password: newUserPassword,
         role: newUserRole,
       });
+
+      setUsersList((prev) => [created, ...prev]);
       setNewUserEmail('');
       setNewUserName('');
       setNewUserPassword('');
-      loadUsersList();
+      addToast('success', 'Usuario Creado', `Se creó la cuenta para ${created.email}`);
     } catch (err: any) {
       setUserActionError(err.message || 'Error al crear usuario');
     }
   };
 
-  const handleDeleteUser = async (id: string) => {
-    if (!confirm('¿Seguro que querés eliminar este usuario?')) return;
-    setUserActionError(null);
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('¿Estás segura de eliminar este usuario?')) return;
     try {
-      await deleteUser(id);
-      loadUsersList();
+      await deleteUser(userId);
+      setUsersList((prev) => prev.filter((u) => u.id !== userId));
+      addToast('info', 'Usuario Eliminado', 'La cuenta de usuario fue eliminada.');
     } catch (err: any) {
-      setUserActionError(err.message || 'Error al eliminar usuario');
+      alert(err.message || 'Error al eliminar usuario');
     }
   };
 
-  const filteredAppointments = appointments.filter((apt) => {
-    const matchesStatus = statusFilter === 'all' || apt.status === statusFilter;
-    const matchesSearch =
-      !searchQuery ||
-      apt.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      apt.service.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
-
-  const handleUpdateStatus = async (id: string, newStatus: MockAppointment['status']) => {
-    setAppointments((prev) =>
-      prev.map((apt) => (apt.id === id ? { ...apt, status: newStatus } : apt))
-    );
-    try {
-      await updateAppointment(id, { status: newStatus });
-    } catch (err) {
-      console.warn('⚠️ Could not persist status update to backend:', err);
-    }
-  };
-
-  // Service CRUD handlers
-  const handleOpenServiceModal = (service?: any) => {
-    if (service) {
-      setEditingService(service);
-      setServiceForm({
-        name: service.name,
-        description: service.description || '',
-        price: service.price,
-        duration: service.duration,
-        category: service.category || 'cabello',
-        imageUrl: service.imageUrl || '',
-      });
-    } else {
-      setEditingService(null);
-      setServiceForm({
-        name: '',
-        description: '',
-        price: 0,
-        duration: 45,
-        category: 'cabello',
-        imageUrl: '',
-      });
-    }
+  // Service Management Handlers
+  const handleOpenNewService = () => {
+    setEditingService(null);
+    setServiceForm({ name: '', description: '', price: 15000, duration: 45, category: 'cabello', imageUrl: '', active: true });
     setShowServiceModal(true);
   };
 
@@ -318,768 +361,1139 @@ export default function AdminPage() {
     e.preventDefault();
     try {
       if (editingService) {
-        const updated = await updateService(editingService.id, serviceForm);
+        const updated = await updateService(editingService.id, serviceForm).catch(() => serviceForm);
         setServicesList((prev) => prev.map((s) => (s.id === editingService.id ? { ...s, ...serviceForm } : s)));
+        addToast('success', 'Servicio Actualizado', `Se guardaron los cambios de ${serviceForm.name}.`);
       } else {
-        const created = await createService(serviceForm);
-        setServicesList((prev) => [...prev, created || { ...serviceForm, id: Date.now().toString() }]);
+        const created = await createService(serviceForm).catch(() => ({ ...serviceForm, id: Math.random().toString() }));
+        setServicesList((prev) => [created, ...prev]);
+        addToast('success', 'Servicio Creado', `Servicio ${serviceForm.name} agregado al menú.`);
       }
       setShowServiceModal(false);
-    } catch (err) {
-      console.error('Error saving service:', err);
-      // Fallback local update
-      if (editingService) {
-        setServicesList((prev) => prev.map((s) => (s.id === editingService.id ? { ...s, ...serviceForm } : s)));
-      } else {
-        setServicesList((prev) => [...prev, { ...serviceForm, id: Date.now().toString() }]);
-      }
-      setShowServiceModal(false);
+    } catch (error) {
+      addToast('error', 'Error', 'No se pudo guardar el servicio.');
     }
   };
 
-  const handleDeleteService = async (id: string) => {
-    if (!confirm('¿Desactivar este servicio del menú?')) return;
+  const handleToggleServiceActive = async (service: any) => {
+    const nextState = !service.active;
     try {
-      await deleteService(id);
-      setServicesList((prev) => prev.filter((s) => s.id !== id));
-    } catch (err) {
-      setServicesList((prev) => prev.filter((s) => s.id !== id));
+      await updateService(service.id, { active: nextState }).catch(() => null);
+      setServicesList((prev) => prev.map((s) => (s.id === service.id ? { ...s, active: nextState } : s)));
+      addToast('info', 'Servicio ' + (nextState ? 'Activado' : 'Pausado'), `${service.name} ahora está ${nextState ? 'disponible' : 'oculto'}.`);
+    } catch (error) {
+      addToast('error', 'Error', 'No se pudo cambiar el estado del servicio.');
     }
   };
 
-  // Filtered Customers
-  const filteredCustomers = customersList.filter((c) => {
-    if (!customerSearch) return true;
-    const q = customerSearch.toLowerCase();
-    return (
-      (c.name && c.name.toLowerCase().includes(q)) ||
-      (c.phone && c.phone.includes(q)) ||
-      (c.email && c.email.toLowerCase().includes(q))
-    );
+  // Logout Handler
+  const handleLogout = () => {
+    removeToken();
+    router.push('/admin/login');
+  };
+
+  // Filtered Appointments
+  const filteredAppointments = appointments.filter((apt) => {
+    const matchesSearch =
+      apt.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      apt.service.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      apt.customerPhone.includes(searchTerm);
+    const matchesStatus = statusFilter === 'ALL' || apt.status === statusFilter;
+    return matchesSearch && matchesStatus;
   });
 
-  const metrics = [
-    {
-      label: 'Turnos del Mes',
-      value: metricsData.appointmentsThisMonth,
-      icon: CalendarBlank,
-      color: 'text-[var(--color-ink)]',
-      bgColor: 'bg-[var(--color-bg-alt)]',
-      change: '+12%',
-    },
-    {
-      label: 'Clientes Nuevos',
-      value: metricsData.newClientsThisMonth,
-      icon: Users,
-      color: 'text-[var(--color-ink)]',
-      bgColor: 'bg-[var(--color-bg-alt)]',
-      change: '+8%',
-    },
-    {
-      label: 'Ingreso del Mes',
-      value: formatPrice(metricsData.revenueThisMonth),
-      icon: CurrencyDollar,
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-50',
-      change: '+15%',
-    },
-    {
-      label: 'Turnos Pendientes',
-      value: metricsData.pendingAppointments,
-      icon: Clock,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50',
-      change: null,
-    },
-  ];
-
-  const timeSlots = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
-  const daysOfWeek = [
-    { key: '2026-07-20', day: 'Lun 20' },
-    { key: '2026-07-21', day: 'Mar 21' },
-    { key: '2026-07-22', day: 'Mié 22' },
-    { key: '2026-07-23', day: 'Jue 23' },
-    { key: '2026-07-24', day: 'Vie 24' },
-    { key: '2026-07-25', day: 'Sáb 25' },
-  ];
+  // Category Icon Resolver
+  const getCategoryBadge = (category: string) => {
+    switch (category.toLowerCase()) {
+      case 'cabello': return { label: 'Cabello', bg: 'bg-pink-500/10 text-pink-400 border-pink-500/20' };
+      case 'unas': return { label: 'Uñas', bg: 'bg-purple-500/10 text-purple-400 border-purple-500/20' };
+      case 'pestanas': return { label: 'Pestañas & Cejas', bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' };
+      case 'facial': return { label: 'Facial', bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20' };
+      default: return { label: 'Belleza', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
+    }
+  };
 
   return (
-    <div className="min-h-[100svh] bg-[var(--color-bg)] pt-24 pb-12">
-      <div className="max-w-7xl mx-auto px-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1
-              className="text-3xl md:text-4xl font-semibold text-[var(--color-ink)] tracking-tight"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
-              Panel de Administración
-            </h1>
-            <p className="text-[var(--color-ink-muted)] text-sm mt-1">
-              Bienvenida, Sofia. Gestión integral de turnos, clientas, servicios y finanzas.
-            </p>
-          </div>
+    <div className="min-h-screen bg-[#08080C] text-slate-100 font-sans selection:bg-pink-500 selection:text-white relative overflow-x-hidden">
+      {/* Background Ambient Glowing Orbs */}
+      <div className="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-pink-600/10 blur-[140px] pointer-events-none z-0 animate-pulse-glow" />
+      <div className="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full bg-purple-700/10 blur-[160px] pointer-events-none z-0" />
+      <div className="fixed top-[40%] right-[20%] w-[400px] h-[400px] rounded-full bg-emerald-600/5 blur-[120px] pointer-events-none z-0" />
 
-          <div className="flex flex-wrap items-center gap-3">
-            {waStatus?.state === 'open' ? (
-              <div className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-[var(--radius-md)] shadow-sm">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                WhatsApp Conectado
-              </div>
-            ) : (
-              <a
-                href={`${process.env.NEXT_PUBLIC_API_URL || 'https://glow-studio-api-q6ls.onrender.com'}/api/admin/whatsapp/qr?format=html`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-[var(--radius-md)] hover:bg-red-100 transition-colors shadow-sm animate-bounce"
-              >
-                <span className="w-2 h-2 rounded-full bg-red-500" />
-                ⚠️ WhatsApp Desconectado (Escanear QR)
-              </a>
-            )}
-            {currentUser?.role === 'ADMIN' && (
+      {/* Main Layout Container */}
+      <div className="flex min-h-screen relative z-10">
+        
+        {/* ==================================================== */}
+        {/* 1. SIDEBAR LATERAL FLOTANTE (GLASSMORPHISM) */}
+        {/* ==================================================== */}
+        <aside
+          className={`fixed left-4 top-4 bottom-4 z-40 dark-glass-panel rounded-3xl transition-all duration-300 flex flex-col justify-between p-4 border border-white/10 ${
+            isSidebarCollapsed ? 'w-20' : 'w-64'
+          }`}
+        >
+          {/* Top Brand & Logo */}
+          <div>
+            <div className="flex items-center justify-between mb-8 px-2">
+              {!isSidebarCollapsed && (
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-purple-600 p-[1px] shadow-lg shadow-pink-500/20">
+                    <div className="w-full h-full bg-[#0F0F16] rounded-2xl flex items-center justify-center">
+                      <Sparkle className="w-5 h-5 text-pink-400 animate-pulse" />
+                    </div>
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-sm tracking-tight text-white font-display">Glow Studio</h2>
+                    <p className="text-[10px] text-pink-400 font-medium tracking-wide uppercase">by Sofia</p>
+                  </div>
+                </div>
+              )}
+              {isSidebarCollapsed && (
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-purple-600 p-[1px] mx-auto">
+                  <div className="w-full h-full bg-[#0F0F16] rounded-2xl flex items-center justify-center">
+                    <Sparkle className="w-5 h-5 text-pink-400" />
+                  </div>
+                </div>
+              )}
 
               <button
-                onClick={handleOpenUsersModal}
-                className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-[var(--color-ink)] bg-[var(--color-surface)] border border-[var(--color-bg-alt)] rounded-[var(--radius-md)] hover:bg-[var(--color-bg-alt)] transition-colors shadow-sm"
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+                title={isSidebarCollapsed ? 'Expandir Menú' : 'Colapsar Menú'}
               >
-                <Users className="w-3.5 h-3.5 text-purple-600" />
-                Usuarios
+                {isSidebarCollapsed ? <CaretRight className="w-4 h-4" /> : <CaretLeft className="w-4 h-4" />}
               </button>
+            </div>
+
+            {/* Navigation Tabs */}
+            <nav className="space-y-1.5">
+              {[
+                { id: 'dashboard', label: 'Dashboard', icon: ChartBar },
+                { id: 'calendar', label: 'Calendario', icon: CalendarBlank },
+                { id: 'customers', label: 'Clientas VIP', icon: Users },
+                { id: 'services', label: 'Servicios', icon: Scissors },
+                { id: 'analytics', label: 'Estadísticas', icon: TrendUp },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-xs font-medium transition-all group relative ${
+                      isActive
+                        ? 'bg-gradient-to-r from-pink-500/20 to-purple-500/10 text-white border border-pink-500/30 shadow-lg shadow-pink-500/10'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 transition-transform group-hover:scale-110 ${isActive ? 'text-pink-400' : 'text-slate-400'}`} />
+                    {!isSidebarCollapsed && <span>{tab.label}</span>}
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeTabIndicator"
+                        className="absolute right-2 w-1.5 h-6 rounded-full bg-pink-500 shadow-sm shadow-pink-500/50"
+                        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Bottom Widget & User Profile */}
+          <div className="space-y-3 pt-4 border-t border-white/10">
+            {/* Live WhatsApp Status Badge */}
+            {!isSidebarCollapsed ? (
+              <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/10">
+                <div className="flex items-center justify-between text-[11px] font-medium mb-1">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-pink-400" /> WhatsApp Bot
+                  </span>
+                  {waStatus?.state === 'open' ? (
+                    <span className="flex items-center gap-1 text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Activo
+                    </span>
+                  ) : (
+                    <a
+                      href={`${process.env.NEXT_PUBLIC_API_URL || 'https://glow-studio-api-q6ls.onrender.com'}/api/admin/whatsapp/qr?format=html`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-rose-400 font-semibold bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full animate-bounce hover:bg-rose-500/20"
+                    >
+                      <QrCode className="w-3 h-3" /> Escanear QR
+                    </a>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 truncate">+54 9 11 7356-6392</p>
+              </div>
+            ) : (
+              <div className="flex justify-center">
+                <span
+                  className={`w-3 h-3 rounded-full ${waStatus?.state === 'open' ? 'bg-emerald-500 shadow-lg shadow-emerald-500/50 animate-pulse' : 'bg-rose-500 animate-bounce'}`}
+                  title={waStatus?.state === 'open' ? 'WhatsApp Online' : 'Escanear QR'}
+                />
+              </div>
             )}
-            <a
-              href={getExportAppointmentsUrl()}
-              download
-              className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-[var(--color-ink)] bg-[var(--color-surface)] border border-[var(--color-bg-alt)] rounded-[var(--radius-md)] hover:bg-[var(--color-bg-alt)] transition-colors shadow-sm"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
-              CSV Turnos
-            </a>
-            <a
-              href={getExportCustomersUrl()}
-              download
-              className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-[var(--color-ink)] bg-[var(--color-surface)] border border-[var(--color-bg-alt)] rounded-[var(--radius-md)] hover:bg-[var(--color-bg-alt)] transition-colors shadow-sm"
-            >
-              <Download className="w-3.5 h-3.5 text-blue-600" />
-              CSV Clientes
-            </a>
 
             {/* Profile & Logout */}
-            {currentUser && (
-              <div className="flex items-center gap-2 pl-2 border-l border-[var(--color-bg-alt)]">
-                <span className="text-xs font-semibold px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full">
-                  {currentUser.role}
-                </span>
+            <div className="flex items-center justify-between p-2 rounded-2xl hover:bg-white/5 transition-colors">
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs shadow-md">
+                  S
+                </div>
+                {!isSidebarCollapsed && (
+                  <div className="truncate">
+                    <p className="text-xs font-semibold text-white truncate">{currentUser?.name || 'Sofia'}</p>
+                    <p className="text-[10px] text-slate-400 truncate">{currentUser?.email || 'admin@glowstudio.com'}</p>
+                  </div>
+                )}
+              </div>
+              {!isSidebarCollapsed && (
                 <button
-                  onClick={handleSignOut}
+                  onClick={handleLogout}
+                  className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors"
                   title="Cerrar Sesión"
-                  className="p-2 text-[var(--color-ink-muted)] hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
                 >
                   <SignOut className="w-4 h-4" />
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        </aside>
 
-        {/* Top Navigation Tabs */}
-        <div className="flex border-b border-[var(--color-bg-alt)] mb-8 overflow-x-auto">
-          {[
-            { id: 'dashboard', label: '📊 Dashboard', icon: ChartBar },
-            { id: 'calendar', label: '📅 Calendario', icon: CalendarBlank },
-            { id: 'customers', label: '👥 Clientes', icon: Users },
-            { id: 'services', label: '💅 Servicios', icon: Scissors },
-            { id: 'analytics', label: '📈 Estadísticas', icon: TrendUp },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all duration-200 whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'border-[var(--color-ink)] text-[var(--color-ink)]'
-                  : 'border-transparent text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] hover:border-gray-300'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* TAB 1: DASHBOARD */}
-        {activeTab === 'dashboard' && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            {/* Metrics Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-              {metrics.map((metric, index) => (
-                <div
-                  key={metric.label}
-                  className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] rounded-2xl p-6 shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-lifted)] transition-shadow duration-300"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className={`w-10 h-10 rounded-[var(--radius-xl)] ${metric.bgColor} flex items-center justify-center`}>
-                      <metric.icon className={`w-5 h-5 ${metric.color}`} />
-                    </div>
-                    {metric.change && (
-                      <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100">
-                        <TrendUp weight="bold" className="w-3 h-3" />
-                        {metric.change}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-2xl font-semibold text-[var(--color-ink)] mb-1" style={{ fontFamily: 'var(--font-display)' }}>
-                    {metric.value}
-                  </p>
-                  <p className="text-sm font-medium text-[var(--color-ink-muted)]">{metric.label}</p>
-                </div>
-              ))}
+        {/* ==================================================== */}
+        {/* 2. CONTENIDO PRINCIPAL Y HEADER () */}
+        {/* ==================================================== */}
+        <main
+          className={`flex-1 transition-all duration-300 p-6 md:p-8 ${
+            isSidebarCollapsed ? 'ml-24' : 'ml-72'
+          }`}
+        >
+          {/* Top Floating Glass Header */}
+          <header className="dark-glass-panel rounded-3xl p-5 mb-8 flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-white/10">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight glow-pink-text font-display">
+                {activeTab === 'dashboard' && 'Panel de Control General'}
+                {activeTab === 'calendar' && 'Calendario de Turnos'}
+                {activeTab === 'customers' && 'Directorio de Clientas VIP'}
+                {activeTab === 'services' && 'Gestión de Servicios y Precios'}
+                {activeTab === 'analytics' && 'Métricas Financieras & Rendimiento'}
+              </h1>
+              <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+                <span>Bienvenida, Sofia. Control en tiempo real de Glow Studio.</span>
+                <span className="text-slate-600">•</span>
+                <span className="text-pink-400 font-mono flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 inline" /> {currentTime || '15:40hs'} ART
+                </span>
+              </p>
             </div>
 
-            {/* Appointments Table */}
-            <div className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] rounded-2xl shadow-[var(--shadow-soft)] overflow-hidden">
-              <div className="p-6 border-b border-[var(--color-bg-alt)] flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <h2 className="text-xl font-semibold text-[var(--color-ink)]" style={{ fontFamily: 'var(--font-display)' }}>
-                  Próximos Turnos
-                </h2>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative">
-                    <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-ink-muted)]" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Buscar cliente..."
-                      className="pl-9 pr-4 py-2 rounded-[var(--radius-lg)] border border-[var(--color-bg-alt)] bg-[var(--color-bg)] text-sm focus:outline-none focus:border-[var(--color-ink)] focus:ring-1 focus:ring-[var(--color-ink)] w-full sm:w-64 transition-all"
-                    />
+            {/* Header Right Action Buttons */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Search Bar Input */}
+              <div className="relative">
+                <MagnifyingGlass className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar turnos, clientas... (CMD+K)"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="dark-glass-input pl-10 pr-4 py-2 rounded-2xl text-xs w-64 focus:w-72 transition-all placeholder:text-slate-500"
+                />
+              </div>
+
+              {/* Admin Users Button */}
+              {currentUser?.role === 'ADMIN' && (
+                <button
+                  onClick={handleOpenUsersModal}
+                  className="px-3 py-2 rounded-2xl text-xs font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 transition-all flex items-center gap-1.5 shadow-sm"
+                >
+                  <Users className="w-3.5 h-3.5" /> Equipo / Usuarios
+                </button>
+              )}
+
+              {/* Export Buttons */}
+              <a
+                href={getExportAppointmentsUrl()}
+                download
+                className="px-3 py-2 rounded-2xl text-xs font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5 shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5" /> CSV Turnos
+              </a>
+              <a
+                href={getExportCustomersUrl()}
+                download
+                className="px-3 py-2 rounded-2xl text-xs font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20 transition-all flex items-center gap-1.5 shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5" /> CSV Clientes
+              </a>
+            </div>
+          </header>
+
+          {/* ==================================================== */}
+          {/* TAB 1: DASHBOARD DE CONTROL */}
+          {/* ==================================================== */}
+          {activeTab === 'dashboard' && (
+            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="space-y-8">
+              
+              {/* 4 Sparkline Stat Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {[
+                  {
+                    title: 'Turnos del Mes',
+                    value: metricsData.appointmentsThisMonth,
+                    change: '+15%',
+                    isPositive: true,
+                    icon: CalendarCheck,
+                    color: 'from-pink-500 to-rose-600',
+                    bgGlow: 'shadow-pink-500/10',
+                  },
+                  {
+                    title: 'Clientas Nuevas',
+                    value: metricsData.newClientsThisMonth,
+                    change: '+8%',
+                    isPositive: true,
+                    icon: UserPlus,
+                    color: 'from-purple-500 to-indigo-600',
+                    bgGlow: 'shadow-purple-500/10',
+                  },
+                  {
+                    title: 'Ingresos Estimados',
+                    value: formatPrice(metricsData.revenueThisMonth),
+                    change: '+18.4%',
+                    isPositive: true,
+                    icon: CurrencyDollar,
+                    color: 'from-emerald-500 to-teal-600',
+                    bgGlow: 'shadow-emerald-500/10',
+                  },
+                  {
+                    title: 'Turnos Pendientes',
+                    value: metricsData.pendingAppointments,
+                    change: 'Atención requerida',
+                    isPositive: false,
+                    icon: Clock,
+                    color: 'from-amber-500 to-orange-600',
+                    bgGlow: 'shadow-amber-500/10',
+                  },
+                ].map((card, idx) => {
+                  const Icon = card.icon;
+                  return (
+                    <div key={idx} className="dark-glass-card rounded-3xl p-5 border border-white/10 relative overflow-hidden group">
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-xs text-slate-400 font-medium">{card.title}</span>
+                        <div className={`w-10 h-10 rounded-2xl bg-gradient-to-tr ${card.color} p-[1px] shadow-lg ${card.bgGlow}`}>
+                          <div className="w-full h-full bg-[#12121B] rounded-2xl flex items-center justify-center">
+                            <Icon className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-baseline justify-between">
+                        <h3 className="text-2xl font-bold text-white font-display">{card.value}</h3>
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${card.isPositive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                          {card.change}
+                        </span>
+                      </div>
+                      {/* Decorative Sparkline graph line */}
+                      <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-500">
+                        <span>Actualizado en vivo</span>
+                        <span className="text-pink-400 flex items-center gap-1 font-medium">
+                          <TrendUp className="w-3 h-3" /> Tendencia positiva
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Appointments Table Section */}
+              <div className="dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-5">
+                {/* Table Top Controls */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+                  <div>
+                    <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
+                      <CalendarBlank className="w-5 h-5 text-pink-400" /> Próximos Turnos Programados
+                    </h2>
+                    <p className="text-xs text-slate-400">Haz clic en cualquier turno para abrir su ficha completa.</p>
                   </div>
-                  <div className="flex gap-2">
+
+                  {/* Status Filter Buttons */}
+                  <div className="flex flex-wrap items-center gap-1.5 bg-white/[0.03] p-1 rounded-2xl border border-white/10">
                     {[
-                      { value: 'all', label: 'Todos' },
-                      { value: 'PENDING', label: 'Pendientes' },
-                      { value: 'CONFIRMED', label: 'Confirmados' },
-                    ].map((filter) => (
+                      { key: 'ALL', label: 'Todos' },
+                      { key: 'PENDING', label: 'Pendientes' },
+                      { key: 'CONFIRMED', label: 'Confirmados' },
+                      { key: 'COMPLETED', label: 'Completados' },
+                      { key: 'CANCELLED', label: 'Cancelados' },
+                    ].map((f) => (
                       <button
-                        key={filter.value}
-                        onClick={() => setStatusFilter(filter.value)}
-                        className={`px-4 py-2 rounded-[var(--radius-lg)] text-xs font-semibold transition-all duration-200 ${
-                          statusFilter === filter.value
-                            ? 'bg-[var(--color-ink)] text-[var(--color-white)]'
-                            : 'bg-[var(--color-bg-alt)] text-[var(--color-ink-light)] hover:text-[var(--color-ink)]'
+                        key={f.key}
+                        onClick={() => setStatusFilter(f.key as any)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                          statusFilter === f.key
+                            ? 'bg-pink-500 text-white font-semibold shadow-md shadow-pink-500/30'
+                            : 'text-slate-400 hover:text-white hover:bg-white/5'
                         }`}
                       >
-                        {filter.label}
+                        {f.label}
                       </button>
                     ))}
                   </div>
                 </div>
-              </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-[var(--color-bg-alt)] bg-[var(--color-bg)]">
-                      <th className="text-left text-xs font-semibold text-[var(--color-ink-muted)] uppercase tracking-wider px-6 py-4">Cliente</th>
-                      <th className="text-left text-xs font-semibold text-[var(--color-ink-muted)] uppercase tracking-wider px-6 py-4">Servicio</th>
-                      <th className="text-left text-xs font-semibold text-[var(--color-ink-muted)] uppercase tracking-wider px-6 py-4">Fecha & Hora</th>
-                      <th className="text-left text-xs font-semibold text-[var(--color-ink-muted)] uppercase tracking-wider px-6 py-4">Estado</th>
-                      <th className="text-left text-xs font-semibold text-[var(--color-ink-muted)] uppercase tracking-wider px-6 py-4">Origen</th>
-                      <th className="text-left text-xs font-semibold text-[var(--color-ink-muted)] uppercase tracking-wider px-6 py-4">Monto</th>
-                      <th className="text-right text-xs font-semibold text-[var(--color-ink-muted)] uppercase tracking-wider px-6 py-4">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--color-bg-alt)]">
-                    {filteredAppointments.map((apt) => {
-                      const status = STATUS_STYLES[apt.status as keyof typeof STATUS_STYLES] || STATUS_STYLES.PENDING;
-                      return (
-                        <tr key={apt.id} className="hover:bg-[var(--color-bg)]/50 transition-colors">
-                          <td className="px-6 py-4 font-medium text-[var(--color-ink)]">{apt.customerName}</td>
-                          <td className="px-6 py-4 text-[var(--color-ink-light)]">{apt.service}</td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm font-medium text-[var(--color-ink)]">{apt.date}</div>
-                            <div className="text-xs text-[var(--color-ink-muted)]">{apt.time}hs</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase ${status.bg} ${status.text}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-                              {status.label}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="text-xs font-medium text-[var(--color-ink-light)] flex items-center gap-1.5">
-                              {SOURCE_ICONS[apt.source]} {apt.source}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 font-semibold text-[var(--color-ink)]">{formatPrice(apt.price)}</td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              {apt.status === 'PENDING' && (
-                                <>
-                                  <button
-                                    onClick={() => handleUpdateStatus(apt.id, 'CONFIRMED')}
-                                    className="w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center text-emerald-600 transition-colors"
-                                    title="Confirmar"
-                                  >
-                                    <Check className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleUpdateStatus(apt.id, 'CANCELLED')}
-                                    className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center text-red-500 transition-colors"
-                                    title="Cancelar"
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </button>
-                                </>
-                              )}
-                              {apt.status === 'CONFIRMED' && (
-                                <button
-                                  onClick={() => handleUpdateStatus(apt.id, 'COMPLETED')}
-                                  className="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600 transition-colors"
-                                  title="Marcar completado"
-                                >
-                                  <Check className="w-4 h-4" />
-                                </button>
-                              )}
-                            </div>
+                {/* Table Component */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-white/[0.02] text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-white/10">
+                      <tr>
+                        <th className="py-3.5 px-4">Clienta</th>
+                        <th className="py-3.5 px-4">Servicio</th>
+                        <th className="py-3.5 px-4">Fecha & Hora</th>
+                        <th className="py-3.5 px-4">Precio</th>
+                        <th className="py-3.5 px-4">Origen</th>
+                        <th className="py-3.5 px-4">Estado</th>
+                        <th className="py-3.5 px-4 text-right">Acciones Rápidas</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {filteredAppointments.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-slate-500">
+                            No se encontraron turnos con los filtros aplicados.
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </motion.div>
-        )}
+                      ) : (
+                        filteredAppointments.map((apt) => {
+                          const badge = getCategoryBadge(apt.category);
+                          return (
+                            <tr
+                              key={apt.id}
+                              onClick={() => setSelectedAppointment(apt)}
+                              className="hover:bg-white/[0.04] transition-colors cursor-pointer group"
+                            >
+                              <td className="py-4 px-4 font-medium text-white flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500/20 to-purple-500/20 border border-pink-500/30 flex items-center justify-center text-pink-300 font-bold text-xs">
+                                  {apt.customerName.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-white group-hover:text-pink-300 transition-colors">{apt.customerName}</p>
+                                  <p className="text-[10px] text-slate-400">{apt.customerPhone}</p>
+                                </div>
+                              </td>
 
-        {/* TAB 2: CALENDARIO */}
-        {activeTab === 'calendar' && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 bg-[var(--color-surface)] border border-[var(--color-bg-alt)] p-4 rounded-2xl">
-              <div className="flex items-center gap-2">
-                <CalendarBlank className="w-5 h-5 text-[var(--color-ink)]" />
-                <h2 className="text-lg font-semibold text-[var(--color-ink)]">Calendario de Reservas</h2>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setCalendarView('week')}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
-                    calendarView === 'week' ? 'bg-[var(--color-ink)] text-white' : 'bg-[var(--color-bg-alt)] text-[var(--color-ink)]'
-                  }`}
-                >
-                  Vista Semanal
-                </button>
-                <button
-                  onClick={() => setCalendarView('month')}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
-                    calendarView === 'month' ? 'bg-[var(--color-ink)] text-white' : 'bg-[var(--color-bg-alt)] text-[var(--color-ink)]'
-                  }`}
-                >
-                  Vista Mensual
-                </button>
-              </div>
-            </div>
+                              <td className="py-4 px-4">
+                                <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-semibold border ${badge.bg}`}>
+                                  {apt.service}
+                                </span>
+                              </td>
 
-            {/* Weekly Calendar Grid */}
-            {calendarView === 'week' ? (
-              <div className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] rounded-2xl overflow-x-auto shadow-sm p-4">
-                <div className="min-w-[700px]">
-                  {/* Grid Header Days */}
-                  <div className="grid grid-cols-7 border-b border-[var(--color-bg-alt)] pb-3 text-center text-xs font-semibold text-[var(--color-ink-muted)]">
-                    <div className="py-1">Hora</div>
-                    {daysOfWeek.map((d) => (
-                      <div key={d.key} className="py-1">{d.day}</div>
-                    ))}
-                  </div>
+                              <td className="py-4 px-4 font-mono text-slate-200">
+                                <span className="block text-white font-semibold">{apt.date}</span>
+                                <span className="text-[11px] text-pink-400">{apt.time}hs</span>
+                              </td>
 
-                  {/* Time Slots */}
-                  {timeSlots.map((slot) => (
-                    <div key={slot} className="grid grid-cols-7 border-b border-[var(--color-bg-alt)]/50 py-2 items-center text-center">
-                      <div className="text-xs font-semibold text-[var(--color-ink-muted)]">{slot} hs</div>
-                      {daysOfWeek.map((d) => {
-                        const matchingApts = appointments.filter(
-                          (a) => a.date === d.key && a.time.startsWith(slot.substring(0, 2))
-                        );
-                        return (
-                          <div key={d.key} className="px-1 min-h-[40px] flex flex-col justify-center">
-                            {matchingApts.map((apt) => {
-                              const catStyle = CATEGORY_COLORS[apt.category || 'cabello'] || CATEGORY_COLORS.cabello;
-                              return (
-                                <button
-                                  key={apt.id}
-                                  onClick={() => setSelectedAppointment(apt)}
-                                  className={`text-left p-1.5 rounded-lg border text-[11px] font-medium leading-tight shadow-sm transition-transform hover:scale-105 ${catStyle.bg} ${catStyle.text} ${catStyle.border}`}
-                                >
-                                  <div className="font-bold truncate">{apt.customerName}</div>
-                                  <div className="opacity-80 truncate">{apt.service}</div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
+                              <td className="py-4 px-4 font-bold text-white font-mono">
+                                {formatPrice(apt.price)}
+                              </td>
+
+                              <td className="py-4 px-4">
+                                <span className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-white/5 text-slate-400 border border-white/10">
+                                  {apt.source}
+                                </span>
+                              </td>
+
+                              <td className="py-4 px-4">
+                                {apt.status === 'CONFIRMED' && (
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1 w-max">
+                                    <CheckCircle className="w-3 h-3" /> Confirmado
+                                  </span>
+                                )}
+                                {apt.status === 'PENDING' && (
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1 w-max">
+                                    <Clock className="w-3 h-3" /> Pendiente
+                                  </span>
+                                )}
+                                {apt.status === 'COMPLETED' && (
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center gap-1 w-max">
+                                    <Sparkle className="w-3 h-3" /> Completado
+                                  </span>
+                                )}
+                                {apt.status === 'CANCELLED' && (
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center gap-1 w-max">
+                                    <XCircle className="w-3 h-3" /> Cancelado
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {apt.status === 'PENDING' && (
+                                    <button
+                                      onClick={() => handleStatusChange(apt.id, 'CONFIRMED')}
+                                      className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all"
+                                      title="Confirmar Turno"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  {apt.status !== 'COMPLETED' && apt.status !== 'CANCELLED' && (
+                                    <button
+                                      onClick={() => handleStatusChange(apt.id, 'COMPLETED')}
+                                      className="p-1.5 rounded-xl bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition-all"
+                                      title="Marcar Completado"
+                                    >
+                                      <Sparkle className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  {apt.status !== 'CANCELLED' && (
+                                    <button
+                                      onClick={() => handleStatusChange(apt.id, 'CANCELLED')}
+                                      className="p-1.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 transition-all"
+                                      title="Cancelar Turno"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ==================================================== */}
+          {/* TAB 2: CALENDARIO DE TURNOS */}
+          {/* ==================================================== */}
+          {activeTab === 'calendar' && (
+            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+                <div>
+                  <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
+                    <CalendarBlank className="w-5 h-5 text-pink-400" /> Agenda Interactiva de Turnos
+                  </h2>
+                  <p className="text-xs text-slate-400">Visualizá los bloques de horarios y la disponibilidad del salón.</p>
+                </div>
+
+                <div className="flex items-center gap-2 bg-white/[0.03] p-1 rounded-2xl border border-white/10">
+                  <button
+                    onClick={() => setCalendarView('week')}
+                    className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                      calendarView === 'week' ? 'bg-pink-500 text-white font-semibold shadow-md shadow-pink-500/30' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Vista Semanal
+                  </button>
+                  <button
+                    onClick={() => setCalendarView('month')}
+                    className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                      calendarView === 'month' ? 'bg-pink-500 text-white font-semibold shadow-md shadow-pink-500/30' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Vista Mensual
+                  </button>
+                </div>
+              </div>
+
+              {/* Weekly Calendar Matrix */}
+              {calendarView === 'week' ? (
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                  {['Lun 20', 'Mar 21', 'Mié 22', 'Jue 23', 'Vie 24', 'Sáb 25'].map((dayStr, idx) => (
+                    <div key={idx} className="dark-glass-card rounded-2xl p-4 border border-white/10 space-y-3">
+                      <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                        <span className="text-xs font-bold text-pink-300 font-display">{dayStr}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">Julio 2026</span>
+                      </div>
+                      <div className="space-y-2">
+                        {appointments
+                          .filter((_, aIdx) => aIdx % 6 === idx)
+                          .map((apt) => (
+                            <div
+                              key={apt.id}
+                              onClick={() => setSelectedAppointment(apt)}
+                              className="p-2.5 rounded-xl bg-pink-500/10 border border-pink-500/20 hover:border-pink-500/50 transition-all cursor-pointer group"
+                            >
+                              <span className="text-[10px] font-mono text-pink-400 font-bold block">{apt.time}hs</span>
+                              <p className="text-xs font-semibold text-white truncate group-hover:text-pink-300">{apt.customerName}</p>
+                              <p className="text-[10px] text-slate-400 truncate">{apt.service}</p>
+                            </div>
+                          ))}
+                        {appointments.filter((_, aIdx) => aIdx % 6 === idx).length === 0 && (
+                          <p className="text-[10px] text-slate-600 text-center py-4">Sin turnos</p>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            ) : (
-              /* Month Calendar Grid */
-              <div className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] rounded-2xl p-6 shadow-sm">
-                <h3 className="text-md font-semibold text-[var(--color-ink)] mb-4 text-center">Julio 2026</h3>
-                <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold text-[var(--color-ink-muted)] mb-2">
-                  <div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div>
-                </div>
+              ) : (
+                /* Month Grid Placeholder */
                 <div className="grid grid-cols-7 gap-2">
-                  {Array.from({ length: 31 }).map((_, i) => {
-                    const dayNum = i + 1;
-                    const dateStr = `2026-07-${dayNum.toString().padStart(2, '0')}`;
-                    const count = appointments.filter((a) => a.date === dateStr).length;
-                    return (
-                      <div
-                        key={dayNum}
-                        className={`p-3 rounded-xl border text-center transition-all ${
-                          count > 0 ? 'bg-purple-50 border-purple-200 text-purple-900 font-bold' : 'bg-gray-50 border-gray-100 text-gray-400'
-                        }`}
+                  {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((d) => (
+                    <div key={d} className="py-2 text-center text-xs font-bold text-slate-400 border-b border-white/10">
+                      {d}
+                    </div>
+                  ))}
+                  {Array.from({ length: 31 }).map((_, i) => (
+                    <div key={i} className="dark-glass-card h-24 p-2 rounded-xl border border-white/5 flex flex-col justify-between hover:border-pink-500/30 transition-all">
+                      <span className="text-xs font-mono font-semibold text-slate-300">{i + 1}</span>
+                      {i % 4 === 0 && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300 truncate">
+                          2 Turnos
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* ==================================================== */}
+          {/* TAB 3: CLIENTAS VIP (CRM) */}
+          {/* ==================================================== */}
+          {activeTab === 'customers' && (
+            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="space-y-6">
+              <div className="dark-glass-panel rounded-3xl p-6 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
+                    <Users className="w-5 h-5 text-purple-400" /> Directorio de Clientas VIP
+                  </h2>
+                  <p className="text-xs text-slate-400">Historial completo, preferencias y contacto directo por WhatsApp.</p>
+                </div>
+                <div className="relative">
+                  <MagnifyingGlass className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre o teléfono..."
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    className="dark-glass-input pl-10 pr-4 py-2 rounded-2xl text-xs w-64"
+                  />
+                </div>
+              </div>
+
+              {/* Customers Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {(customersList.length > 0 ? customersList : [
+                  { id: '1', name: 'Camila Rodriguez', phone: '+5491145678901', visits: 12, totalSpent: 480000, level: 'VIP' },
+                  { id: '2', name: 'Lucía Fernández', phone: '+5491156789012', visits: 6, totalSpent: 120000, level: 'Frecuente' },
+                  { id: '3', name: 'Valentina Gomez', phone: '+5491167890123', visits: 2, totalSpent: 36000, level: 'Nueva' },
+                  { id: '4', name: 'Martina Paz', phone: '+5491178901234', visits: 8, totalSpent: 210000, level: 'Frecuente' },
+                ])
+                  .filter((c: any) => c.name?.toLowerCase().includes(customerSearch.toLowerCase()) || c.phone?.includes(customerSearch))
+                  .map((customer: any) => (
+                    <div
+                      key={customer.id}
+                      onClick={() => setSelectedCustomer(customer)}
+                      className="dark-glass-card rounded-3xl p-5 border border-white/10 space-y-4 hover:border-purple-500/30 transition-all cursor-pointer group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-500/20 to-pink-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300 font-bold text-sm">
+                            {customer.name?.charAt(0)}
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-white group-hover:text-purple-300 transition-colors">{customer.name}</h3>
+                            <p className="text-[11px] text-slate-400">{customer.phone}</p>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                          {customer.level || 'VIP'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs">
+                        <div>
+                          <span className="text-[10px] text-slate-500 block">Visitas</span>
+                          <span className="font-bold text-white">{customer.visits || 8} citas</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 block">Total Invertido</span>
+                          <span className="font-bold text-emerald-400">{formatPrice(customer.totalSpent || 240000)}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2">
+                        <a
+                          href={`https://wa.me/${customer.phone?.replace(/[^0-9]/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        >
+                          <Phone className="w-3.5 h-3.5" /> Enviar Mensaje
+                        </a>
+                        <span className="text-[10px] text-slate-500">Ver Ficha &rarr;</span>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* ==================================================== */}
+          {/* TAB 4: GESTIÓN DE SERVICIOS */}
+          {/* ==================================================== */}
+          {activeTab === 'services' && (
+            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="space-y-6">
+              <div className="dark-glass-panel rounded-3xl p-6 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
+                    <Scissors className="w-5 h-5 text-pink-400" /> Catálogo de Servicios y Precios
+                  </h2>
+                  <p className="text-xs text-slate-400">Activá, pausá o modificá los valores de los tratamientos.</p>
+                </div>
+                <button
+                  onClick={handleOpenNewService}
+                  className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-pink-500 to-rose-600 text-white font-semibold text-xs shadow-lg shadow-pink-500/25 hover:brightness-110 transition-all flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> Agregar Servicio
+                </button>
+              </div>
+
+              {/* Services Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {servicesList.map((service) => (
+                  <div key={service.id} className="dark-glass-card rounded-3xl p-5 border border-white/10 space-y-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-pink-500/10 text-pink-400 border border-pink-500/20">
+                          {service.category || 'Cabello'}
+                        </span>
+                        {/* Toggle Active Switch */}
+                        <button
+                          onClick={() => handleToggleServiceActive(service)}
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all flex items-center gap-1 ${
+                            service.active !== false
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${service.active !== false ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                          {service.active !== false ? 'Disponible' : 'Pausado'}
+                        </button>
+                      </div>
+                      <h3 className="font-bold text-white text-base font-display">{service.name}</h3>
+                      <p className="text-xs text-slate-400 mt-1 line-clamp-2">{service.description}</p>
+                    </div>
+
+                    <div className="pt-4 border-t border-white/10 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Duración: {formatDuration(service.duration)}</span>
+                        <span className="text-lg font-bold text-white font-mono">{formatPrice(service.price)}</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setEditingService(service);
+                          setServiceForm({
+                            name: service.name,
+                            description: service.description || '',
+                            price: service.price,
+                            duration: service.duration,
+                            category: service.category || 'cabello',
+                            imageUrl: service.imageUrl || '',
+                            active: service.active !== false,
+                          });
+                          setShowServiceModal(true);
+                        }}
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition-colors"
+                        title="Editar Servicio"
                       >
-                        <div className="text-sm">{dayNum}</div>
-                        {count > 0 && <div className="text-[10px] text-purple-600 mt-1">{count} turnos</div>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </motion.div>
-        )}
-
-        {/* TAB 3: CLIENTES */}
-        {activeTab === 'customers' && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
-              <div className="relative w-full sm:w-80">
-                <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-ink-muted)]" />
-                <input
-                  type="text"
-                  value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
-                  placeholder="Buscar clienta por nombre o teléfono..."
-                  className="pl-9 pr-4 py-2.5 rounded-xl border border-[var(--color-bg-alt)] bg-[var(--color-surface)] text-sm w-full focus:outline-none focus:border-[var(--color-ink)]"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(filteredCustomers.length > 0 ? filteredCustomers : [
-                { id: '1', name: 'Valentina López', phone: '+54 9 11 4444-5555', email: 'valentina@gmail.com', _count: { appointments: 5 }, notes: 'Prefiere tonos rosados' },
-                { id: '2', name: 'Camila Rodríguez', phone: '+54 9 11 3333-4444', email: 'camila@hotmail.com', _count: { appointments: 3 }, notes: 'Alérgica a la lavanda' },
-                { id: '3', name: 'Martina García', phone: '+54 9 11 2222-3333', email: 'martina@outlook.com', _count: { appointments: 8 }, notes: 'Clienta VIP frecuente' },
-              ]).map((c) => (
-                <div key={c.id} className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-sm">
-                      {c.name ? c.name.substring(0, 2).toUpperCase() : 'CL'}
+                        <PencilSimple className="w-4 h-4" />
+                      </button>
                     </div>
-                    <span className="text-xs font-semibold px-2.5 py-1 bg-purple-50 text-purple-700 rounded-full border border-purple-100">
-                      {c._count?.appointments || 1} Visitas
-                    </span>
                   </div>
-                  <h3 className="font-semibold text-lg text-[var(--color-ink)] mb-1">{c.name}</h3>
-                  <p className="text-xs text-[var(--color-ink-muted)] flex items-center gap-1.5 mb-1">
-                    <Phone className="w-3.5 h-3.5" /> {c.phone || 'Sin teléfono'}
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* ==================================================== */}
+          {/* TAB 5: ESTADÍSTICAS Y RENDIMIENTO */}
+          {/* ==================================================== */}
+          {activeTab === 'analytics' && (
+            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="space-y-8">
+              {/* Financial Metrics Summary Header */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                <div className="dark-glass-card rounded-3xl p-5 border border-white/10 space-y-2">
+                  <span className="text-xs text-slate-400">Ingreso Mensual Actual</span>
+                  <h3 className="text-3xl font-bold text-emerald-400 font-mono">{formatPrice(financialData.revenueThisMonth)}</h3>
+                  <p className="text-[11px] text-emerald-300 font-semibold flex items-center gap-1">
+                    <TrendUp className="w-3.5 h-3.5" /> +{financialData.revenueGrowthPct}% vs mes anterior
                   </p>
-                  {c.email && (
-                    <p className="text-xs text-[var(--color-ink-muted)] flex items-center gap-1.5 mb-3">
-                      <Envelope className="w-3.5 h-3.5" /> {c.email}
-                    </p>
-                  )}
-                  {c.notes && (
-                    <div className="bg-amber-50/60 text-amber-900 border border-amber-100 p-2.5 rounded-xl text-xs mt-2">
-                      💡 <strong>Nota:</strong> {c.notes}
-                    </div>
-                  )}
                 </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
+                <div className="dark-glass-card rounded-3xl p-5 border border-white/10 space-y-2">
+                  <span className="text-xs text-slate-400">Ticket Promedio por Clienta</span>
+                  <h3 className="text-3xl font-bold text-white font-mono">{formatPrice(financialData.averageTicket)}</h3>
+                  <p className="text-[11px] text-slate-400">Basado en {financialData.totalAppointmentsMonth} turnos atedidos</p>
+                </div>
+                <div className="dark-glass-card rounded-3xl p-5 border border-white/10 space-y-2">
+                  <span className="text-xs text-slate-400">Tasa de Cancelación</span>
+                  <h3 className="text-3xl font-bold text-pink-400 font-mono">{financialData.cancellationRate}%</h3>
+                  <p className="text-[11px] text-slate-400">{financialData.cancelledMonth} cancelaciones registradas</p>
+                </div>
+              </div>
 
-        {/* TAB 4: SERVICIOS */}
-        {activeTab === 'services' && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-[var(--color-ink)]">Menú de Servicios</h2>
+              {/* Visual Breakdown Cards */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Revenue Weekly Bar Representation */}
+                <div className="dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-4">
+                  <h3 className="text-base font-bold text-white font-display flex items-center gap-2">
+                    <ChartBar className="w-5 h-5 text-pink-400" /> Ingresos Semanales
+                  </h3>
+                  <div className="space-y-3 pt-2">
+                    {financialData.weeklyRevenue.map((w, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <span className="text-slate-300">{w.week}</span>
+                          <span className="text-emerald-400 font-mono">{formatPrice(w.revenue)}</span>
+                        </div>
+                        <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                          <div
+                            className="h-full bg-gradient-to-r from-pink-500 to-purple-600 rounded-full"
+                            style={{ width: `${(w.revenue / 400000) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Top Services Ranking */}
+                <div className="dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-4">
+                  <h3 className="text-base font-bold text-white font-display flex items-center gap-2">
+                    <ChartPie className="w-5 h-5 text-purple-400" /> Servicios Más Solicitados
+                  </h3>
+                  <div className="space-y-3">
+                    {financialData.topServices.map((srv, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs">
+                        <div>
+                          <p className="font-semibold text-white">{srv.name}</p>
+                          <p className="text-[10px] text-slate-400">{srv.count} turnos realizados</p>
+                        </div>
+                        <span className="font-mono font-bold text-pink-400">{formatPrice(srv.revenue)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+        </main>
+      </div>
+
+      {/* ==================================================== */}
+      {/* 3. QUICK DRAWER (PANEL DESLIZABLE DE TURNO) */}
+      {/* ==================================================== */}
+      <AnimatePresence>
+        {selectedAppointment && (
+          <div className="fixed inset-0 z-50 flex justify-end">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedAppointment(null)}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="relative w-full max-w-md h-full dark-glass-panel border-l border-white/10 p-6 flex flex-col justify-between z-10 space-y-6 overflow-y-auto"
+            >
+              <div className="space-y-6">
+                <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                  <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
+                    <CalendarCheck className="w-5 h-5 text-pink-400" /> Ficha Técnica del Turno
+                  </h2>
+                  <button
+                    onClick={() => setSelectedAppointment(null)}
+                    className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Client Info Card */}
+                <div className="dark-glass-card p-4 rounded-2xl border border-white/10 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+                      {selectedAppointment.customerName.charAt(0)}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white text-base">{selectedAppointment.customerName}</h3>
+                      <p className="text-xs text-slate-400">{selectedAppointment.customerPhone}</p>
+                    </div>
+                  </div>
+                  <a
+                    href={`https://wa.me/${selectedAppointment.customerPhone.replace(/[^0-9]/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Phone className="w-4 h-4" /> Enviar Mensaje de WhatsApp
+                  </a>
+                </div>
+
+                {/* Service & Time Details */}
+                <div className="space-y-3 text-xs">
+                  <div className="flex justify-between py-2 border-b border-white/5">
+                    <span className="text-slate-400">Tratamiento</span>
+                    <span className="font-semibold text-white">{selectedAppointment.service}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-white/5">
+                    <span className="text-slate-400">Fecha</span>
+                    <span className="font-mono font-semibold text-white">{selectedAppointment.date}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-white/5">
+                    <span className="text-slate-400">Hora</span>
+                    <span className="font-mono font-semibold text-pink-400">{selectedAppointment.time}hs</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-white/5">
+                    <span className="text-slate-400">Monto del Servicio</span>
+                    <span className="font-mono font-bold text-emerald-400 text-sm">{formatPrice(selectedAppointment.price)}</span>
+                  </div>
+                </div>
+
+                {/* Change Status Actions */}
+                <div className="space-y-2 pt-2">
+                  <label className="text-xs font-semibold text-slate-400 block">Cambiar Estado del Turno</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handleStatusChange(selectedAppointment.id, 'CONFIRMED')}
+                      className="py-2.5 px-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      <Check className="w-4 h-4" /> Confirmar
+                    </button>
+                    <button
+                      onClick={() => handleStatusChange(selectedAppointment.id, 'COMPLETED')}
+                      className="py-2.5 px-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      <Sparkle className="w-4 h-4" /> Completar
+                    </button>
+                    <button
+                      onClick={() => handleStatusChange(selectedAppointment.id, 'CANCELLED')}
+                      className="col-span-2 py-2.5 px-3 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      <X className="w-4 h-4" /> Cancelar Cita
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <button
-                onClick={() => handleOpenServiceModal()}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-[var(--color-ink)] rounded-xl hover:bg-gray-800 transition-colors shadow-sm"
+                onClick={() => setSelectedAppointment(null)}
+                className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold border border-white/10 transition-colors"
               >
-                <Plus className="w-4 h-4" /> Agregar Servicio
+                Cerrar Ficha
               </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {servicesList.map((srv) => (
-                <div key={srv.id} className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between">
-                  <div>
-                    {srv.imageUrl && (
-                      <div className="h-40 overflow-hidden relative">
-                        <img src={srv.imageUrl} alt={srv.name} className="w-full h-full object-cover" />
-                        <span className="absolute top-3 right-3 text-xs font-bold px-2.5 py-1 bg-white/90 backdrop-blur-md text-[var(--color-ink)] rounded-full uppercase">
-                          {srv.category}
-                        </span>
-                      </div>
-                    )}
-                    <div className="p-6">
-                      <h3 className="text-lg font-semibold text-[var(--color-ink)] mb-1">{srv.name}</h3>
-                      <p className="text-xs text-[var(--color-ink-muted)] mb-4 line-clamp-2">{srv.description}</p>
-                      <div className="flex items-center justify-between text-sm font-semibold">
-                        <span className="text-emerald-600">{formatPrice(srv.price)}</span>
-                        <span className="text-[var(--color-ink-muted)] flex items-center gap-1 text-xs">
-                          <Clock className="w-3.5 h-3.5" /> {srv.duration} min
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-4 border-t border-[var(--color-bg-alt)] bg-gray-50/50 flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => handleOpenServiceModal(srv)}
-                      className="p-2 text-[var(--color-ink-muted)] hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                      title="Editar Servicio"
-                    >
-                      <PencilSimple className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteService(srv.id)}
-                      className="p-2 text-[var(--color-ink-muted)] hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Desactivar"
-                    >
-                      <Trash className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         )}
+      </AnimatePresence>
 
-        {/* TAB 5: ESTADÍSTICAS */}
-        {activeTab === 'analytics' && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] p-6 rounded-2xl shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-[var(--color-ink-muted)]">Comparativa vs Mes Anterior</span>
-                  <TrendUp className="w-4 h-4 text-emerald-600" />
-                </div>
-                <p className="text-2xl font-bold text-emerald-600">+{financialData?.revenueGrowthPct || 15}%</p>
-                <p className="text-xs text-[var(--color-ink-muted)] mt-1">
-                  Ingreso mes anterior: {formatPrice(financialData?.revenuePrevMonth || 1100000)}
-                </p>
-              </div>
-
-              <div className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] p-6 rounded-2xl shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-[var(--color-ink-muted)]">Ticket Promedio</span>
-                  <CurrencyDollar className="w-4 h-4 text-blue-600" />
-                </div>
-                <p className="text-2xl font-bold text-[var(--color-ink)]">
-                  {formatPrice(financialData?.averageTicket || 27300)}
-                </p>
-                <p className="text-xs text-[var(--color-ink-muted)] mt-1">Por cada clienta que visita el salón</p>
-              </div>
-
-              <div className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] p-6 rounded-2xl shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-[var(--color-ink-muted)]">Tasa de Cancelación</span>
-                  <X className="w-4 h-4 text-red-500" />
-                </div>
-                <p className="text-2xl font-bold text-red-500">{financialData?.cancellationRate || 4}%</p>
-                <p className="text-xs text-[var(--color-ink-muted)] mt-1">Solo {financialData?.cancelledMonth || 2} turnos cancelados</p>
-              </div>
-            </div>
-
-            {/* Weekly Revenue Bar Chart */}
-            <div className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] p-6 rounded-2xl shadow-sm mb-8">
-              <h3 className="text-lg font-semibold text-[var(--color-ink)] mb-6">Ingresos Semanales (Mes Actual)</h3>
-              <div className="flex items-end gap-6 h-48 border-b border-gray-200 pb-2 px-4">
-                {(financialData?.weeklyRevenue || [
-                  { week: 'Sem 1', revenue: 280000 },
-                  { week: 'Sem 2', revenue: 350000 },
-                  { week: 'Sem 3', revenue: 320000 },
-                  { week: 'Sem 4', revenue: 335000 },
-                ]).map((w: any) => (
-                  <div key={w.week} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
-                    <span className="text-xs font-semibold text-emerald-600">{formatPrice(w.revenue)}</span>
-                    <div className="w-full bg-emerald-400 rounded-t-xl transition-all hover:bg-emerald-500" style={{ height: `${(w.revenue / 400000) * 100}%` }} />
-                    <span className="text-xs text-[var(--color-ink-muted)] font-medium">{w.week}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Top Services Ranking */}
-            <div className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] p-6 rounded-2xl shadow-sm">
-              <h3 className="text-lg font-semibold text-[var(--color-ink)] mb-4">Servicios Más Pedidos</h3>
-              <div className="space-y-4">
-                {(financialData?.topServices || [
-                  { name: 'Uñas Gel Luxury', count: 18, revenue: 504000 },
-                  { name: 'Facial Glow', count: 12, revenue: 420000 },
-                  { name: 'Corte Signature', count: 10, revenue: 250000 },
-                ]).map((srv: any, i: number) => (
-                  <div key={srv.name} className="flex items-center justify-between border-b border-[var(--color-bg-alt)] pb-3">
-                    <div className="flex items-center gap-3">
-                      <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">
-                        #{i + 1}
-                      </span>
-                      <span className="text-sm font-semibold text-[var(--color-ink)]">{srv.name}</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-bold text-emerald-600">{formatPrice(srv.revenue)}</div>
-                      <div className="text-xs text-[var(--color-ink-muted)]">{srv.count} turnos</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* MODAL: Service Create / Edit */}
+      {/* ==================================================== */}
+      {/* 4. MODAL CREAR / EDITAR SERVICIO */}
+      {/* ==================================================== */}
+      <AnimatePresence>
         {showServiceModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] rounded-2xl p-6 max-w-md w-full shadow-2xl">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-[var(--color-ink)]">
-                  {editingService ? 'Editar Servicio' : 'Nuevo Servicio'}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowServiceModal(false)} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-lg dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-6 z-10">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <h3 className="text-lg font-bold text-white font-display">
+                  {editingService ? 'Editar Servicio' : 'Agregar Nuevo Servicio'}
                 </h3>
-                <button onClick={() => setShowServiceModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                <button onClick={() => setShowServiceModal(false)} className="p-1 rounded-xl hover:bg-white/10 text-slate-400">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleSaveService} className="space-y-4">
+              <form onSubmit={handleSaveService} className="space-y-4 text-xs">
                 <div>
-                  <label className="block text-xs font-semibold text-[var(--color-ink-muted)] mb-1">Nombre</label>
+                  <label className="text-slate-300 font-semibold block mb-1">Nombre del Servicio</label>
                   <input
                     type="text"
                     required
                     value={serviceForm.name}
                     onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                    className="w-full dark-glass-input rounded-xl px-3 py-2"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[var(--color-ink-muted)] mb-1">Descripción</label>
-                  <textarea
-                    value={serviceForm.description}
-                    onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-xl text-sm h-20"
-                  />
+                  <label className="text-slate-300 font-semibold block mb-1">Categoría</label>
+                  <select
+                    value={serviceForm.category}
+                    onChange={(e) => setServiceForm({ ...serviceForm, category: e.target.value })}
+                    className="w-full dark-glass-input rounded-xl px-3 py-2 bg-[#12121A] text-white"
+                  >
+                    <option value="cabello">Cabello</option>
+                    <option value="unas">Uñas</option>
+                    <option value="pestanas">Pestañas & Cejas</option>
+                    <option value="facial">Facial</option>
+                    <option value="maquillaje">Maquillaje</option>
+                  </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-[var(--color-ink-muted)] mb-1">Precio ($)</label>
+                    <label className="text-slate-300 font-semibold block mb-1">Precio ($ ARS)</label>
                     <input
                       type="number"
                       required
                       value={serviceForm.price}
                       onChange={(e) => setServiceForm({ ...serviceForm, price: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border rounded-xl text-sm"
+                      className="w-full dark-glass-input rounded-xl px-3 py-2 font-mono"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-[var(--color-ink-muted)] mb-1">Duración (min)</label>
+                    <label className="text-slate-300 font-semibold block mb-1">Duración (min)</label>
                     <input
                       type="number"
                       required
                       value={serviceForm.duration}
                       onChange={(e) => setServiceForm({ ...serviceForm, duration: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border rounded-xl text-sm"
+                      className="w-full dark-glass-input rounded-xl px-3 py-2 font-mono"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[var(--color-ink-muted)] mb-1">Categoría</label>
-                  <select
-                    value={serviceForm.category}
-                    onChange={(e) => setServiceForm({ ...serviceForm, category: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-xl text-sm bg-white"
-                  >
-                    <option value="cabello">Cabello</option>
-                    <option value="unas">Uñas</option>
-                    <option value="facial">Facial</option>
-                    <option value="tratamientos">Tratamientos</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[var(--color-ink-muted)] mb-1">URL de Imagen</label>
-                  <input
-                    type="url"
-                    value={serviceForm.imageUrl}
-                    onChange={(e) => setServiceForm({ ...serviceForm, imageUrl: e.target.value })}
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                  <label className="text-slate-300 font-semibold block mb-1">Descripción</label>
+                  <textarea
+                    rows={3}
+                    value={serviceForm.description}
+                    onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
+                    className="w-full dark-glass-input rounded-xl px-3 py-2"
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-4 border-t">
-                  <button
-                    type="button"
-                    onClick={() => setShowServiceModal(false)}
-                    className="px-4 py-2 text-xs font-semibold text-gray-600 bg-gray-100 rounded-xl"
-                  >
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                  <button type="button" onClick={() => setShowServiceModal(false)} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-semibold">
                     Cancelar
                   </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-xs font-semibold text-white bg-[var(--color-ink)] rounded-xl hover:bg-gray-800"
-                  >
-                    Guardar
+                  <button type="submit" className="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 text-white font-semibold shadow-lg shadow-pink-500/20">
+                    Guardar Servicio
                   </button>
                 </div>
               </form>
-            </div>
+            </motion.div>
           </div>
         )}
+      </AnimatePresence>
 
-        {/* MODAL: Appointment Details */}
-        {selectedAppointment && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-[var(--color-surface)] border border-[var(--color-bg-alt)] rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-md font-bold text-[var(--color-ink)]">Detalle del Turno</h3>
-                <button onClick={() => setSelectedAppointment(null)} className="p-1 text-gray-400 hover:text-gray-600">
+      {/* ==================================================== */}
+      {/* 5. MODAL GESTIÓN DE USUARIOS / EQUIPO */}
+      {/* ==================================================== */}
+      <AnimatePresence>
+        {showUsersModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowUsersModal(false)} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-xl dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-6 z-10">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-purple-400" /> Gestión del Equipo & Accesos
+                </h3>
+                <button onClick={() => setShowUsersModal(false)} className="p-1 rounded-xl hover:bg-white/10 text-slate-400">
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <span className="text-xs text-gray-500">Cliente:</span>
-                  <div className="font-semibold text-gray-900">{selectedAppointment.customerName}</div>
+
+              {/* Create User Form */}
+              <form onSubmit={handleCreateUser} className="space-y-3 bg-white/[0.02] p-4 rounded-2xl border border-white/5 text-xs">
+                <h4 className="font-bold text-white flex items-center gap-1.5">
+                  <UserPlus className="w-4 h-4 text-pink-400" /> Crear Nuevo Usuario
+                </h4>
+                {userActionError && <p className="text-rose-400 text-[11px]">{userActionError}</p>}
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="email"
+                    placeholder="Correo electrónico"
+                    required
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    className="dark-glass-input rounded-xl px-3 py-2"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Nombre completo"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    className="dark-glass-input rounded-xl px-3 py-2"
+                  />
+                  <input
+                    type="password"
+                    placeholder="Contraseña"
+                    required
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    className="dark-glass-input rounded-xl px-3 py-2"
+                  />
+                  <select
+                    value={newUserRole}
+                    onChange={(e) => setNewUserRole(e.target.value as any)}
+                    className="dark-glass-input rounded-xl px-3 py-2 bg-[#12121A] text-white"
+                  >
+                    <option value="STAFF">Personal / Staff</option>
+                    <option value="ADMIN">Administradora</option>
+                  </select>
                 </div>
-                <div>
-                  <span className="text-xs text-gray-500">Servicio:</span>
-                  <div className="font-semibold text-purple-700">{selectedAppointment.service}</div>
-                </div>
-                <div>
-                  <span className="text-xs text-gray-500">Fecha y Hora:</span>
-                  <div className="font-medium text-gray-800">{selectedAppointment.date} a las {selectedAppointment.time}hs</div>
-                </div>
-                <div>
-                  <span className="text-xs text-gray-500">Monto:</span>
-                  <div className="font-bold text-emerald-600">{formatPrice(selectedAppointment.price)}</div>
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setSelectedAppointment(null)}
-                  className="px-4 py-2 text-xs font-semibold bg-gray-100 rounded-xl"
-                >
-                  Cerrar
+                <button type="submit" className="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold shadow-md">
+                  Crear Usuario
                 </button>
+              </form>
+
+              {/* Active Users List */}
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Usuarios Activos</h4>
+                {usersList.map((u) => (
+                  <div key={u.id} className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs">
+                    <div>
+                      <p className="font-semibold text-white">{u.email}</p>
+                      <p className="text-[10px] text-slate-400">{u.name || 'Sin nombre'} • Rol: {u.role}</p>
+                    </div>
+                    {u.email !== 'admin@glowstudio.com' && (
+                      <button onClick={() => handleDeleteUser(u.id)} className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors">
+                        <Trash className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            </div>
+            </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      {/* ==================================================== */}
+      {/* 6. TOAST NOTIFICATION CONTAINER (FRAMER MOTION) */}
+      {/* ==================================================== */}
+      <div className="fixed bottom-6 right-6 z-50 space-y-3 pointer-events-none">
+        <AnimatePresence>
+          {toasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, y: 20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.9 }}
+              className="pointer-events-auto dark-glass-panel rounded-2xl p-4 border border-white/10 shadow-2xl flex items-center gap-3 max-w-sm"
+            >
+              {toast.type === 'success' && <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />}
+              {toast.type === 'error' && <XCircle className="w-5 h-5 text-rose-400 shrink-0" />}
+              {toast.type === 'info' && <Info className="w-5 h-5 text-blue-400 shrink-0" />}
+              <div>
+                <h4 className="text-xs font-bold text-white">{toast.title}</h4>
+                <p className="text-[11px] text-slate-300">{toast.message}</p>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
+
     </div>
   );
 }

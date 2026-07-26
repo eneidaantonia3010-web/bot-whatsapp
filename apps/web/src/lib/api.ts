@@ -133,7 +133,8 @@ export const getFinancialAnalytics = () =>
   }>('/api/analytics/financial');
 
 export const getWhatsAppStatus = () =>
-  fetchAPI<{ configured: boolean; state?: string; phone?: string; instanceName?: string }>('/api/admin/whatsapp/status');
+  fetchAPI<{ configured: boolean; state?: string; phone?: string; instanceName?: string }>('/api/whatsapp-admin/status');
+
 
 
 

@@ -68,12 +68,14 @@ app.use('/api/gallery', publicApiLimiter, galleryRouter);
 app.use('/api/appointments', appointmentCreationLimiter, appointmentsRouter);
 
 // Protected Administrative Endpoints
+app.use('/api/whatsapp-admin', whatsappAdminRouter);
+app.use('/api/admin/whatsapp', whatsappAdminRouter);
 app.use('/api/customers', requireAuth, customersRouter);
 app.use('/api/messages', requireAuth, messagesRouter);
-app.use('/api/admin/whatsapp', whatsappAdminRouter);
 app.use('/api/admin', requireAdmin, adminRouter);
 app.use('/api/analytics', requireAdmin, analyticsRouter);
 app.use('/api/exports', requireAdmin, exportsRouter);
+
 
 // Health check
 app.get('/', (_req, res) => {

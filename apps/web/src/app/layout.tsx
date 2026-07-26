@@ -4,6 +4,7 @@ import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Toaster } from "sonner";
+import { I18nProvider } from "@/i18n/I18nContext";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -46,22 +47,24 @@ export default function RootLayout({
   return (
     <html lang="es" className="scroll-smooth">
       <body className={`${outfit.variable} ${inter.variable} font-sans bg-[var(--color-bg)] text-[var(--color-ink)] antialiased`}>
-        <Navbar />
-        <main>{children}</main>
-        <Footer />
-        <Toaster
-          position="bottom-right"
-          toastOptions={{
-            style: {
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-bg-alt)',
-              color: 'var(--color-ink)',
-              fontFamily: 'var(--font-sans)',
-              boxShadow: 'var(--shadow-soft)',
-              borderRadius: 'var(--radius-md)'
-            },
-          }}
-        />
+        <I18nProvider>
+          <Navbar />
+          <main>{children}</main>
+          <Footer />
+          <Toaster
+            position="bottom-right"
+            toastOptions={{
+              style: {
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-bg-alt)',
+                color: 'var(--color-ink)',
+                fontFamily: 'var(--font-sans)',
+                boxShadow: 'var(--shadow-soft)',
+                borderRadius: 'var(--radius-md)'
+              },
+            }}
+          />
+        </I18nProvider>
       </body>
     </html>
   );

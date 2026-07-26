@@ -5,14 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import Image from 'next/image';
 import { X, CaretLeft, CaretRight } from '@phosphor-icons/react';
 
-const GALLERY_CATEGORIES = [
-  { id: 'todos', label: 'Todos' },
-  { id: 'salon', label: 'Salón' },
-  { id: 'cabello', label: 'Cabello' },
-  { id: 'unas', label: 'Uñas' },
-  { id: 'facial', label: 'Facial' },
-  { id: 'ambiente', label: 'Ambiente' },
-];
+import { useTranslation } from '@/i18n/I18nContext';
 
 const GALLERY_IMAGES = [
   { url: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&h=1000&fit=crop', alt: 'Interior del salón', category: 'salon' },
@@ -24,25 +17,26 @@ const GALLERY_IMAGES = [
   { url: 'https://images.unsplash.com/photo-1605497788044-5a32c7078486?w=800&h=600&fit=crop', alt: 'Brushing perfecto', category: 'cabello' },
   { url: 'https://images.unsplash.com/photo-1607779097040-26e80aa78e66?w=800&h=600&fit=crop', alt: 'Esmaltado semi pastel', category: 'unas' },
   { url: 'https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=800&h=1000&fit=crop', alt: 'Mascarilla hidratante', category: 'facial' },
-  { url: 'https://images.unsplash.com/photo-1519699047748-de8e457a634e?w=800&h=1000&fit=crop', alt: 'Corte moderno', category: 'cabello' },
-  { url: 'https://images.unsplash.com/photo-1519014816548-bf5fe059798b?w=800&h=800&fit=crop', alt: 'French manicure elegante', category: 'unas' },
-  { url: 'https://images.unsplash.com/photo-1596755389378-c31d21fd1273?w=600&h=800&fit=crop', alt: 'Limpieza profunda', category: 'facial' },
-  { url: 'https://images.unsplash.com/photo-1580618672591-eb180b1a973f?w=800&h=600&fit=crop', alt: 'Peinado de evento', category: 'cabello' },
-  { url: 'https://images.unsplash.com/photo-1632345031435-8727f6897d53?w=600&h=800&fit=crop', alt: 'Nail art premium', category: 'unas' },
-  { url: '/images/rincon_relajacion.png', alt: 'Rincón de relajación', category: 'ambiente' },
-  { url: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=800&h=600&fit=crop', alt: 'Skincare premium', category: 'facial' },
-  { url: 'https://images.unsplash.com/photo-1492106087820-71f1a00d2b11?w=800&h=1000&fit=crop', alt: 'Mechas balayage', category: 'cabello' },
-  { url: 'https://images.unsplash.com/photo-1519823551278-64ac92734fb1?w=800&h=600&fit=crop', alt: 'Flores frescas del salón', category: 'ambiente' },
 ];
 
 export function Gallery() {
   const [activeCategory, setActiveCategory] = useState('todos');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const { t } = useTranslation();
+
+  const categories = [
+    { id: 'todos', label: t('gallery.filters.all') },
+    { id: 'cabello', label: t('gallery.filters.balayage') },
+    { id: 'unas', label: t('gallery.filters.nails') },
+    { id: 'pestanas', label: t('gallery.filters.lashes') },
+    { id: 'facial', label: t('gallery.filters.facial') },
+  ];
 
   const filtered =
     activeCategory === 'todos'
       ? GALLERY_IMAGES
       : GALLERY_IMAGES.filter((img) => img.category === activeCategory);
+
 
   const openLightbox = (index: number) => setLightboxIndex(index);
   const closeLightbox = () => setLightboxIndex(null);
@@ -79,7 +73,8 @@ export function Gallery() {
 
       {/* Category Filters */}
       <div className="flex flex-wrap justify-center gap-3 mb-12">
-        {GALLERY_CATEGORIES.map((cat) => (
+        {categories.map((cat) => (
+
           <button
             key={cat.id}
             onClick={() => setActiveCategory(cat.id)}

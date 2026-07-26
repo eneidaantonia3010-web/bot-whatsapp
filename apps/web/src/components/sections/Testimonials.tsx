@@ -8,7 +8,11 @@ import { TESTIMONIALS } from '@/lib/constants';
 import useEmblaCarousel from 'embla-carousel-react';
 import Autoplay from 'embla-carousel-autoplay';
 
+import { useTranslation } from '@/i18n/I18nContext';
+
 export function Testimonials() {
+  const { t } = useTranslation();
+
   const [emblaRef, emblaApi] = useEmblaCarousel(
     { loop: true, align: 'center' },
     [Autoplay({ delay: 5000, stopOnInteraction: true })]
@@ -41,18 +45,19 @@ export function Testimonials() {
         className="text-center mb-16"
       >
         <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-[var(--color-ink-muted)] mb-4">
-          Testimonios
+          {t('testimonials.badge')}
         </span>
         <h2 
           className="text-4xl md:text-5xl lg:text-6xl font-semibold text-[var(--color-ink)] mb-6 tracking-tight"
           style={{ fontFamily: 'var(--font-display)' }}
         >
-          Lo que dicen <span className="text-[var(--color-ink-muted)] italic font-light">ellas</span>
+          {t('testimonials.title')}
         </h2>
-        <p className="text-[var(--color-ink-light)] max-w-lg mx-auto text-lg">
-          La mejor publicidad es una clienta feliz. Estas son algunas de sus experiencias.
+        <p className="text-[var(--color-ink-light)] max-w-lg mx-auto text-base md:text-lg leading-relaxed">
+          {t('testimonials.subtitle')}
         </p>
       </motion.div>
+
 
       {/* Carousel */}
       <motion.div 

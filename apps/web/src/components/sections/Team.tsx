@@ -6,21 +6,29 @@ import { At } from '@phosphor-icons/react';
 import { TEAM } from '@/lib/constants';
 import { StaggerContainer, StaggerItem } from '@/components/AnimatedSection';
 
+import { useTranslation } from '@/i18n/I18nContext';
+
 export function Team() {
+  const { t } = useTranslation();
+
   return (
-    <section id="equipo" className="section-padding bg-cream">
+    <section id="equipo" className="section-padding bg-[var(--color-bg)]">
       {/* Header */}
       <div className="text-center mb-16">
-        <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-rosa mb-4">
-          Nuestro Equipo
+        <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-[var(--color-ink-muted)] mb-4">
+          {t('team.badge')}
         </span>
-        <h2 className="font-[Playfair_Display] text-4xl md:text-5xl lg:text-6xl font-semibold text-ink mb-6">
-          Las manos detrás de la magia
+        <h2 
+          className="text-4xl md:text-5xl lg:text-6xl font-semibold text-[var(--color-ink)] mb-6 tracking-tight"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          {t('team.title')}
         </h2>
-        <p className="text-ink-muted max-w-lg mx-auto">
-          Un equipo apasionado de profesionales que aman lo que hacen y se nota en cada detalle.
+        <p className="text-[var(--color-ink-light)] max-w-lg mx-auto text-base md:text-lg leading-relaxed">
+          {t('team.subtitle')}
         </p>
       </div>
+
 
       {/* Team Grid */}
       <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">

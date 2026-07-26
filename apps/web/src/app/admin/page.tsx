@@ -66,6 +66,8 @@ import {
 } from '@/lib/api';
 
 import { getToken, removeToken } from '@/lib/auth';
+import { useTranslation } from '@/i18n/I18nContext';
+
 
 // ----------------------------------------------------
 // Types & Mock Fallbacks
@@ -143,6 +145,7 @@ const MOCK_FINANCIAL = {
 
 export default function AdminPage() {
   const router = useRouter();
+  const { language, setLanguage, t } = useTranslation();
 
   // Navigation State
   const [activeTab, setActiveTab] = useState<'dashboard' | 'calendar' | 'customers' | 'services' | 'analytics'>('dashboard');
@@ -467,12 +470,13 @@ export default function AdminPage() {
             {/* Navigation Tabs */}
             <nav className="space-y-1.5">
               {[
-                { id: 'dashboard', label: 'Dashboard', icon: ChartBar },
-                { id: 'calendar', label: 'Calendario', icon: CalendarBlank },
-                { id: 'customers', label: 'Clientas VIP', icon: Users },
-                { id: 'services', label: 'Servicios', icon: Scissors },
-                { id: 'analytics', label: 'Estadísticas', icon: TrendUp },
+                { id: 'dashboard', label: t('admin.tabs.dashboard'), icon: ChartBar },
+                { id: 'calendar', label: t('admin.tabs.calendar'), icon: CalendarBlank },
+                { id: 'customers', label: t('admin.tabs.customers'), icon: Users },
+                { id: 'services', label: t('admin.tabs.services'), icon: Scissors },
+                { id: 'analytics', label: t('admin.tabs.analytics'), icon: TrendUp },
               ].map((tab) => {
+
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
                 return (
@@ -590,7 +594,30 @@ export default function AdminPage() {
 
             {/* Header Right Action Buttons */}
             <div className="flex flex-wrap items-center gap-3">
+              {/* Language Switcher */}
+              <div className="flex items-center gap-1 bg-white/5 p-1 rounded-2xl border border-white/10">
+                <button
+                  onClick={() => setLanguage('es')}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all ${
+                    language === 'es' ? 'bg-pink-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Español"
+                >
+                  🇪🇸 ES
+                </button>
+                <button
+                  onClick={() => setLanguage('it')}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all ${
+                    language === 'it' ? 'bg-pink-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Italiano"
+                >
+                  🇮🇹 IT
+                </button>
+              </div>
+
               {/* Search Bar Input */}
+
               <div className="relative">
                 <MagnifyingGlass className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input

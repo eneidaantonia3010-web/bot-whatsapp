@@ -4,12 +4,22 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Image from 'next/image';
 import { Clock, Sparkle, ArrowRight } from '@phosphor-icons/react';
-import { SERVICES_STATIC, CATEGORIES } from '@/lib/constants';
+import { SERVICES_STATIC } from '@/lib/constants';
 import { formatPrice, formatDuration } from '@/lib/utils';
-import { StaggerContainer, StaggerItem } from '@/components/AnimatedSection';
+import { useTranslation } from '@/i18n/I18nContext';
 
 export function Services() {
   const [activeCategory, setActiveCategory] = useState('todos');
+  const { t } = useTranslation();
+
+  const categories = [
+    { id: 'todos', label: t('services.categories.all') },
+    { id: 'cabello', label: t('services.categories.hair') },
+    { id: 'unas', label: t('services.categories.nails') },
+    { id: 'pestanas', label: t('services.categories.lashes') },
+    { id: 'facial', label: t('services.categories.facial') },
+    { id: 'maquillaje', label: t('services.categories.makeup') },
+  ];
 
   const filtered =
     activeCategory === 'todos'
@@ -29,29 +39,29 @@ export function Services() {
           viewport={{ once: true }}
           className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-[var(--color-ink-muted)] mb-4"
         >
-          Nuestros Tratamientos
+          {t('services.badge')}
         </motion.span>
         <h2 
           className="text-4xl md:text-5xl lg:text-6xl font-semibold text-[var(--color-ink)] mb-6 tracking-tight"
           style={{ fontFamily: 'var(--font-display)' }}
         >
-          Arte en cada <span className="text-[var(--color-ink-muted)] italic font-light">detalle</span>
+          {t('services.title')}
         </h2>
-        <p className="text-[var(--color-ink-light)] max-w-lg mx-auto text-lg">
-          Experimentá protocolos de belleza diseñados para resultados excepcionales.
+        <p className="text-[var(--color-ink-light)] max-w-lg mx-auto text-base md:text-lg leading-relaxed">
+          {t('services.subtitle')}
         </p>
       </div>
 
-      {/* Category Filters */}
-      <div className="flex flex-wrap justify-center gap-3 mb-12 relative z-10">
-        {CATEGORIES.map((cat) => (
+      {/* Category Filters with Flex Wrap */}
+      <div className="flex flex-wrap justify-center gap-3 mb-12 relative z-10 px-4">
+        {categories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => setActiveCategory(cat.id)}
-            className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-300 ${
+            className={`px-5 py-2.5 rounded-full text-xs md:text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
               activeCategory === cat.id
                 ? 'bg-[var(--color-ink)] text-[var(--color-white)] shadow-[var(--shadow-soft)]'
-                : 'bg-[var(--color-bg-alt)] text-[var(--color-ink-light)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)] hover:shadow-sm'
+                : 'bg-[var(--color-bg-alt)] text-[var(--color-ink-light)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]'
             }`}
           >
             {cat.label}
@@ -63,7 +73,6 @@ export function Services() {
       <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto relative z-10 px-4">
         <AnimatePresence mode="popLayout">
           {filtered.map((service, index) => {
-            // Logic for asymmetrical bento grid
             const isFeatured = index === 0 || index === 3;
             return (
               <motion.div
@@ -73,7 +82,7 @@ export function Services() {
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
                 key={service.name}
-                className={`group bg-[var(--color-surface)] rounded-[var(--radius-2xl)] overflow-hidden shadow-[var(--shadow-soft)] border border-[var(--color-bg-alt)] hover:shadow-[var(--shadow-lifted)] transition-all duration-500 flex flex-col ${
+                className={`group bg-[var(--color-surface)] rounded-[var(--radius-2xl)] overflow-hidden shadow-[var(--shadow-soft)] border border-[var(--color-bg-alt)] hover:shadow-[var(--shadow-lifted)] transition-all duration-500 flex flex-col justify-between ${
                   isFeatured ? 'md:col-span-2' : 'col-span-1'
                 }`}
               >
@@ -91,7 +100,7 @@ export function Services() {
                   {/* Category Badge */}
                   <div className="absolute top-4 left-4 z-10">
                     <span className="px-3 py-1.5 glass rounded-full text-xs font-semibold text-[var(--color-ink)] tracking-wide uppercase">
-                      {service.category === 'unas' ? 'Uñas' : service.category}
+                      {service.category}
                     </span>
                   </div>
                 </div>
@@ -105,26 +114,30 @@ export function Services() {
                     >
                       {service.name}
                     </h3>
-                    <p className="text-[var(--color-ink-muted)] mb-6 line-clamp-2 leading-relaxed">
+                    <p className="text-[var(--color-ink-muted)] mb-6 line-clamp-3 leading-relaxed text-sm md:text-base">
                       {service.description}
                     </p>
                   </div>
 
                   {/* Meta / Booking */}
-                  <div className="flex items-center justify-between pt-5 border-t border-[var(--color-bg-alt)]">
+                  <div className="flex items-center justify-between pt-5 border-t border-[var(--color-bg-alt)] mt-auto">
                     <div className="flex flex-col gap-1">
-                      <span className="text-xl font-semibold text-[var(--color-ink)]">
+                      <span className="text-xl font-bold text-[var(--color-ink)] font-mono">
                         {formatPrice(service.price)}
                       </span>
                       <div className="flex items-center gap-1.5 text-[var(--color-ink-muted)] text-xs font-medium uppercase tracking-wide">
                         <Clock className="w-3.5 h-3.5" />
-                        <span>{formatDuration(service.duration)}</span>
+                        <span>{t('services.durationLabel')}: {formatDuration(service.duration)}</span>
                       </div>
                     </div>
                     
-                    <button className="w-10 h-10 rounded-full bg-[var(--color-bg-alt)] flex items-center justify-center text-[var(--color-ink)] group-hover:bg-[var(--color-ink)] group-hover:text-[var(--color-white)] transition-colors duration-300">
+                    <a
+                      href="#reservar"
+                      className="w-10 h-10 rounded-full bg-[var(--color-bg-alt)] flex items-center justify-center text-[var(--color-ink)] group-hover:bg-[var(--color-ink)] group-hover:text-[var(--color-white)] transition-colors duration-300"
+                      title={t('services.btnBook')}
+                    >
                       <ArrowRight className="w-4 h-4" />
-                    </button>
+                    </a>
                   </div>
                 </div>
               </motion.div>
@@ -132,19 +145,6 @@ export function Services() {
           })}
         </AnimatePresence>
       </motion.div>
-
-      {/* Bottom CTA */}
-      <div className="text-center mt-20 relative z-10">
-        <a
-          href="#reservar"
-          className="double-bezel inline-block group"
-        >
-          <div className="double-bezel-inner bg-[var(--color-surface)] text-[var(--color-ink)] px-8 py-4 text-sm font-medium hover:bg-[var(--color-ink)] hover:text-[var(--color-white)] transition-all duration-300 flex items-center justify-center gap-2">
-            <Sparkle weight="fill" className="w-4 h-4 text-[var(--color-accent)] group-hover:text-[var(--color-white)] transition-colors" />
-            Explorar Catálogo Completo
-          </div>
-        </a>
-      </div>
     </section>
   );
 }

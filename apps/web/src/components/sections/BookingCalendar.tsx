@@ -17,6 +17,7 @@ import {
 import { SERVICES_STATIC, SALON } from '@/lib/constants';
 import { formatPrice, formatDuration } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useTranslation } from '@/i18n/I18nContext';
 
 // Generate available time slots for a given day
 function generateTimeSlots() {
@@ -28,15 +29,12 @@ function generateTimeSlots() {
   return slots;
 }
 
+
 const TIME_SLOTS = generateTimeSlots();
 
-const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const MONTHS = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
-
 function getDaysInMonth(year: number, month: number) {
+
+
   return new Date(year, month + 1, 0).getDate();
 }
 
@@ -45,6 +43,17 @@ function getFirstDayOfMonth(year: number, month: number) {
 }
 
 export function BookingCalendar() {
+
+  const { language, t } = useTranslation();
+
+  const DAYS = language === 'it' 
+    ? ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'] 
+    : ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+  const MONTHS = language === 'it'
+    ? ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
+    : ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
   const today = new Date();
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
@@ -54,6 +63,7 @@ export function BookingCalendar() {
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', phone: '', email: '', notes: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth);

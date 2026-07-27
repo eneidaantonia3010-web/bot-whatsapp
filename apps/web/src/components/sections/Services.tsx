@@ -32,22 +32,17 @@ export function Services() {
       <div className="absolute -left-40 top-40 w-96 h-96 bg-[var(--color-accent)] opacity-[0.02] rounded-full blur-[100px] pointer-events-none" />
 
       {/* Header */}
-      <div className="text-center mb-16 relative z-10">
-        <motion.span
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-[var(--color-ink-muted)] mb-4"
-        >
+      <div className="text-center mb-16 relative z-10 max-w-3xl mx-auto px-4">
+        <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-semibold tracking-[0.2em] uppercase bg-[#FF2D85]/10 text-[#FF2D85] border border-[#FF2D85]/20 mb-4">
           {t('services.badge')}
-        </motion.span>
+        </span>
         <h2 
-          className="text-4xl md:text-5xl lg:text-6xl font-semibold text-[var(--color-ink)] mb-6 tracking-tight"
+          className="text-4xl md:text-5xl lg:text-6xl font-semibold text-white mb-6 tracking-tight"
           style={{ fontFamily: 'var(--font-display)' }}
         >
           {t('services.title')}
         </h2>
-        <p className="text-[var(--color-ink-light)] max-w-lg mx-auto text-base md:text-lg leading-relaxed">
+        <p className="text-gray-300 max-w-lg mx-auto text-base md:text-lg leading-relaxed">
           {t('services.subtitle')}
         </p>
       </div>

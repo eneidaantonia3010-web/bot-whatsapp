@@ -115,16 +115,22 @@ export function BookingCalendar() {
   const service = selectedService !== null ? SERVICES_STATIC[selectedService] : null;
 
   return (
-    <section id="reservar" className="section-padding bg-cream">
+    <section id="reservar" className="section-padding bg-[#0F0F16] relative overflow-hidden">
+      {/* Ambient background glow */}
+      <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-[#FF2D85]/10 rounded-full blur-[120px] pointer-events-none" />
+
       {/* Header */}
-      <div className="text-center mb-16">
-        <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-rosa mb-4">
+      <div className="text-center mb-16 max-w-3xl mx-auto px-4 relative z-10">
+        <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-semibold tracking-[0.2em] uppercase bg-[#FF2D85]/10 text-[#FF2D85] border border-[#FF2D85]/20 mb-4">
           Reservar Turno
         </span>
-        <h2 className="font-[Playfair_Display] text-4xl md:text-5xl lg:text-6xl font-semibold text-ink mb-6">
+        <h2 
+          className="text-4xl md:text-5xl lg:text-6xl font-semibold text-white mb-6 tracking-tight"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
           Elegí tu momento
         </h2>
-        <p className="text-ink-muted max-w-lg mx-auto">
+        <p className="text-gray-300 max-w-lg mx-auto text-base md:text-lg">
           Reservá tu turno en minutos. Elegí el servicio, fecha y horario que más te convenga.
         </p>
       </div>

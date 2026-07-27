@@ -54,34 +54,36 @@ export function Gallery() {
   };
 
   return (
-    <section id="galeria" className="section-padding bg-[var(--color-bg-alt)]">
+    <section id="galeria" className="section-padding bg-[#0F0F16] relative overflow-hidden">
+      {/* Ambient background glow */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#9D4EDD]/10 rounded-full blur-[120px] pointer-events-none" />
+
       {/* Header */}
-      <div className="text-center mb-16">
-        <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-[var(--color-ink-muted)] mb-4">
+      <div className="text-center mb-14 max-w-3xl mx-auto px-4">
+        <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-semibold tracking-[0.2em] uppercase bg-[#FF2D85]/10 text-[#FF2D85] border border-[#FF2D85]/20 mb-4">
           Nuestro Trabajo
         </span>
         <h2 
-          className="text-4xl md:text-5xl lg:text-6xl font-semibold text-[var(--color-ink)] mb-6 tracking-tight"
+          className="text-4xl md:text-5xl lg:text-6xl font-semibold text-white mb-6 tracking-tight"
           style={{ fontFamily: 'var(--font-display)' }}
         >
-          Galería de <span className="text-[var(--color-ink-muted)] italic font-light">Inspiración</span>
+          Galería de <span className="text-gradient italic font-light">Inspiración</span>
         </h2>
-        <p className="text-[var(--color-ink-light)] max-w-lg mx-auto text-lg">
+        <p className="text-gray-300 max-w-lg mx-auto text-base md:text-lg">
           Cada servicio es una obra de arte. Mirá lo que hacemos y dejate inspirar.
         </p>
       </div>
 
       {/* Category Filters */}
-      <div className="flex flex-wrap justify-center gap-3 mb-12">
+      <div className="flex flex-wrap justify-center gap-3 mb-12 px-4">
         {categories.map((cat) => (
-
           <button
             key={cat.id}
             onClick={() => setActiveCategory(cat.id)}
-            className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-300 ${
+            className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-300 backdrop-blur-md border ${
               activeCategory === cat.id
-                ? 'bg-[var(--color-ink)] text-[var(--color-white)]'
-                : 'bg-[var(--color-surface)] text-[var(--color-ink-light)] hover:text-[var(--color-ink)]'
+                ? 'btn-gradient border-transparent shadow-[0_0_20px_rgba(223,0,110,0.4)] text-white'
+                : 'bg-white/[0.04] border-white/10 text-gray-300 hover:text-white hover:border-white/20'
             }`}
           >
             {cat.label}

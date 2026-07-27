@@ -42,18 +42,18 @@ export function Testimonials() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-100px" }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-        className="text-center mb-16"
+        className="text-center mb-16 max-w-3xl mx-auto px-4"
       >
-        <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-[var(--color-ink-muted)] mb-4">
+        <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-semibold tracking-[0.2em] uppercase bg-[#FF2D85]/10 text-[#FF2D85] border border-[#FF2D85]/20 mb-4">
           {t('testimonials.badge')}
         </span>
         <h2 
-          className="text-4xl md:text-5xl lg:text-6xl font-semibold text-[var(--color-ink)] mb-6 tracking-tight"
+          className="text-4xl md:text-5xl lg:text-6xl font-semibold text-white mb-6 tracking-tight"
           style={{ fontFamily: 'var(--font-display)' }}
         >
           {t('testimonials.title')}
         </h2>
-        <p className="text-[var(--color-ink-light)] max-w-lg mx-auto text-base md:text-lg leading-relaxed">
+        <p className="text-gray-300 max-w-lg mx-auto text-base md:text-lg leading-relaxed">
           {t('testimonials.subtitle')}
         </p>
       </motion.div>

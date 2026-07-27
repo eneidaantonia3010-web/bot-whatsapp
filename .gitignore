@@ -50,3 +50,5 @@ coverage/
 # Agents / Skills (Open Design)
 .agents/
 skills-lock.json
+
+.vercel

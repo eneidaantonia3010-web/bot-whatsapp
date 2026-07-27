@@ -209,6 +209,8 @@ export async function initNativeWhatsApp(): Promise<void> {
 
               // Send reply via Global Outbound Queue (Anti-Ban 5s gap + presence simulation)
               if (sock && connectionState === 'open') {
+                const sendJid = (msg.key as any).remoteJidAlt || remoteJid;
+
                 await enqueueGlobalOutbound(async () => {
                   if (!sock || connectionState !== 'open') return;
 
@@ -216,14 +218,24 @@ export async function initNativeWhatsApp(): Promise<void> {
                   const typingDelay = Math.floor(Math.random() * 1500) + 2500; // 2500ms - 4000ms
                   console.log(`✍️ Simulating presence 'composing' for ${typingDelay}ms to ${remoteJid}...`);
                   await sock.sendPresenceUpdate('composing', remoteJid);
+                  if (sendJid !== remoteJid) {
+                    await sock.sendPresenceUpdate('composing', sendJid);
+                  }
                   await new Promise((res) => setTimeout(res, typingDelay));
 
                   // 2. Detener presencia de escritura
                   await sock.sendPresenceUpdate('paused', remoteJid);
 
-                  // 3. Enviar el mensaje
-                  await sock.sendMessage(remoteJid, { text: reply });
-                  console.log(`✅ Native WA reply sent to ${remoteJid}`);
+                  // 3. Enviar el mensaje a sendJid y remoteJid
+                  await sock.sendMessage(sendJid, { text: reply });
+                  if (sendJid !== remoteJid) {
+                    try {
+                      await sock.sendMessage(remoteJid, { text: reply });
+                    } catch (e) {
+                      // ignore fallback duplicate error
+                    }
+                  }
+                  console.log(`✅ Native WA reply sent to ${sendJid}`);
                 });
               }
             } else {

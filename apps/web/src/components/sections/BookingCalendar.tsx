@@ -136,28 +136,28 @@ export function BookingCalendar() {
       </div>
 
       {/* Progress Steps */}
-      <div className="max-w-2xl mx-auto mb-12">
+      <div className="max-w-2xl mx-auto mb-12 relative z-10 px-4">
         <div className="flex items-center justify-between">
           {['Servicio', 'Fecha', 'Horario', 'Datos'].map((label, index) => (
             <div key={label} className="flex items-center">
               <div className="flex flex-col items-center">
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 ${
                     step > index + 1
-                      ? 'bg-salvia text-white'
+                      ? 'bg-[#9D4EDD] text-white shadow-[0_0_15px_rgba(157,78,221,0.4)]'
                       : step === index + 1
-                      ? 'bg-ink text-cream'
-                      : 'bg-cream-dark text-ink-muted'
+                      ? 'bg-[#DF006E] text-white shadow-[0_0_20px_rgba(223,0,110,0.5)] scale-110'
+                      : 'bg-white/10 text-gray-400 border border-white/10'
                   }`}
                 >
                   {step > index + 1 ? <Check className="w-4 h-4" /> : index + 1}
                 </div>
-                <span className="text-xs text-ink-muted mt-2 hidden sm:block">{label}</span>
+                <span className="text-xs text-gray-400 mt-2 font-medium hidden sm:block uppercase tracking-wider">{label}</span>
               </div>
               {index < 3 && (
                 <div
                   className={`w-12 sm:w-20 md:w-32 h-[2px] mx-2 transition-colors duration-300 ${
-                    step > index + 1 ? 'bg-salvia' : 'bg-cream-dark'
+                    step > index + 1 ? 'bg-[#9D4EDD]' : 'bg-white/10'
                   }`}
                 />
               )}

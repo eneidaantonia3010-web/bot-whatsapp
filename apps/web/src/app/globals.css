@@ -263,3 +263,15 @@ h1, h2, h3, h4, h5, h6 {
   opacity: 0.4;
 }
 
+.max-w-container-max {
+  max-width: 1440px;
+}
+
+.booking-gradient {
+  background: linear-gradient(135deg, #df006e 0%, #6a0baa 100%);
+}
+
+.glow-hover:hover {
+  box-shadow: 0 0 25px rgba(223, 0, 110, 0.4);
+}
+

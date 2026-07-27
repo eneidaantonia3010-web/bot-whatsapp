@@ -4,6 +4,8 @@
   "private": true,
   "description": "Glow Studio by Sofia — Premium Beauty Salon Web Application",
   "scripts": {
+    "build": "cd apps/web && npm run build",
+    "start": "cd apps/web && npm run start",
     "dev:web": "cd apps/web && npm run dev",
     "dev:api": "cd apps/api && npm run dev",
     "dev:bot": "cd apps/bot && python main.py",

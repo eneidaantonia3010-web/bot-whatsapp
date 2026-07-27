@@ -1,5 +1,5 @@
 // ============================================
-// Message Queue per Sender ID (Concurrency Control)
+// Message Queue System (Sender Concurrency + Anti-Ban Global Outbound Gap)
 // ============================================
 
 const senderQueues = new Map<string, Promise<any>>();
@@ -11,7 +11,6 @@ export function enqueueForSender<T>(senderId: string, task: () => Promise<T>): P
     return await task();
   });
 
-  // Keep internal chain resilient even if task fails
   const chainPromise = taskPromise.catch((err) => {
     console.error(`❌ Queue execution error for sender ${senderId}:`, err);
   });
@@ -27,3 +26,33 @@ export function enqueueForSender<T>(senderId: string, task: () => Promise<T>): P
   return taskPromise;
 }
 
+// Global Outbound Queue (Ensures at least 5s gap between ANY WhatsApp outgoing messages)
+let globalOutboundChain: Promise<any> = Promise.resolve();
+let lastOutboundTimestamp = 0;
+const MIN_OUTBOUND_GAP_MS = 5000; // 5 segundos entre envíos
+
+export function enqueueGlobalOutbound<T>(task: () => Promise<T>): Promise<T> {
+  const nextTask = globalOutboundChain.then(async () => {
+    const now = Date.now();
+    const elapsed = now - lastOutboundTimestamp;
+
+    if (elapsed < MIN_OUTBOUND_GAP_MS) {
+      const waitTime = MIN_OUTBOUND_GAP_MS - elapsed;
+      console.log(`⏳ Anti-Ban Queue: Espaciando envío por ${waitTime}ms para mantener la distancia de 5s...`);
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+    }
+
+    try {
+      const result = await task();
+      return result;
+    } finally {
+      lastOutboundTimestamp = Date.now();
+    }
+  });
+
+  globalOutboundChain = nextTask.catch((err) => {
+    console.error('❌ Anti-Ban Queue task error:', err);
+  });
+
+  return nextTask;
+}

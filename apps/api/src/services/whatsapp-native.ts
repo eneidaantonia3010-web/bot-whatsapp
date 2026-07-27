@@ -1,6 +1,7 @@
 // ============================================
 // Native In-App WhatsApp Service (@whiskeysockets/baileys)
 // Integrated directly into Express API with PostgreSQL Session Storage
+// Includes Humanized Presence Simulation (composing) & Anti-Ban Dynamic Texts
 // ============================================
 
 import makeWASocket, {
@@ -8,13 +9,12 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   isJidGroup,
   isJidBroadcast,
-  proto,
 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import { usePrismaAuthState } from './baileys-store';
 import { prisma } from './prisma';
-import { enqueueForSender } from './message-queue';
+import { enqueueForSender, enqueueGlobalOutbound } from './message-queue';
 
 let BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-7ghr.onrender.com';
 if (process.env.NODE_ENV === 'production' && (!process.env.BOT_URL || BOT_URL.includes('localhost'))) {
@@ -28,6 +28,37 @@ let connectionState: 'connecting' | 'open' | 'close' = 'connecting';
 let clearAuthState: (() => Promise<void>) | null = null;
 
 const logger = pino({ level: 'error' });
+
+// Variaciones de saludos y cierres para evitar textos planos repetitivos
+const GREETING_VARIATIONS = [
+  '¡Hola!',
+  '¡Hola, qué tal!',
+  '¡Hola! Bienvenida 💕',
+  '¡Hola! ¿Cómo estás?',
+  '¡Hola! Es un gusto saludarte ✨',
+];
+
+const EMOJI_VARIATIONS = ['✨', '💕', '🌸', '💇‍♀️', '💎', '💅', '💖'];
+
+function addHumanDynamicVariation(text: string): string {
+  if (!text) return text;
+  
+  let result = text;
+
+  // Variar saludos iniciales estáticos
+  if (result.startsWith('¡Hola!')) {
+    const randomGreeting = GREETING_VARIATIONS[Math.floor(Math.random() * GREETING_VARIATIONS.length)];
+    result = result.replace(/^¡Hola!/, randomGreeting);
+  }
+
+  // Variar emoji al final si no tiene uno
+  const randomEmoji = EMOJI_VARIATIONS[Math.floor(Math.random() * EMOJI_VARIATIONS.length)];
+  if (!result.trim().endsWith('✨') && !result.trim().endsWith('💕')) {
+    result = `${result.trim()} ${randomEmoji}`;
+  }
+
+  return result;
+}
 
 export async function initNativeWhatsApp(): Promise<void> {
   console.log('🚀 Initializing Native In-App WhatsApp Service (Baileys + PostgreSQL Store)...');
@@ -161,7 +192,9 @@ export async function initNativeWhatsApp(): Promise<void> {
 
             if (agentResponse.ok) {
               const data = (await agentResponse.json()) as { response: string };
-              const reply = data.response;
+              let reply = data.response;
+              reply = addHumanDynamicVariation(reply);
+
               console.log(`🤖 Native WA Bot reply for ${remoteJid}: ${reply.substring(0, 100)}...`);
 
               // Save OUTBOUND log
@@ -174,10 +207,24 @@ export async function initNativeWhatsApp(): Promise<void> {
                 },
               });
 
-              // Send reply back via native Baileys socket
+              // Send reply via Global Outbound Queue (Anti-Ban 5s gap + presence simulation)
               if (sock && connectionState === 'open') {
-                await sock.sendMessage(remoteJid, { text: reply });
-                console.log(`✅ Native WA reply sent to ${remoteJid}`);
+                await enqueueGlobalOutbound(async () => {
+                  if (!sock || connectionState !== 'open') return;
+
+                  // 1. Simular presencia "composing" (escribiendo) durante 2.5 a 4 segundos
+                  const typingDelay = Math.floor(Math.random() * 1500) + 2500; // 2500ms - 4000ms
+                  console.log(`✍️ Simulating presence 'composing' for ${typingDelay}ms to ${remoteJid}...`);
+                  await sock.sendPresenceUpdate('composing', remoteJid);
+                  await new Promise((res) => setTimeout(res, typingDelay));
+
+                  // 2. Detener presencia de escritura
+                  await sock.sendPresenceUpdate('paused', remoteJid);
+
+                  // 3. Enviar el mensaje
+                  await sock.sendMessage(remoteJid, { text: reply });
+                  console.log(`✅ Native WA reply sent to ${remoteJid}`);
+                });
               }
             } else {
               console.error(`❌ Bot API returned status ${agentResponse.status}`);
@@ -216,9 +263,22 @@ export async function sendNativeWhatsAppMessage(to: string, message: string): Pr
 
   try {
     const formattedJid = to.includes('@') ? to : `${to.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
-    await sock.sendMessage(formattedJid, { text: message });
-    console.log(`✅ Native WhatsApp message sent to ${formattedJid}`);
-    return true;
+    const dynamicMessage = addHumanDynamicVariation(message);
+
+    return await enqueueGlobalOutbound(async () => {
+      if (!sock || connectionState !== 'open') return false;
+
+      // 1. Simular presencia 'composing'
+      const typingDelay = Math.floor(Math.random() * 1500) + 2000;
+      await sock.sendPresenceUpdate('composing', formattedJid);
+      await new Promise((res) => setTimeout(res, typingDelay));
+      await sock.sendPresenceUpdate('paused', formattedJid);
+
+      // 2. Enviar mensaje
+      await sock.sendMessage(formattedJid, { text: dynamicMessage });
+      console.log(`✅ Native WhatsApp message sent to ${formattedJid}`);
+      return true;
+    });
   } catch (error) {
     console.error(`❌ Error sending Native WhatsApp message to ${to}:`, error);
     return false;

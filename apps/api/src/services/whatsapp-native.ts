@@ -209,33 +209,34 @@ export async function initNativeWhatsApp(): Promise<void> {
 
               // Send reply via Global Outbound Queue (Anti-Ban 5s gap + presence simulation)
               if (sock && connectionState === 'open') {
-                const sendJid = (msg.key as any).remoteJidAlt || remoteJid;
+                const sendJid = (msg.key as any).remoteJidAlt || (msg.key as any).participantPn || remoteJid;
 
                 await enqueueGlobalOutbound(async () => {
                   if (!sock || connectionState !== 'open') return;
 
                   // 1. Simular presencia "composing" (escribiendo) durante 2.5 a 4 segundos
                   const typingDelay = Math.floor(Math.random() * 1500) + 2500; // 2500ms - 4000ms
-                  console.log(`✍️ Simulating presence 'composing' for ${typingDelay}ms to ${remoteJid}...`);
+                  console.log(`✍️ Simulating presence 'composing' for ${typingDelay}ms to ${remoteJid}... key:`, JSON.stringify(msg.key));
                   await sock.sendPresenceUpdate('composing', remoteJid);
-                  if (sendJid !== remoteJid) {
-                    await sock.sendPresenceUpdate('composing', sendJid);
-                  }
                   await new Promise((res) => setTimeout(res, typingDelay));
 
-                  // 2. Detener presencia de escritura
-                  await sock.sendPresenceUpdate('paused', remoteJid);
+                  // 2. Enviar el mensaje directamente (la entrega del mensaje limpia el estado 'composing' automáticamente)
+                  try {
+                    await sock.sendMessage(remoteJid, { text: reply }, { quoted: msg });
+                    console.log(`✅ Native WA reply sent to ${remoteJid} (quoted msg)`);
+                  } catch (e1) {
+                    console.error(`⚠️ Error sending quoted to ${remoteJid}, trying standard send:`, e1);
+                    await sock.sendMessage(remoteJid, { text: reply });
+                  }
 
-                  // 3. Enviar el mensaje respondiendo al mensaje original (quoted: msg) para que WhatsApp renderice el globo en LID
-                  await sock.sendMessage(remoteJid, { text: reply }, { quoted: msg });
                   if (sendJid !== remoteJid) {
                     try {
                       await sock.sendMessage(sendJid, { text: reply });
-                    } catch (e) {
-                      // ignore fallback duplicate error
+                      console.log(`✅ Native WA reply sent to alt JID ${sendJid}`);
+                    } catch (e2) {
+                      // ignore alt JID fallback error
                     }
                   }
-                  console.log(`✅ Native WA reply sent to ${remoteJid} (quoted msg)`);
                 });
               }
             } else {

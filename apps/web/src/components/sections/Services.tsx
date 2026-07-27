@@ -60,8 +60,8 @@ export function Services() {
             onClick={() => setActiveCategory(cat.id)}
             className={`px-5 py-2.5 rounded-full text-xs md:text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
               activeCategory === cat.id
-                ? 'bg-[var(--color-ink)] text-[var(--color-white)] shadow-[var(--shadow-soft)]'
-                : 'bg-[var(--color-bg-alt)] text-[var(--color-ink-light)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]'
+                ? 'btn-gradient shadow-lg shadow-pink-500/20'
+                : 'glass-panel text-slate-300 hover:text-white border border-white/10'
             }`}
           >
             {cat.label}

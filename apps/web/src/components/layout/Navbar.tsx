@@ -102,7 +102,7 @@ export function Navbar() {
 
           <a
             href="#reservar"
-            className="px-4 py-2 rounded-full bg-gradient-to-r from-pink-500 to-rose-600 text-white text-xs font-semibold shadow-lg shadow-pink-500/25 hover:brightness-110 transition-all whitespace-nowrap"
+            className="btn-gradient px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg hover:shadow-pink-500/30 transition-all whitespace-nowrap"
           >
             {t('header.btnBook')}
           </a>

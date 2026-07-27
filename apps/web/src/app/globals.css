@@ -222,3 +222,44 @@ h1, h2, h3, h4, h5, h6 {
     padding-bottom: 8rem;
   }
 }
+
+/* Exact Stitch Design Classes */
+.glass-panel {
+  background: rgba(29, 32, 33, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-header {
+  background: rgba(15, 15, 22, 0.75);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #FFB1C5 0%, #DF006E 50%, #9D4EDD 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.btn-gradient {
+  background: linear-gradient(135deg, #DF006E 0%, #9D4EDD 100%);
+  color: #ffffff;
+  transition: all 0.3s ease;
+}
+
+.btn-gradient:hover {
+  box-shadow: 0 0 25px rgba(223, 0, 110, 0.5);
+  transform: translateY(-2px);
+}
+
+.glow-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  z-index: -1;
+  opacity: 0.4;
+}
+

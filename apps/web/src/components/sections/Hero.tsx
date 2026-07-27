@@ -9,129 +9,87 @@ export function Hero() {
   const { t } = useTranslation();
 
   return (
-    <section id="inicio" className="relative min-h-[100svh] pt-32 pb-20 overflow-hidden flex items-center">
-      {/* Background elements */}
-      <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-[var(--color-accent)] opacity-[0.03] rounded-full blur-[120px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
-      
-      <div className="max-w-7xl mx-auto px-6 w-full grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center relative z-10">
-        
-        {/* Left Column - Editorial Text */}
-        <div className="lg:col-span-6 flex flex-col items-start text-left">
-          {/* Badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[var(--color-ink-muted)]/20 bg-[var(--color-surface)] shadow-[var(--shadow-soft)] mb-8"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse" />
-            <span className="text-xs font-semibold text-[var(--color-ink-muted)] tracking-[0.2em] uppercase">
+    <section id="inicio" className="relative min-h-[90vh] flex items-center pt-28 pb-20 px-4 md:px-8 max-w-7xl mx-auto">
+      {/* Ambient Glow Backgrounds */}
+      <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
+        <div className="glow-blob bg-[#df006e]/20 w-[500px] h-[500px] top-[-100px] left-[-200px]" />
+        <div className="glow-blob bg-[#9d4edd]/20 w-[600px] h-[600px] bottom-[-200px] right-[-200px]" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center w-full">
+        {/* Text Content */}
+        <div className="lg:col-span-6 flex flex-col items-start gap-6 z-10">
+          <div className="glass-panel px-4 py-2 rounded-full border border-[#ffb1c5]/30 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#ffb1c5] animate-pulse" />
+            <span className="text-xs font-semibold text-[#ffb1c5] uppercase tracking-wider">
               {t('hero.badge')}
             </span>
-          </motion.div>
+          </div>
 
-          {/* Heading with Bodoni Moda Editorial typography */}
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="font-display font-bold text-[var(--color-ink)] leading-[1.05] tracking-tight mb-8"
-            style={{ 
-              fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(2.75rem, 5.5vw + 1rem, 5.5rem)'
-            }}
+            transition={{ duration: 0.8, delay: 0.1 }}
+            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white leading-tight font-display tracking-tight"
           >
-            {t('hero.titleLine1')}<br />
-            <span className="glow-pink-text italic font-normal tracking-normal">{t('hero.titleHighlight')}</span>
+            {t('hero.titleLine1')}{' '}
+            <span className="text-gradient italic font-normal">{t('hero.titleHighlight')}</span>
           </motion.h1>
 
-          {/* Subtext */}
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.2, ease: 'easeOut' }}
-            className="text-base sm:text-lg text-[var(--color-ink-light)] max-w-lg mb-10 leading-relaxed"
-          >
+          <p className="text-base sm:text-lg text-slate-300 max-w-xl leading-relaxed">
             {t('hero.description')}
-          </motion.p>
+          </p>
 
-          {/* CTA Buttons with Flex Wrap */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3, ease: 'easeOut' }}
-            className="flex flex-wrap items-center gap-4 w-full sm:w-auto"
-          >
+          <div className="flex flex-col sm:flex-row gap-4 mt-4 w-full sm:w-auto">
             <a
               href="#reservar"
-              className="double-bezel w-full sm:w-auto group shrink-0"
+              className="btn-gradient px-8 py-4 rounded-full text-xs font-bold uppercase tracking-widest text-center flex justify-center items-center gap-2 shadow-lg hover:shadow-pink-500/25 transition-all"
             >
-              <div className="double-bezel-inner bg-[var(--color-ink)] text-[var(--color-white)] px-8 py-4 text-sm font-medium hover:bg-[var(--color-ink-light)] transition-colors duration-300 flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap">
-                {t('hero.ctaPrimary')}
-                <ArrowRight weight="bold" className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </div>
+              {t('hero.ctaPrimary')}
+              <ArrowRight weight="bold" className="w-4 h-4" />
             </a>
             <a
               href="#servicios"
-              className="px-8 py-4 text-[var(--color-ink)] font-medium rounded-full text-sm hover:bg-[var(--color-ink)]/5 transition-all w-full sm:w-auto text-center border border-black/10 whitespace-nowrap"
+              className="glass-panel hover:bg-white/10 transition-colors px-8 py-4 rounded-full text-xs font-bold uppercase tracking-widest text-white text-center flex justify-center items-center border border-white/20"
             >
               {t('hero.ctaSecondary')}
             </a>
-          </motion.div>
+          </div>
         </div>
 
-        {/* Right Column - Image Cascade / Float */}
-        <motion.div 
-          initial={{ opacity: 0, x: 40, rotate: 2 }}
-          animate={{ opacity: 1, x: 0, rotate: 0 }}
-          transition={{ duration: 1, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="lg:col-span-6 relative min-h-[420px] sm:min-h-[500px] lg:min-h-[650px] w-full"
-        >
-          {/* Main Floating Image */}
-          <div className="absolute inset-0 rounded-[var(--radius-2xl)] overflow-hidden shadow-[var(--shadow-lifted)] border border-[var(--color-bg-alt)] z-10">
-            <Image
-              src="https://images.unsplash.com/photo-1560066984-138dadb4c035?w=1000&q=80"
-              alt="Glow Studio interior"
-              fill
-              priority
-              className="object-cover scale-105 hover:scale-100 transition-transform duration-[2s] ease-out"
-              sizes="(max-width: 1024px) 100vw, 50vw"
-            />
-            <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)] rounded-[var(--radius-2xl)] pointer-events-none" />
+        {/* Image Frame (Arch Shaped Glass Panel) */}
+        <div className="lg:col-span-6 relative mt-12 lg:mt-0">
+          <div className="relative w-full aspect-[4/5] max-w-md mx-auto lg:max-w-none rounded-t-full rounded-b-3xl overflow-hidden glass-panel p-2">
+            <div className="absolute inset-0 rounded-t-full rounded-b-3xl border border-[#ffb1c5]/20 m-4 z-10 pointer-events-none" />
+            <div className="relative w-full h-full rounded-t-full rounded-b-[20px] overflow-hidden">
+              <Image
+                src="https://images.unsplash.com/photo-1560066984-138dadb4c035?w=1000&q=80"
+                alt="Glow Studio interior"
+                fill
+                priority
+                className="object-cover grayscale-[10%] hover:grayscale-0 transition-all duration-700 hover:scale-105"
+                sizes="(max-width: 1024px) 100vw, 50vw"
+              />
+            </div>
           </div>
 
-          {/* Accent Graphic / Secondary Card */}
-          <motion.div 
-            initial={{ opacity: 0, y: 30 }}
+          {/* Rating Floating Element */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute -bottom-6 -left-6 bg-[var(--color-surface)] p-5 rounded-2xl shadow-[var(--shadow-lifted)] border border-[var(--color-bg-alt)] z-20 hidden md:flex items-center gap-4"
+            transition={{ delay: 0.6 }}
+            className="absolute -bottom-6 -left-4 glass-panel p-4 rounded-2xl flex items-center gap-4 border border-white/10 z-20 shadow-2xl"
           >
-            <div className="w-12 h-12 rounded-full bg-[var(--color-bg-alt)] flex items-center justify-center shrink-0">
-              <Sparkle weight="fill" className="w-6 h-6 text-[var(--color-accent)]" />
+            <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-pink-500 to-rose-600 flex items-center justify-center shrink-0">
+              <Sparkle weight="fill" className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-[var(--color-ink)]">Glow Studio</p>
-              <p className="text-xs text-[var(--color-ink-muted)]">Atención personalizada VIP</p>
+              <p className="text-lg font-bold text-white m-0 leading-tight">4.9/5 ★</p>
+              <p className="text-xs text-slate-400 m-0 font-medium">Top Rated VIP Salon</p>
             </div>
           </motion.div>
-        </motion.div>
+        </div>
       </div>
-
-      {/* Scroll Indicator */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.5 }}
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 hidden md:block"
-      >
-        <motion.div
-          animate={{ y: [0, 8, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-        >
-          <ArrowDown weight="bold" className="w-5 h-5 text-[var(--color-ink-muted)]" />
-        </motion.div>
-      </motion.div>
     </section>
   );
 }

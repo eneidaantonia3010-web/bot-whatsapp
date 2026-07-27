@@ -11,7 +11,7 @@ import {
 
 export const whatsappAdminRouter = Router();
 
-const SALON_WHATSAPP = process.env.SALON_WHATSAPP || '5491173566392';
+const SALON_WHATSAPP = process.env.SALON_WHATSAPP || '5491178296781';
 
 // GET /api/admin/whatsapp/status — Check native connection state
 whatsappAdminRouter.get('/status', (_req: Request, res: Response) => {

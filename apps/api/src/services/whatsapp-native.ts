@@ -20,7 +20,7 @@ let BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-7ghr.onrender.com'
 if (process.env.NODE_ENV === 'production' && (!process.env.BOT_URL || BOT_URL.includes('localhost'))) {
   BOT_URL = 'https://glow-studio-bot-7ghr.onrender.com';
 }
-const SALON_WHATSAPP = process.env.SALON_WHATSAPP || '5491173566392';
+const SALON_WHATSAPP = process.env.SALON_WHATSAPP || '5491178296781';
 
 let sock: ReturnType<typeof makeWASocket> | null = null;
 let currentQRBase64: string | null = null;

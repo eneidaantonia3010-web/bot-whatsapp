@@ -11,8 +11,8 @@ export const SALON = {
   heroTagline: 'Tu momento de brillar',
   heroSubtext: 'Descubrí una experiencia de belleza única. Tratamientos premium en un espacio diseñado para que te sientas especial.',
   address: 'Av. Corrientes 1234, Buenos Aires',
-  phone: '+54 9 11 7356-6392',
-  whatsapp: 'https://wa.me/5491173566392',
+  phone: '+54 9 11 7829-6781',
+  whatsapp: 'https://wa.me/5491178296781',
 
   instagram: 'https://instagram.com/glowstudiobysofia',
   email: 'hola@glowstudio.com',

@@ -315,7 +315,7 @@ async def process_message(sender_id: str, message: str, platform: str = "INSTAGR
                     response = (
                         f"😔 Hubo un problema al reservar. "
                         f"Por favor, intentá de nuevo o escribinos por WhatsApp "
-                        f"al *+54 9 11 7356-6392* y te ayudamos personalmente. 💕"
+                        f"al *+54 9 11 7829-6781* y te ayudamos personalmente. 💕"
                     )
 
                 # Reset conversation

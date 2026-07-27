@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
-import { Outfit, Inter } from "next/font/google";
+import { Bodoni_Moda, Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Toaster } from "sonner";
 import { I18nProvider } from "@/i18n/I18nContext";
 
-const outfit = Outfit({
+const bodoniModa = Bodoni_Moda({
   subsets: ["latin"],
-  variable: "--font-outfit",
+  variable: "--font-bodoni-moda",
   display: "swap",
 });
 
-const inter = Inter({
+const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-hanken-grotesk",
   display: "swap",
 });
 
@@ -46,7 +46,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className="scroll-smooth">
-      <body className={`${outfit.variable} ${inter.variable} font-sans bg-[var(--color-bg)] text-[var(--color-ink)] antialiased`}>
+      <body className={`${bodoniModa.variable} ${hankenGrotesk.variable} font-sans bg-[var(--color-bg)] text-[var(--color-ink)] antialiased`}>
         <I18nProvider>
           <Navbar />
           <main>{children}</main>

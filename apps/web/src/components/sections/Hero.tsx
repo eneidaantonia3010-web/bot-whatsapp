@@ -30,19 +30,19 @@ export function Hero() {
             </span>
           </motion.div>
 
-          {/* Heading with clamp() typography */}
+          {/* Heading with Bodoni Moda Editorial typography */}
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="font-semibold text-[var(--color-ink)] leading-[1.05] tracking-tight mb-8"
+            className="font-display font-bold text-[var(--color-ink)] leading-[1.05] tracking-tight mb-8"
             style={{ 
               fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(2.5rem, 5vw + 1rem, 5rem)'
+              fontSize: 'clamp(2.75rem, 5.5vw + 1rem, 5.5rem)'
             }}
           >
             {t('hero.titleLine1')}<br />
-            <span className="text-[var(--color-ink-muted)] italic font-light">{t('hero.titleHighlight')}</span>
+            <span className="glow-pink-text italic font-normal tracking-normal">{t('hero.titleHighlight')}</span>
           </motion.h1>
 
           {/* Subtext */}

@@ -226,16 +226,16 @@ export async function initNativeWhatsApp(): Promise<void> {
                   // 2. Detener presencia de escritura
                   await sock.sendPresenceUpdate('paused', remoteJid);
 
-                  // 3. Enviar el mensaje a sendJid y remoteJid
-                  await sock.sendMessage(sendJid, { text: reply });
+                  // 3. Enviar el mensaje respondiendo al mensaje original (quoted: msg) para que WhatsApp renderice el globo en LID
+                  await sock.sendMessage(remoteJid, { text: reply }, { quoted: msg });
                   if (sendJid !== remoteJid) {
                     try {
-                      await sock.sendMessage(remoteJid, { text: reply });
+                      await sock.sendMessage(sendJid, { text: reply });
                     } catch (e) {
                       // ignore fallback duplicate error
                     }
                   }
-                  console.log(`✅ Native WA reply sent to ${sendJid}`);
+                  console.log(`✅ Native WA reply sent to ${remoteJid} (quoted msg)`);
                 });
               }
             } else {

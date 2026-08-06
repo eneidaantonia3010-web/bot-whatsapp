@@ -28,7 +28,13 @@ appointmentsRouter.get('/', async (req: Request, res: Response) => {
     const appointments = await prisma.appointment.findMany({
       where,
       include: {
-        customer: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+          }
+        },
         service: true,
       },
       orderBy: { date: 'asc' },
@@ -164,7 +170,12 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
 // PATCH /api/appointments/:id — Update appointment status
 appointmentsRouter.patch('/:id', async (req: Request, res: Response) => {
   try {
-    const { status, notes } = req.body;
+    const parseResult = updateAppointmentSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: 'Datos inválidos', details: parseResult.error.flatten() });
+    }
+    
+    const { status, notes } = parseResult.data;
 
     const appointment = await prisma.appointment.update({
       where: { id: req.params.id as string },

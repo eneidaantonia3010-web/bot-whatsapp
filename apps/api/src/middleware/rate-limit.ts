@@ -4,6 +4,15 @@
 
 import rateLimit from 'express-rate-limit';
 
+// Strict limiter for authentication routes (prevent brute force)
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Max 5 login attempts per IP per 15 minutes
+  message: { error: 'Demasiados intentos de inicio de sesión desde esta IP, intente de nuevo después de 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Strict limiter for public appointment creation (prevent spam/DOS)
 export const appointmentCreationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

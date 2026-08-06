@@ -6,6 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import compression from 'compression';
+import helmet from 'helmet';
 
 dotenv.config({ path: '../../.env' });
 dotenv.config({ path: '../../.env.local' });
@@ -38,14 +39,15 @@ const PORT = process.env.PORT || 3001;
 app.set('trust proxy', 1);
 
 // Middleware
+app.use(helmet());
 app.use(compression());
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests from Vercel, localhost, or no origin (mobile/curl)
+    // Allow requests from Vercel, localhost, or the configured frontend url
     if (!origin || origin.includes('vercel.app') || origin.includes('localhost') || origin === process.env.FRONTEND_URL) {
       return callback(null, true);
     }
-    return callback(null, true);
+    return callback(new Error('No permitido por CORS'));
   },
   credentials: true,
 }));
@@ -72,8 +74,8 @@ app.use('/api/gallery', publicApiLimiter, galleryRouter);
 app.use('/api/appointments', appointmentCreationLimiter, appointmentsRouter);
 
 // Protected Administrative Endpoints
-app.use('/api/whatsapp-admin', whatsappAdminRouter);
-app.use('/api/admin/whatsapp', whatsappAdminRouter);
+app.use('/api/whatsapp-admin', requireAdmin, whatsappAdminRouter);
+app.use('/api/admin/whatsapp', requireAdmin, whatsappAdminRouter);
 app.use('/api/customers', requireAuth, customersRouter);
 app.use('/api/messages', requireAuth, messagesRouter);
 app.use('/api/admin', requireAdmin, adminRouter);
@@ -98,7 +100,9 @@ app.use((_req, res) => {
 // Error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('❌ Error:', err.message);
-  res.status(500).json({ error: 'Internal server error', message: err.message });
+  // Do not expose err.message in production unless it's a known safe error
+  const message = process.env.NODE_ENV === 'production' ? 'Ocurrió un error en el servidor.' : err.message;
+  res.status(500).json({ error: 'Internal server error', message });
 });
 
 // Start server

@@ -9,8 +9,14 @@ export async function ensureAdminUserExists() {
   try {
     const userCount = await prisma.user.count();
     if (userCount === 0) {
-      const defaultEmail = process.env.INITIAL_ADMIN_EMAIL || 'admin@glowstudio.com';
-      const defaultPassword = process.env.INITIAL_ADMIN_PASSWORD || 'GlowStudio2026!';
+      const defaultEmail = process.env.INITIAL_ADMIN_EMAIL;
+      const defaultPassword = process.env.INITIAL_ADMIN_PASSWORD;
+
+      if (!defaultEmail || !defaultPassword) {
+        console.warn('⚠️ INITIAL_ADMIN_EMAIL or INITIAL_ADMIN_PASSWORD not set. Skipping admin user creation.');
+        return;
+      }
+
       const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
       await prisma.user.create({
@@ -22,7 +28,7 @@ export async function ensureAdminUserExists() {
         },
       });
 
-      console.log(`👤 Initial Admin user created in Neon DB: ${defaultEmail}`);
+      console.log('👤 Initial Admin user created successfully.');
     }
   } catch (error) {
     console.error('⚠️ Could not seed admin user:', error);

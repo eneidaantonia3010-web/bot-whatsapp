@@ -5,20 +5,32 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { z } from 'zod';
 import { prisma } from '../services/prisma';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
+import { authLimiter } from '../middleware/rate-limit';
 
 export const authRouter = Router();
-const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'glow-studio-secret-key-2026';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error("CRITICAL: JWT_SECRET or NEXTAUTH_SECRET environment variable is missing.");
+}
 
 // POST /api/auth/login — Authenticate user
-authRouter.post('/login', async (req: Request, res: Response) => {
-  try {
-    const { email, password } = req.body;
+const loginSchema = z.object({
+  email: z.string().email('Email inválido'),
+  password: z.string().min(1, 'Contraseña requerida').max(100, 'Contraseña demasiado larga'),
+});
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Debes ingresar email y contraseña' });
+authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
+  try {
+    const parseResult = loginSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: 'Credenciales inválidas o formato incorrecto' });
     }
+
+    const { email, password } = parseResult.data;
 
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },

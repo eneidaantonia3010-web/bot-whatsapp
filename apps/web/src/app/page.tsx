@@ -6,7 +6,6 @@ import { Services } from '@/components/sections/Services';
 import { Gallery } from '@/components/sections/Gallery';
 import { Team } from '@/components/sections/Team';
 import { Testimonials } from '@/components/sections/Testimonials';
-import { BookingCalendar } from '@/components/sections/BookingCalendar';
 import { Chatbot } from '@/components/Chatbot';
 
 export default function Home() {
@@ -28,10 +27,6 @@ export default function Home() {
 
       <AnimatedSection>
         <Testimonials />
-      </AnimatedSection>
-
-      <AnimatedSection>
-        <BookingCalendar />
       </AnimatedSection>
 
       <Chatbot />

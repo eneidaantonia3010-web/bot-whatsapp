@@ -45,8 +45,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="scroll-smooth">
-      <body className={`${bodoniModa.variable} ${hankenGrotesk.variable} font-sans bg-[var(--color-bg)] text-[var(--color-ink)] antialiased`}>
+    <html lang="es" className="dark scroll-smooth">
+      <body className={`${bodoniModa.variable} ${hankenGrotesk.variable} antialiased overflow-x-hidden selection:bg-secondary-container selection:text-white`}>
         <I18nProvider>
           <Navbar />
           <main>{children}</main>

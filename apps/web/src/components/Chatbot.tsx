@@ -108,18 +108,24 @@ export function Chatbot() {
       {/* Floating Button */}
       <AnimatePresence>
         {!isOpen && (
-          <motion.button
+          <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 300, damping: 20 }}
             onClick={() => setIsOpen(true)}
-            className="fixed bottom-6 right-6 z-50 w-14 h-14 md:w-16 md:h-16 rounded-full bg-[var(--color-ink)] text-white shadow-[var(--shadow-lifted)] flex items-center justify-center hover:scale-110 transition-transform duration-300 group"
+            className="fixed bottom-6 right-6 md:bottom-12 md:right-12 z-50 rounded-full p-3 md:p-5 bg-surface-container/90 backdrop-blur-[40px] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] hover:scale-110 transition-all active:scale-95 cursor-pointer flex items-center gap-3 md:gap-5 floating-element group"
             aria-label="Abrir chat"
           >
-            <ChatCircle weight="fill" className="w-6 h-6 md:w-7 md:h-7 text-pink-400" />
-            <span className="absolute inset-0 rounded-full bg-pink-500 animate-ping opacity-20" />
-          </motion.button>
+            <div className="relative w-10 h-10 md:w-14 md:h-14 rounded-full bg-secondary-container flex items-center justify-center flex-shrink-0 overflow-hidden shadow-inner">
+              <span className="material-symbols-outlined text-white text-xl md:text-2xl transition-transform duration-500 group-hover:rotate-[360deg]" style={{ fontVariationSettings: "'FILL' 1" }}>chat</span>
+              <span className="absolute bottom-0.5 right-0.5 md:bottom-1 md:right-1 w-2.5 md:w-4 h-2.5 md:h-4 bg-green-500 rounded-full border-2 border-[#1d2021]"></span>
+            </div>
+            <div className="hidden sm:block pr-2 md:pr-4 text-left">
+              <p className="text-label-md font-bold text-secondary m-0 tracking-wider text-[12px] md:text-label-md">Glow Assistant</p>
+              <p className="font-body-md text-on-surface-variant text-[11px] md:text-[13px] m-0">En línea ahora</p>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 

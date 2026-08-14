@@ -1,145 +1,132 @@
 'use client';
 
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import Image from 'next/image';
-import { Clock, Sparkle, ArrowRight } from '@phosphor-icons/react';
-import { SERVICES_STATIC } from '@/lib/constants';
-import { formatPrice, formatDuration } from '@/lib/utils';
+import { motion } from 'motion/react';
 import { useTranslation } from '@/i18n/I18nContext';
 
 export function Services() {
-  const [activeCategory, setActiveCategory] = useState('todos');
   const { t } = useTranslation();
 
-  const categories = [
-    { id: 'todos', label: t('services.categories.all') },
-    { id: 'cabello', label: t('services.categories.hair') },
-    { id: 'unas', label: t('services.categories.nails') },
-    { id: 'pestanas', label: t('services.categories.lashes') },
-    { id: 'facial', label: t('services.categories.facial') },
-    { id: 'maquillaje', label: t('services.categories.makeup') },
-  ];
-
-  const filtered =
-    activeCategory === 'todos'
-      ? SERVICES_STATIC
-      : SERVICES_STATIC.filter((s) => s.category === activeCategory);
-
   return (
-    <section id="servicios" className="section-padding bg-[var(--color-bg)] relative overflow-hidden">
-      {/* Abstract Background Element */}
-      <div className="absolute -left-40 top-40 w-96 h-96 bg-[var(--color-accent)] opacity-[0.02] rounded-full blur-[100px] pointer-events-none" />
-
-      {/* Header */}
-      <div className="text-center mb-16 relative z-10 max-w-3xl mx-auto px-4">
-        <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-semibold tracking-[0.2em] uppercase bg-[#FF2D85]/10 text-[#FF2D85] border border-[#FF2D85]/20 mb-4">
-          {t('services.badge')}
-        </span>
-        <h2 
-          className="text-4xl md:text-5xl lg:text-6xl font-semibold text-white mb-6 tracking-tight"
-          style={{ fontFamily: 'var(--font-display)' }}
+    <section className="py-12 md:py-section-gap px-margin-mobile md:px-gutter max-w-container-max mx-auto relative" id="servicios">
+      <div className="text-center mb-10 md:mb-20">
+        <motion.h2 
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8 }}
+          className="font-headline-lg-mobile lg:font-headline-lg text-headline-lg-mobile lg:text-headline-lg text-on-surface mb-4 md:mb-6"
         >
           {t('services.title')}
-        </h2>
-        <p className="text-gray-300 max-w-lg mx-auto text-base md:text-lg leading-relaxed">
+        </motion.h2>
+        <motion.p 
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8, delay: 0.1 }}
+          className="font-body-lg text-body-lg text-on-surface-variant max-w-3xl mx-auto leading-relaxed"
+        >
           {t('services.subtitle')}
-        </p>
+        </motion.p>
       </div>
 
-      {/* Category Filters with Flex Wrap */}
-      <div className="flex flex-wrap justify-center gap-3 mb-12 relative z-10 px-4">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setActiveCategory(cat.id)}
-            className={`px-5 py-2.5 rounded-full text-xs md:text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
-              activeCategory === cat.id
-                ? 'btn-gradient shadow-lg shadow-pink-500/20'
-                : 'glass-panel text-slate-300 hover:text-white border border-white/10'
-            }`}
-          >
-            {cat.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Bento Grid */}
-      <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto relative z-10 px-4">
-        <AnimatePresence mode="popLayout">
-          {filtered.map((service, index) => {
-            const isFeatured = index === 0 || index === 3;
-            return (
-              <motion.div
-                layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                key={service.name}
-                className={`group bg-[var(--color-surface)] rounded-[var(--radius-2xl)] overflow-hidden shadow-[var(--shadow-soft)] border border-[var(--color-bg-alt)] hover:shadow-[var(--shadow-lifted)] transition-all duration-500 flex flex-col justify-between ${
-                  isFeatured ? 'md:col-span-2' : 'col-span-1'
-                }`}
-              >
-                {/* Image Area */}
-                <div className={`relative w-full ${isFeatured ? 'h-64 md:h-80' : 'h-56'} overflow-hidden bg-[var(--color-bg-alt)]`}>
-                  <Image
-                    src={service.imageUrl || ''}
-                    alt={service.name}
-                    fill
-                    className="object-cover transition-transform duration-[1.5s] ease-out group-hover:scale-105"
-                    sizes={isFeatured ? "(max-width: 768px) 100vw, 66vw" : "(max-width: 768px) 100vw, 33vw"}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[var(--color-ink)]/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                  
-                  {/* Category Badge */}
-                  <div className="absolute top-4 left-4 z-10">
-                    <span className="px-3 py-1.5 glass rounded-full text-xs font-semibold text-[var(--color-ink)] tracking-wide uppercase">
-                      {service.category}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Content Area */}
-                <div className="p-6 md:p-8 flex flex-col flex-grow justify-between">
-                  <div>
-                    <h3 
-                      className="text-2xl font-semibold text-[var(--color-ink)] mb-3 group-hover:text-[var(--color-accent)] transition-colors duration-300"
-                      style={{ fontFamily: 'var(--font-display)' }}
-                    >
-                      {service.name}
-                    </h3>
-                    <p className="text-[var(--color-ink-muted)] mb-6 line-clamp-3 leading-relaxed text-sm md:text-base">
-                      {service.description}
-                    </p>
-                  </div>
-
-                  {/* Meta / Booking */}
-                  <div className="flex items-center justify-between pt-5 border-t border-[var(--color-bg-alt)] mt-auto">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xl font-bold text-[var(--color-ink)] font-mono">
-                        {formatPrice(service.price)}
-                      </span>
-                      <div className="flex items-center gap-1.5 text-[var(--color-ink-muted)] text-xs font-medium uppercase tracking-wide">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>{t('services.durationLabel')}: {formatDuration(service.duration)}</span>
-                      </div>
-                    </div>
-                    
-                    <a
-                      href="#reservar"
-                      className="w-10 h-10 rounded-full bg-[var(--color-bg-alt)] flex items-center justify-center text-[var(--color-ink)] group-hover:bg-[var(--color-ink)] group-hover:text-[var(--color-white)] transition-colors duration-300"
-                      title={t('services.btnBook')}
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                    </a>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+      {/* Tabs */}
+      <motion.div 
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.8, delay: 0.1 }}
+        className="flex overflow-x-auto hide-scrollbar gap-4 md:gap-6 mb-12 md:mb-20 pb-4 justify-start md:justify-center"
+      >
+        <button className="px-6 md:px-10 py-3 rounded-full border border-secondary text-secondary bg-secondary/10 font-label-md text-label-md whitespace-nowrap tracking-widest hover:bg-secondary/20 transition-all uppercase">{t('services.categories.all')}</button>
+        <button className="px-6 md:px-10 py-3 rounded-full border border-white/10 text-on-surface-variant hover:text-on-surface hover:border-white/30 glass-panel font-label-md text-label-md whitespace-nowrap transition-all tracking-widest uppercase">{t('services.categories.hair')}</button>
+        <button className="px-6 md:px-10 py-3 rounded-full border border-white/10 text-on-surface-variant hover:text-on-surface hover:border-white/30 glass-panel font-label-md text-label-md whitespace-nowrap transition-all tracking-widest uppercase">{t('services.categories.nails')}</button>
+        <button className="px-6 md:px-10 py-3 rounded-full border border-white/10 text-on-surface-variant hover:text-on-surface hover:border-white/30 glass-panel font-label-md text-label-md whitespace-nowrap transition-all tracking-widest uppercase">{t('services.categories.brows')}</button>
+        <button className="px-6 md:px-10 py-3 rounded-full border border-white/10 text-on-surface-variant hover:text-on-surface hover:border-white/30 glass-panel font-label-md text-label-md whitespace-nowrap transition-all tracking-widest uppercase">{t('services.categories.facial')}</button>
       </motion.div>
+
+      {/* Grid of Services */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-10">
+        {/* Service Card 1 */}
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8 }}
+          className="glass-panel rounded-[24px] md:rounded-[32px] p-6 md:p-10 flex flex-col group relative overflow-hidden transition-all duration-700 hover:border-secondary/40 hover:-translate-y-4 shadow-xl"
+        >
+          <div className="absolute top-0 right-0 p-6 md:p-8">
+            <span className="font-headline-md text-secondary/90 text-xl md:text-2xl">ARS $45k</span>
+          </div>
+          <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-white/5 flex items-center justify-center mb-6 md:mb-8 group-hover:bg-secondary/20 transition-all duration-500 transform group-hover:rotate-12">
+            <span className="material-symbols-outlined text-secondary text-2xl md:text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>cut</span>
+          </div>
+          <h3 className="font-headline-lg text-[22px] md:text-headline-md text-on-surface mb-3 md:mb-4 leading-tight">Balayage Signature</h3>
+          <p className="font-body-md text-body-md text-on-surface-variant mb-8 md:mb-10 flex-grow leading-relaxed">Técnica francesa artesanal de iluminación a mano alzada para un degradado orgánico, natural y sofisticado que no requiere mantenimiento constante.</p>
+          <div className="flex justify-between items-center mt-auto border-t border-white/10 pt-6 md:pt-8">
+            <div className="flex items-center gap-2 md:gap-3 text-on-surface-variant">
+              <span className="material-symbols-outlined text-lg md:text-xl">schedule</span>
+              <span className="font-label-md text-[12px] md:text-label-md tracking-widest">3-4 HS</span>
+            </div>
+            <button className="text-secondary hover:text-white transition-colors font-label-md text-[12px] md:text-label-md flex items-center gap-2 group/btn tracking-widest uppercase">
+              Reservar <span className="material-symbols-outlined text-lg group-hover/btn:translate-x-2 transition-transform">arrow_forward</span>
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Service Card 2 */}
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8, delay: 0.1 }}
+          className="glass-panel rounded-[24px] md:rounded-[32px] p-6 md:p-10 flex flex-col group relative overflow-hidden transition-all duration-700 hover:border-secondary/40 hover:-translate-y-4 shadow-xl"
+        >
+          <div className="absolute top-0 right-0 p-6 md:p-8">
+            <span className="font-headline-md text-secondary/90 text-xl md:text-2xl">ARS $18k</span>
+          </div>
+          <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-white/5 flex items-center justify-center mb-6 md:mb-8 group-hover:bg-secondary/20 transition-all duration-500 transform group-hover:rotate-12">
+            <span className="material-symbols-outlined text-secondary text-2xl md:text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>spa</span>
+          </div>
+          <h3 className="font-headline-lg text-[22px] md:text-headline-md text-on-surface mb-3 md:mb-4 leading-tight">Tratamiento K18</h3>
+          <p className="font-body-md text-body-md text-on-surface-variant mb-8 md:mb-10 flex-grow leading-relaxed">Reconstrucción biomimética molecular profunda. Repara los puentes de queratina dañados por químicos o calor, restaurando fuerza y elasticidad real.</p>
+          <div className="flex justify-between items-center mt-auto border-t border-white/10 pt-6 md:pt-8">
+            <div className="flex items-center gap-2 md:gap-3 text-on-surface-variant">
+              <span className="material-symbols-outlined text-lg md:text-xl">schedule</span>
+              <span className="font-label-md text-[12px] md:text-label-md tracking-widest">1.5 HS</span>
+            </div>
+            <button className="text-secondary hover:text-white transition-colors font-label-md text-[12px] md:text-label-md flex items-center gap-2 group/btn tracking-widest uppercase">
+              Reservar <span className="material-symbols-outlined text-lg group-hover/btn:translate-x-2 transition-transform">arrow_forward</span>
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Service Card 3 */}
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          className="glass-panel rounded-[24px] md:rounded-[32px] p-6 md:p-10 flex flex-col group relative overflow-hidden transition-all duration-700 hover:border-secondary/40 hover:-translate-y-4 shadow-xl"
+        >
+          <div className="absolute top-0 right-0 p-6 md:p-8">
+            <span className="font-headline-md text-secondary/90 text-xl md:text-2xl">ARS $12k</span>
+          </div>
+          <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-white/5 flex items-center justify-center mb-6 md:mb-8 group-hover:bg-secondary/20 transition-all duration-500 transform group-hover:rotate-12">
+            <span className="material-symbols-outlined text-secondary text-2xl md:text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>back_hand</span>
+          </div>
+          <h3 className="font-headline-lg text-[22px] md:text-headline-md text-on-surface mb-3 md:mb-4 leading-tight">Manicura Premium</h3>
+          <p className="font-body-md text-body-md text-on-surface-variant mb-8 md:mb-10 flex-grow leading-relaxed">Esmaltado semipermanente con nivelación de placa y color de alta pigmentación. Brillo de cristal impecable garantizado por más de 21 días.</p>
+          <div className="flex justify-between items-center mt-auto border-t border-white/10 pt-6 md:pt-8">
+            <div className="flex items-center gap-2 md:gap-3 text-on-surface-variant">
+              <span className="material-symbols-outlined text-lg md:text-xl">schedule</span>
+              <span className="font-label-md text-[12px] md:text-label-md tracking-widest">1.5 HS</span>
+            </div>
+            <button className="text-secondary hover:text-white transition-colors font-label-md text-[12px] md:text-label-md flex items-center gap-2 group/btn tracking-widest uppercase">
+              Reservar <span className="material-symbols-outlined text-lg group-hover/btn:translate-x-2 transition-transform">arrow_forward</span>
+            </button>
+          </div>
+        </motion.div>
+      </div>
     </section>
   );
 }

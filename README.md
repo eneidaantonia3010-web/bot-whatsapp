@@ -95,8 +95,8 @@ npm run dev:bot
 
 - **Web**: http://localhost:3000
 - **Admin**: http://localhost:3000/admin
-- **API**: http://localhost:3001/api/health
-- **Bot**: http://localhost:8000/health
+- **API**: https://glow-studio-api-2vzt.onrender.com/api/health
+- **Bot**: https://glow-studio-bot-altn.onrender.com/health
 
 ---
 

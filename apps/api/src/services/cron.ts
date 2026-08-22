@@ -4,7 +4,7 @@ import { sendSalonUpcomingAlert, sendCustomerReminder } from './whatsapp';
 
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || '';
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
-const INSTANCE_NAME = process.env.INSTANCE_NAME || 'glow-studio-5491173566392';
+const INSTANCE_NAME = process.env.INSTANCE_NAME || 'glow-studio-5491178296781';
 
 export function initCronJobs() {
   console.log('⏰ Initializing cron jobs for appointment reminders and WhatsApp keepalive...');

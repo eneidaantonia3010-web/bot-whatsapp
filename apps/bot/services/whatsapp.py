@@ -16,7 +16,7 @@ EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "")
 INSTANCE_NAME = os.getenv("INSTANCE_NAME", "")
 
 
-SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491173566392")
+SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491178296781")
 
 async def send_whatsapp_notification(
     customer_name: str,

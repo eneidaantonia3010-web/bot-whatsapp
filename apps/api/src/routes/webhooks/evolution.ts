@@ -5,13 +5,13 @@ import { enqueueForSender } from '../../services/message-queue';
 
 export const evolutionWebhookRouter = Router();
 
-let BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-7ghr.onrender.com';
+let BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-altn.onrender.com';
 if (process.env.NODE_ENV === 'production' && (!process.env.BOT_URL || BOT_URL.includes('localhost'))) {
-  BOT_URL = 'https://glow-studio-bot-7ghr.onrender.com';
+  BOT_URL = 'https://glow-studio-bot-altn.onrender.com';
 }
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://evolution-api-latest-yicm.onrender.com';
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || 'Disjd12-9';
-const INSTANCE_NAME = process.env.INSTANCE_NAME || 'glow-studio-5491173566392';
+const INSTANCE_NAME = process.env.INSTANCE_NAME || 'glow-studio-5491178296781';
 
 evolutionWebhookRouter.post('/', async (req: Request, res: Response) => {
   try {

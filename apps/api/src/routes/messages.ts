@@ -47,7 +47,7 @@ messagesRouter.post('/', async (req: Request, res: Response) => {
 
     // For web chatbot, try to get AI response from the bot service
     let botResponse = '';
-    const BOT_URL = process.env.BOT_URL || 'http://localhost:8000';
+    const BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-altn.onrender.com';
 
     try {
       const aiResponse = await fetch(`${BOT_URL}/process-message`, {

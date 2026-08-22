@@ -17,7 +17,7 @@ import { usePrismaAuthState } from './baileys-store';
 import { prisma } from './prisma';
 import { enqueueForSender, enqueueGlobalOutbound } from './message-queue';
 
-const BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-7ghr.onrender.com';
+const BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-altn.onrender.com';
 const SALON_WHATSAPP = process.env.SALON_WHATSAPP || '5491178296781';
 
 let sock: ReturnType<typeof makeWASocket> | null = null;

@@ -8,7 +8,7 @@ import { sendWhatsAppMessage } from '../../services/whatsapp';
 
 export const whatsappWebhookRouter = Router();
 
-const BOT_URL = process.env.BOT_URL || 'http://localhost:8000';
+const BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-altn.onrender.com';
 const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || '';
 
 // GET — Webhook verification (Meta challenge)

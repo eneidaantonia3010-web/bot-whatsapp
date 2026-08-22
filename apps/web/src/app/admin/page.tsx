@@ -519,7 +519,7 @@ export default function AdminPage() {
                     </span>
                   ) : (
                     <a
-                      href={`${process.env.NEXT_PUBLIC_API_URL || 'https://glow-studio-api-q6ls.onrender.com'}/api/admin/whatsapp/qr?format=html`}
+                      href={`${process.env.NEXT_PUBLIC_API_URL || 'https://glow-studio-api-2vzt.onrender.com'}/api/admin/whatsapp/qr?format=html`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 text-rose-400 font-semibold bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full animate-bounce hover:bg-rose-500/20"
@@ -528,7 +528,7 @@ export default function AdminPage() {
                     </a>
                   )}
                 </div>
-                <p className="text-[10px] text-slate-500 truncate">+54 9 11 7356-6392</p>
+                <p className="text-[10px] text-slate-500 truncate">+54 9 11 7829-6781</p>
               </div>
             ) : (
               <div className="flex justify-center">

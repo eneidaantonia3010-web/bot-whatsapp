@@ -65,7 +65,7 @@ export function Chatbot() {
     setIsTyping(true);
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://glow-studio-api-q6ls.onrender.com';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://glow-studio-api-2vzt.onrender.com';
       const res = await fetch(`${API_URL}/api/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -93,7 +93,7 @@ export function Chatbot() {
         ...prev,
         {
           id: Date.now(),
-          text: 'Atención disponible por WhatsApp al +54 9 11 7356-6392 💕',
+          text: 'Atención disponible por WhatsApp al +54 9 11 7829-6781 💕',
           sender: 'bot',
           timestamp: new Date(),
         },

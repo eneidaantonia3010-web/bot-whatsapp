@@ -8,9 +8,9 @@ import { prisma } from '../../services/prisma';
 export const instagramWebhookRouter = Router();
 
 const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || process.env.WEBHOOK_VERIFY_TOKEN || '';
-let BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-7ghr.onrender.com';
+let BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-altn.onrender.com';
 if (process.env.NODE_ENV === 'production' && (!process.env.BOT_URL || BOT_URL.includes('localhost'))) {
-  BOT_URL = 'https://glow-studio-bot-7ghr.onrender.com';
+  BOT_URL = 'https://glow-studio-bot-altn.onrender.com';
 }
 const PAGE_ACCESS_TOKEN = process.env.META_PAGE_ACCESS_TOKEN || '';
 

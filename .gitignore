@@ -58,3 +58,6 @@ save_qr.py
 qr*.html
 qr*.png
 qr*.md
+
+# Render accounts (sensitive)
+RENDER_ACCOUNTS.md

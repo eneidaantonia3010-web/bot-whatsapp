@@ -652,7 +652,7 @@ async def process_message(
                     notes=f"Reservado via {platform} bot",
                 )
 
-                if result:
+                if result and not result.get("conflict"):
                     display_date = _format_date_display(date_str)
                     date_time_str = f"{display_date} a las {time_str}hs"
 
@@ -665,15 +665,24 @@ async def process_message(
                         f"Te vamos a enviar un recordatorio por WhatsApp 📱\n\n"
                         f"¡Nos vemos! 💕✨"
                     )
+                    conversations.pop(sender_id, None)
+                    delete_conversation_state(sender_id)
+                elif result and result.get("conflict"):
+                    display_date = _format_date_display(date_str)
+                    response = (
+                        f"⚠️ El horario de las *{time_str}hs* para el *{display_date}* ya se encuentra ocupado. 😔\n\n"
+                        f"¿Te gustaría elegir otro horario? (Por ejemplo: 11:00hs, 14:00hs, 16:00hs) 😊"
+                    )
+                    conv["stage"] = "select_time"
+                    save_conversation_state(sender_id, conv)
                 else:
                     response = (
                         f"😔 Hubo un problema al reservar. "
                         f"Por favor, intentá de nuevo o escribinos por WhatsApp "
                         f"al *+54 9 11 7829-6781* y te ayudamos personalmente. 💕"
                     )
-
-                conversations.pop(sender_id, None)
-                delete_conversation_state(sender_id)
+                    conversations.pop(sender_id, None)
+                    delete_conversation_state(sender_id)
                 chat_history.append({"role": "model", "parts": [response]})
                 return response
 

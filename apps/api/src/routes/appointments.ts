@@ -370,20 +370,24 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
     });
     const dateTimeStr = `${dateStr} a las ${timeStr}hs`;
 
-    // Send WhatsApp notifications
-    await sendWhatsAppNotification({
-      customerName,
-      serviceName: service.name,
-      dateTime: dateTimeStr,
-    });
-
-    if (customerPhone) {
-      await sendBookingConfirmation({
-        customerPhone,
+    // Send WhatsApp notifications (non-blocking)
+    try {
+      await sendWhatsAppNotification({
         customerName,
         serviceName: service.name,
         dateTime: dateTimeStr,
       });
+
+      if (customerPhone) {
+        await sendBookingConfirmation({
+          customerPhone,
+          customerName,
+          serviceName: service.name,
+          dateTime: dateTimeStr,
+        });
+      }
+    } catch (notifErr: any) {
+      console.warn(`⚠️ Warning sending booking notification: ${notifErr.message}`);
     }
 
     console.log(`✅ Appointment created: ${appointment.id}`);

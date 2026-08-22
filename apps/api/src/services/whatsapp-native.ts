@@ -207,28 +207,32 @@ export async function initNativeWhatsApp(): Promise<void> {
           console.log(`📩 Native WA message from ${remoteJid} (${senderName}): ${textMessage}`);
 
           // Blacklist check
-          const cleanPhone = remoteJid.split('@')[0];
-          const customer = await prisma.customer.findFirst({
-            where: {
-              OR: [{ phone: cleanPhone }, { phone: `+${cleanPhone}` }],
-            },
-          });
+          try {
+            const cleanPhone = remoteJid.split('@')[0];
+            const customer = await prisma.customer.findFirst({
+              where: {
+                OR: [{ phone: cleanPhone }, { phone: `+${cleanPhone}` }],
+              },
+            });
 
-          if (customer?.blocked) {
-            console.warn(`🚫 Ignoring message from blocked customer: ${remoteJid}`);
-            return;
+            if (customer?.blocked) {
+              console.warn(`🚫 Ignoring message from blocked customer: ${remoteJid}`);
+              return;
+            }
+
+            // Save INBOUND log
+            await prisma.messageLog.create({
+              data: {
+                platform: 'WHATSAPP',
+                senderId: remoteJid,
+                senderName,
+                message: textMessage,
+                direction: 'INBOUND',
+              },
+            });
+          } catch (dbErr: any) {
+            console.warn(`⚠️ DB log warning: ${dbErr.message}`);
           }
-
-          // Save INBOUND log
-          await prisma.messageLog.create({
-            data: {
-              platform: 'WHATSAPP',
-              senderId: remoteJid,
-              senderName,
-              message: textMessage,
-              direction: 'INBOUND',
-            },
-          });
 
           // Call Python AI Bot
           try {
@@ -251,14 +255,18 @@ export async function initNativeWhatsApp(): Promise<void> {
               console.log(`🤖 Native WA Bot reply for ${remoteJid}: ${reply.substring(0, 100)}...`);
 
               // Save OUTBOUND log
-              await prisma.messageLog.create({
-                data: {
-                  platform: 'WHATSAPP',
-                  senderId: remoteJid,
-                  message: reply,
-                  direction: 'OUTBOUND',
-                },
-              });
+              try {
+                await prisma.messageLog.create({
+                  data: {
+                    platform: 'WHATSAPP',
+                    senderId: remoteJid,
+                    message: reply,
+                    direction: 'OUTBOUND',
+                  },
+                });
+              } catch (logErr: any) {
+                console.warn(`⚠️ DB outbound log warning: ${logErr.message}`);
+              }
 
               // Send reply via Global Outbound Queue (Anti-Ban 5s gap + presence simulation)
               if (sock && connectionState === 'open') {

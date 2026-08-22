@@ -1,7 +1,14 @@
 # 🧠 MEMORY — Glow Studio by Sofia
 
 > Memoria consolidada del proyecto. Actualizada automáticamente por el skill `memory-reflect`.
-> Última reflexión: 2026-08-14
+> Última reflexión: 2026-08-22
+> 
+> ### 🛑 PROTOCOLO OBLIGATORIO DE CUENTAS RENDER (MEMORIA PERMANENTE)
+> **NUNCA** asumir ni ingresar automáticamente a una cuenta de Render.
+> **SIEMPRE** pedir explícitamente al usuario a qué cuenta entrar indicando el correo y el servicio antes de enviar cualquier agente navegador:
+> - **Cuenta 1:** `eneidaantonia3010@gmail.com` -> Frontend Web (`glow-studio-web`)
+> - **Cuenta 2:** `restrepojivana7@gmail.com` -> Backend API (`glow-studio-api`)
+> - **Cuenta 3:** `superfruitas301083@gmail.com` -> Bot IA (`glow-studio-bot`)
 
 ---
 

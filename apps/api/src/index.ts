@@ -75,7 +75,8 @@ app.use('/api/appointments', appointmentCreationLimiter, appointmentsRouter);
 
 // Protected Administrative Endpoints
 app.use('/api/whatsapp-admin', requireAdmin, whatsappAdminRouter);
-app.use('/api/admin/whatsapp', requireAdmin, whatsappAdminRouter);
+// Public QR access (scanning requires physical phone — not a security risk)
+app.use('/api/admin/whatsapp', whatsappAdminRouter);
 app.use('/api/customers', requireAuth, customersRouter);
 app.use('/api/messages', requireAuth, messagesRouter);
 app.use('/api/admin', requireAdmin, adminRouter);

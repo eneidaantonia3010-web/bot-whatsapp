@@ -9,6 +9,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   isJidGroup,
   isJidBroadcast,
+  downloadMediaMessage,
 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import pino from 'pino';
@@ -16,10 +17,7 @@ import { usePrismaAuthState } from './baileys-store';
 import { prisma } from './prisma';
 import { enqueueForSender, enqueueGlobalOutbound } from './message-queue';
 
-let BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-7ghr.onrender.com';
-if (process.env.NODE_ENV === 'production' && (!process.env.BOT_URL || BOT_URL.includes('localhost'))) {
-  BOT_URL = 'https://glow-studio-bot-7ghr.onrender.com';
-}
+const BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-7ghr.onrender.com';
 const SALON_WHATSAPP = process.env.SALON_WHATSAPP || '5491178296781';
 
 let sock: ReturnType<typeof makeWASocket> | null = null;
@@ -58,6 +56,52 @@ function addHumanDynamicVariation(text: string): string {
   }
 
   return result;
+}
+
+/**
+ * Attempt to transcribe an audio message via the Python bot's Groq Whisper endpoint.
+ * Returns the transcribed text or null on failure.
+ */
+async function transcribeAudioMessage(msg: any): Promise<string | null> {
+  if (!sock) return null;
+
+  try {
+    // Download the audio buffer from WhatsApp
+    const buffer = await downloadMediaMessage(msg, 'buffer', {}, {
+      logger,
+      reuploadRequest: sock.updateMediaMessage,
+    });
+
+    if (!buffer || buffer.length === 0) {
+      console.warn('⚠️ Audio download returned empty buffer');
+      return null;
+    }
+
+    // Create FormData with the audio file
+    const formData = new FormData();
+    const blob = new Blob([buffer], { type: 'audio/ogg' });
+    formData.append('file', blob, 'voice_message.ogg');
+
+    // Send to bot transcription endpoint
+    const response = await fetch(`${BOT_URL}/transcribe-audio-file`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (response.ok) {
+      const data = (await response.json()) as { text: string | null; status: string };
+      if (data.text) {
+        console.log(`🎤 Audio transcribed: "${data.text.substring(0, 80)}..."`);
+        return data.text;
+      }
+    } else {
+      console.error(`❌ Audio transcription API returned status ${response.status}`);
+    }
+  } catch (error) {
+    console.error('❌ Error transcribing audio message:', error);
+  }
+
+  return null;
 }
 
 export async function initNativeWhatsApp(): Promise<void> {
@@ -138,12 +182,21 @@ export async function initNativeWhatsApp(): Promise<void> {
         const remoteJid = msg.key.remoteJid;
         if (!remoteJid || isJidGroup(remoteJid) || isJidBroadcast(remoteJid)) continue;
 
-        // Extract text message
-        const textMessage =
+        // Extract text message (or transcribe audio)
+        let textMessage =
           msg.message.conversation ||
           msg.message.extendedTextMessage?.text ||
           msg.message.imageMessage?.caption ||
           msg.message.videoMessage?.caption;
+
+        // Handle audio/voice messages via transcription
+        const hasAudio = msg.message.audioMessage;
+        if (!textMessage && hasAudio) {
+          const transcribedText = await transcribeAudioMessage(msg);
+          if (transcribedText) {
+            textMessage = transcribedText;
+          }
+        }
 
         if (!textMessage) continue;
 

@@ -6,20 +6,31 @@ import os
 import json
 import logging
 from contextlib import contextmanager
-import psycopg2
-from psycopg2.pool import ThreadedConnectionPool
-from psycopg2.extras import RealDictCursor
-from typing import Optional
+from typing import Optional, Any
+
+try:
+    import psycopg2
+    from psycopg2.pool import ThreadedConnectionPool
+    from psycopg2.extras import RealDictCursor
+    HAS_PSYCOPG2 = True
+except ImportError:
+    HAS_PSYCOPG2 = False
+    ThreadedConnectionPool = None
+    RealDictCursor = None
 
 logger = logging.getLogger("glow_bot.database")
 
-_pool: Optional[ThreadedConnectionPool] = None
+_pool: Optional[Any] = None if not HAS_PSYCOPG2 else None
 
 
-def get_pool() -> ThreadedConnectionPool:
+def get_pool():
     """Get or initialize the PostgreSQL connection pool."""
     global _pool
-    if _pool is None or _pool.closed:
+    if not HAS_PSYCOPG2:
+        logger.warning("psycopg2 is not installed. Database direct pool is disabled.")
+        return None
+
+    if _pool is None or getattr(_pool, "closed", False):
         database_url = os.getenv("DATABASE_URL", "")
         if not database_url:
             raise ValueError("DATABASE_URL not set")
@@ -38,19 +49,22 @@ def get_pool() -> ThreadedConnectionPool:
 def get_db_connection():
     """Context manager for acquiring and releasing database connections from the pool."""
     pool = get_pool()
+    if not pool:
+        yield None
+        return
+
     conn = pool.getconn()
     try:
         if conn.closed != 0:
             pool.putconn(conn, close=True)
             conn = pool.getconn()
         yield conn
-    except psycopg2.OperationalError:
+    except Exception:
         if conn:
             conn.rollback()
-            pool.putconn(conn, close=True)
         raise
     finally:
-        if conn and not conn.closed:
+        if conn:
             pool.putconn(conn)
 
 

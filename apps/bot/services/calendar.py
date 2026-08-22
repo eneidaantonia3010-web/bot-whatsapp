@@ -9,8 +9,6 @@ import httpx
 logger = logging.getLogger("glow_bot.calendar")
 
 API_URL = os.getenv("API_URL", "https://glow-studio-api-q6ls.onrender.com")
-if "localhost" in API_URL:
-    API_URL = "https://glow-studio-api-q6ls.onrender.com"
 
 
 async def create_appointment_via_api(
@@ -63,3 +61,84 @@ async def get_availability(date: str, service_id: str) -> list[dict]:
     except Exception as e:
         logger.exception(f"Availability check error: {e}")
         return []
+
+
+async def get_upcoming_appointments(phone: str = None, instagram: str = None) -> list[dict]:
+    """Get upcoming active appointments for a customer."""
+    try:
+        params = {}
+        if phone:
+            params["phone"] = phone
+        if instagram:
+            params["instagram"] = instagram
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{API_URL}/api/appointments/customer/upcoming",
+                params=params,
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                return response.json()
+            return []
+    except Exception as e:
+        logger.exception(f"Error fetching upcoming appointments: {e}")
+        return []
+
+
+async def confirm_upcoming_appointment(phone: str = None, instagram: str = None) -> dict | None:
+    """Confirm a pending appointment within 48h."""
+    try:
+        payload = {}
+        if phone:
+            payload["phone"] = phone
+        if instagram:
+            payload["instagram"] = instagram
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{API_URL}/api/appointments/confirm-upcoming",
+                json=payload,
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                return response.json()
+            return None
+    except Exception as e:
+        logger.exception(f"Error confirming upcoming appointment: {e}")
+        return None
+
+
+async def cancel_appointment(appointment_id: str, reason: str = "Cancelado por cliente via bot") -> dict | None:
+    """Cancel an appointment via API."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{API_URL}/api/appointments/{appointment_id}/cancel",
+                json={"reason": reason},
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                return response.json()
+            return None
+    except Exception as e:
+        logger.exception(f"Error cancelling appointment: {e}")
+        return None
+
+
+async def reschedule_appointment(appointment_id: str, new_date: str) -> dict | None:
+    """Reschedule an appointment to a new date/time via API."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{API_URL}/api/appointments/{appointment_id}/reschedule",
+                json={"newDate": new_date},
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                return response.json()
+            return None
+    except Exception as e:
+        logger.exception(f"Error rescheduling appointment: {e}")
+        return None
+

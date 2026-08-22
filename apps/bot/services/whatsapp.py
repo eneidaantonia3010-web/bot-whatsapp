@@ -10,10 +10,10 @@ import httpx
 
 logger = logging.getLogger("glow_bot.whatsapp")
 
-# Credenciales de Evolution API
-EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "https://evolution-api-latest-yicm.onrender.com")
-EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "Disjd12-9")
-INSTANCE_NAME = os.getenv("INSTANCE_NAME", "glow-studio-5491173566392")
+# Credenciales de Evolution API (deben configurarse via variables de entorno)
+EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "")
+EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "")
+INSTANCE_NAME = os.getenv("INSTANCE_NAME", "")
 
 
 SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491173566392")

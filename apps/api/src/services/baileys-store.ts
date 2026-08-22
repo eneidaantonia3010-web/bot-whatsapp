@@ -1,5 +1,6 @@
 // ============================================
 // Baileys PostgreSQL Session Auth Store
+// Uses dedicated baileys_sessions table with fallback to conversation_states
 // ============================================
 
 import {
@@ -18,28 +19,68 @@ export async function usePrismaAuthState(): Promise<{
   saveCreds: () => Promise<void>;
   clearState: () => Promise<void>;
 }> {
+  const store = (prisma as any).baileysSession || prisma.conversationState;
+  const isDedicatedTable = !!(prisma as any).baileysSession;
+
   // Load or initialize creds
-  const credsRecord = await prisma.conversationState.findUnique({
-    where: { senderId: CREDS_KEY },
-  });
+  let credsRecord: any = null;
+  try {
+    if (isDedicatedTable) {
+      credsRecord = await (prisma as any).baileysSession.findUnique({
+        where: { key: CREDS_KEY },
+      });
+    } else {
+      credsRecord = await prisma.conversationState.findUnique({
+        where: { senderId: CREDS_KEY },
+      });
+    }
+  } catch (err) {
+    // Fallback to conversationState if baileysSession table is not yet pushed
+    credsRecord = await prisma.conversationState.findUnique({
+      where: { senderId: CREDS_KEY },
+    });
+  }
 
   let creds: AuthenticationCreds;
-  if (credsRecord && credsRecord.state) {
-    creds = JSON.parse(JSON.stringify(credsRecord.state), BufferJSON.reviver);
+  const rawState = credsRecord?.value || credsRecord?.state;
+  if (rawState) {
+    creds = JSON.parse(JSON.stringify(rawState), BufferJSON.reviver);
   } else {
     creds = initAuthCreds();
   }
 
   const saveCreds = async () => {
     const serializedCreds = JSON.parse(JSON.stringify(creds, BufferJSON.replacer));
-    await prisma.conversationState.upsert({
-      where: { senderId: CREDS_KEY },
-      create: { senderId: CREDS_KEY, state: serializedCreds },
-      update: { state: serializedCreds },
-    });
+    try {
+      if (isDedicatedTable) {
+        await (prisma as any).baileysSession.upsert({
+          where: { key: CREDS_KEY },
+          create: { key: CREDS_KEY, value: serializedCreds },
+          update: { value: serializedCreds },
+        });
+      } else {
+        await prisma.conversationState.upsert({
+          where: { senderId: CREDS_KEY },
+          create: { senderId: CREDS_KEY, state: serializedCreds },
+          update: { state: serializedCreds },
+        });
+      }
+    } catch (err) {
+      await prisma.conversationState.upsert({
+        where: { senderId: CREDS_KEY },
+        create: { senderId: CREDS_KEY, state: serializedCreds },
+        update: { state: serializedCreds },
+      });
+    }
   };
 
   const clearState = async () => {
+    try {
+      if (isDedicatedTable) {
+        await (prisma as any).baileysSession.deleteMany({});
+      }
+    } catch (e) {}
+
     await prisma.conversationState.deleteMany({
       where: {
         senderId: {
@@ -58,11 +99,26 @@ export async function usePrismaAuthState(): Promise<{
           await Promise.all(
             ids.map(async (id) => {
               const key = `${KEY_PREFIX}${type}_${id}`;
-              const record = await prisma.conversationState.findUnique({
-                where: { senderId: key },
-              });
-              if (record && record.state) {
-                const value = JSON.parse(JSON.stringify(record.state), BufferJSON.reviver);
+              let record: any = null;
+              try {
+                if (isDedicatedTable) {
+                  record = await (prisma as any).baileysSession.findUnique({
+                    where: { key },
+                  });
+                } else {
+                  record = await prisma.conversationState.findUnique({
+                    where: { senderId: key },
+                  });
+                }
+              } catch (e) {
+                record = await prisma.conversationState.findUnique({
+                  where: { senderId: key },
+                });
+              }
+
+              const val = record?.value || record?.state;
+              if (val) {
+                const value = JSON.parse(JSON.stringify(val), BufferJSON.reviver);
                 data[id] = value;
               }
             })
@@ -80,18 +136,41 @@ export async function usePrismaAuthState(): Promise<{
               const key = `${KEY_PREFIX}${category}_${id}`;
               if (value) {
                 const serializedValue = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
-                tasks.push(
-                  prisma.conversationState.upsert({
-                    where: { senderId: key },
-                    create: { senderId: key, state: serializedValue },
-                    update: { state: serializedValue },
-                  })
-                );
+                if (isDedicatedTable) {
+                  tasks.push(
+                    (prisma as any).baileysSession.upsert({
+                      where: { key },
+                      create: { key, value: serializedValue },
+                      update: { value: serializedValue },
+                    }).catch(() => {
+                      return prisma.conversationState.upsert({
+                        where: { senderId: key },
+                        create: { senderId: key, state: serializedValue },
+                        update: { state: serializedValue },
+                      });
+                    })
+                  );
+                } else {
+                  tasks.push(
+                    prisma.conversationState.upsert({
+                      where: { senderId: key },
+                      create: { senderId: key, state: serializedValue },
+                      update: { state: serializedValue },
+                    })
+                  );
+                }
               } else {
+                if (isDedicatedTable) {
+                  tasks.push(
+                    (prisma as any).baileysSession.deleteMany({
+                      where: { key },
+                    }).catch(() => {})
+                  );
+                }
                 tasks.push(
                   prisma.conversationState.deleteMany({
                     where: { senderId: key },
-                  })
+                  }).catch(() => {})
                 );
               }
             }

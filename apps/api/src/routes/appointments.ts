@@ -1,14 +1,241 @@
-// ============================================
-// Appointments Routes
-// ============================================
-
 import { Router, Request, Response } from 'express';
 import { prisma } from '../services/prisma';
-import { createCalendarEvent, getFreeBusy } from '../services/calendar';
+import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent, getFreeBusy } from '../services/calendar';
 import { sendWhatsAppNotification, sendBookingConfirmation } from '../services/whatsapp';
 import { createAppointmentSchema, updateAppointmentSchema } from '../schemas/appointment';
 
 export const appointmentsRouter = Router();
+
+// GET /api/appointments/customer/upcoming — Get upcoming active appointments for a customer
+appointmentsRouter.get('/customer/upcoming', async (req: Request, res: Response) => {
+  try {
+    const { phone, instagram } = req.query;
+    if (!phone && !instagram) {
+      return res.status(400).json({ error: 'phone or instagram is required' });
+    }
+
+    const cleanPhone = phone ? (phone as string).replace(/[^0-9]/g, '') : null;
+    const now = new Date();
+
+    const customerConditions: any[] = [];
+    if (cleanPhone) {
+      customerConditions.push(
+        { phone: cleanPhone },
+        { phone: `+${cleanPhone}` },
+        { phone: { contains: cleanPhone.slice(-8) } }
+      );
+    }
+    if (instagram) {
+      customerConditions.push({ instagram: instagram as string });
+    }
+
+    const customer = await prisma.customer.findFirst({
+      where: { OR: customerConditions },
+    });
+
+    if (!customer) {
+      return res.json([]);
+    }
+
+    const upcoming = await prisma.appointment.findMany({
+      where: {
+        customerId: customer.id,
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        date: { gte: now },
+      },
+      include: {
+        service: true,
+        customer: true,
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    res.json(upcoming);
+  } catch (error) {
+    console.error('Error fetching customer upcoming appointments:', error);
+    res.status(500).json({ error: 'Failed to fetch customer appointments' });
+  }
+});
+
+// POST /api/appointments/confirm-upcoming — Confirm a customer's upcoming PENDING appointment (within 48h)
+appointmentsRouter.post('/confirm-upcoming', async (req: Request, res: Response) => {
+  try {
+    const { phone, instagram } = req.body;
+    if (!phone && !instagram) {
+      return res.status(400).json({ error: 'phone or instagram is required' });
+    }
+
+    const cleanPhone = phone ? (phone as string).replace(/[^0-9]/g, '') : null;
+    const now = new Date();
+    const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+    const customerConditions: any[] = [];
+    if (cleanPhone) {
+      customerConditions.push(
+        { phone: cleanPhone },
+        { phone: `+${cleanPhone}` },
+        { phone: { contains: cleanPhone.slice(-8) } }
+      );
+    }
+    if (instagram) {
+      customerConditions.push({ instagram: instagram as string });
+    }
+
+    const customer = await prisma.customer.findFirst({
+      where: { OR: customerConditions },
+    });
+
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    // Find the next pending appointment within 48h
+    const appointment = await prisma.appointment.findFirst({
+      where: {
+        customerId: customer.id,
+        status: 'PENDING',
+        date: { gte: now, lte: in48h },
+      },
+      include: {
+        service: true,
+        customer: true,
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'No pending appointment found in the next 48 hours' });
+    }
+
+    const updated = await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: { status: 'CONFIRMED' },
+      include: {
+        service: true,
+        customer: true,
+      },
+    });
+
+    console.log(`✅ Appointment ${updated.id} confirmed automatically via WhatsApp reply`);
+    res.json(updated);
+  } catch (error) {
+    console.error('Error confirming appointment:', error);
+    res.status(500).json({ error: 'Failed to confirm appointment' });
+  }
+});
+
+// POST /api/appointments/:id/cancel — Cancel an appointment and delete Google Calendar event
+appointmentsRouter.post('/:id/cancel', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const existing = await prisma.appointment.findUnique({
+      where: { id: id as string },
+      include: { service: true, customer: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Delete Google Calendar event if it exists
+    if (existing.calendarEventId) {
+      try {
+        await deleteCalendarEvent(existing.calendarEventId);
+      } catch (err) {
+        console.warn(`Could not delete calendar event ${existing.calendarEventId}:`, err);
+      }
+    }
+
+    const updatedNotes = reason
+      ? `${existing.notes ? `${existing.notes} | ` : ''}Cancelado: ${reason}`
+      : existing.notes;
+
+    const updated = await prisma.appointment.update({
+      where: { id: id as string },
+      data: {
+        status: 'CANCELLED',
+        notes: updatedNotes,
+      },
+      include: { service: true, customer: true },
+    });
+
+    console.log(`🗑️ Appointment ${id} cancelled successfully`);
+    res.json(updated);
+  } catch (error) {
+    console.error('Error cancelling appointment:', error);
+    res.status(500).json({ error: 'Failed to cancel appointment' });
+  }
+});
+
+// POST /api/appointments/:id/reschedule — Reschedule an appointment to a new date/time
+appointmentsRouter.post('/:id/reschedule', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { newDate } = req.body;
+
+    if (!newDate || isNaN(Date.parse(newDate))) {
+      return res.status(400).json({ error: 'newDate is required and must be a valid ISO-8601 date string' });
+    }
+
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: id as string },
+      include: { service: true, customer: true },
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const startDate = new Date(newDate);
+    const endDate = new Date(startDate);
+    endDate.setMinutes(endDate.getMinutes() + appointment.service.duration);
+
+    // Check for overlapping appointments excluding current one
+    const overlapping = await prisma.appointment.findFirst({
+      where: {
+        id: { not: appointment.id },
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        date: { lt: endDate },
+        endDate: { gt: startDate },
+      },
+    });
+
+    if (overlapping) {
+      return res.status(409).json({ error: 'El nuevo horario seleccionado no está disponible.' });
+    }
+
+    // Update Google Calendar event if it exists
+    if (appointment.calendarEventId) {
+      try {
+        await updateCalendarEvent(appointment.calendarEventId, {
+          summary: `${appointment.service.name} — ${appointment.customer.name}`,
+          startTime: startDate,
+          endTime: endDate,
+        });
+      } catch (err) {
+        console.warn(`Could not update calendar event ${appointment.calendarEventId}:`, err);
+      }
+    }
+
+    const updated = await prisma.appointment.update({
+      where: { id: id as string },
+      data: {
+        date: startDate,
+        endDate,
+        status: 'CONFIRMED',
+      },
+      include: { service: true, customer: true },
+    });
+
+    console.log(`📅 Appointment ${id} rescheduled to ${startDate.toISOString()}`);
+    res.json(updated);
+  } catch (error) {
+    console.error('Error rescheduling appointment:', error);
+    res.status(500).json({ error: 'Failed to reschedule appointment' });
+  }
+});
 
 // GET /api/appointments — List appointments with optional filters
 appointmentsRouter.get('/', async (req: Request, res: Response) => {

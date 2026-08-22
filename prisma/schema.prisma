@@ -99,6 +99,7 @@ model Appointment {
   service       Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   calendarEventId String?         @unique @map("calendar_event_id")
   source        Platform          @default(WEB)
+  review        Review?
   createdAt     DateTime          @default(now()) @map("created_at")
   updatedAt     DateTime          @updatedAt @map("updated_at")
 
@@ -107,6 +108,22 @@ model Appointment {
   @@index([serviceId])
   @@index([status])
   @@map("appointments")
+}
+
+model Review {
+  id            String       @id @default(cuid())
+  rating        Int          // 1 to 5 stars
+  comment       String?
+  authorName    String       @map("author_name")
+  serviceName   String?      @map("service_name")
+  verified      Boolean      @default(true)
+  appointmentId String?      @unique @map("appointment_id")
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  @@index([rating])
+  @@index([createdAt])
+  @@map("reviews")
 }
 
 model MessageLog {
@@ -147,6 +164,14 @@ model ConversationState {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("conversation_states")
+}
+
+model BaileysSession {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("baileys_sessions")
 }
 
 model AuditLog {

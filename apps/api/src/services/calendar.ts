@@ -97,6 +97,40 @@ export async function deleteCalendarEvent(eventId: string): Promise<boolean> {
   }
 }
 
+export async function updateCalendarEvent(eventId: string, data: {
+  summary?: string;
+  description?: string;
+  startTime: Date;
+  endTime: Date;
+}): Promise<boolean> {
+  const calendar = getCalendarClient();
+  if (!calendar) return false;
+
+  try {
+    await calendar.events.patch({
+      calendarId: CALENDAR_ID,
+      eventId,
+      requestBody: {
+        ...(data.summary ? { summary: data.summary } : {}),
+        ...(data.description ? { description: data.description } : {}),
+        start: {
+          dateTime: data.startTime.toISOString(),
+          timeZone: 'America/Argentina/Buenos_Aires',
+        },
+        end: {
+          dateTime: data.endTime.toISOString(),
+          timeZone: 'America/Argentina/Buenos_Aires',
+        },
+      },
+    });
+    console.log(`📅 Calendar event updated: ${eventId}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to update calendar event:', error);
+    return false;
+  }
+}
+
 export async function getFreeBusy(startDate: Date, endDate: Date): Promise<Array<{ start: string; end: string }>> {
   const calendar = getCalendarClient();
   if (!calendar) return [];

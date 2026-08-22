@@ -50,5 +50,11 @@ coverage/
 # Agents / Skills (Open Design)
 .agents/
 skills-lock.json
+agent-skills/
 
-.vercel
+# Scratch / temporary scripts
+scratch_*.py
+save_qr.py
+qr*.html
+qr*.png
+qr*.md

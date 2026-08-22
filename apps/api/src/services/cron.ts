@@ -145,4 +145,43 @@ export function initCronJobs() {
     },
     { timezone: 'America/Argentina/Buenos_Aires' }
   );
+
+  // 4. Post-Service Review Request (runs every hour for appointments completed 2 hours ago)
+  cron.schedule(
+    '0 * * * *',
+    async () => {
+      try {
+        const now = new Date();
+        const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+        const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+
+        const completedRecently = await prisma.appointment.findMany({
+          where: {
+            status: 'COMPLETED',
+            date: {
+              gte: threeHoursAgo,
+              lte: twoHoursAgo,
+            },
+            review: null,
+          },
+          include: { customer: true, service: true },
+        });
+
+        for (const apt of completedRecently) {
+          if (apt.customer?.phone) {
+            const reviewMsg = `✨ *¡Hola ${apt.customer.name}!* 💕\n\nEsperamos que hayas disfrutado mucho tu atención en *Glow Studio* con *${apt.service.name}*.\n\n¿Cómo calificarías tu experiencia hoy del 1 al 5? ⭐\n\n_¡Tu opinión nos ayuda a seguir brindándote la mejor atención!_ ✨`;
+            const { sendWhatsAppMessage } = await import('./whatsapp');
+            await sendWhatsAppMessage({
+              to: apt.customer.phone,
+              message: reviewMsg,
+            });
+            console.log(`⭐ Sent post-service review request to ${apt.customer.phone}`);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error in post-service review cron:', error);
+      }
+    },
+    { timezone: 'America/Argentina/Buenos_Aires' }
+  );
 }

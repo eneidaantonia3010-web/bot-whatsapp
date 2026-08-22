@@ -75,13 +75,19 @@ async def handle_message(request: MessageRequest):
     The agent will understand the message, track conversation state,
     and return an appropriate response.
     """
-    response_text = await process_message(
+    result = await process_message(
         sender_id=request.sender_id,
         message=request.message,
         platform=request.platform.value,
     )
 
-    return MessageResponse(response=response_text)
+    # Agent can return a string or a dict with response + image_url
+    if isinstance(result, dict):
+        return MessageResponse(
+            response=result.get("response", ""),
+            image_url=result.get("image_url"),
+        )
+    return MessageResponse(response=result)
 
 
 @app.post("/reset-conversation/{sender_id}")
@@ -158,6 +164,38 @@ async def transcribe_audio_file_endpoint(file: UploadFile = File(...)):
     except Exception as e:
         return {"text": None, "status": "error", "error": str(e)}
 
+
+
+@app.post("/analyze-image")
+async def analyze_image_endpoint(request: Request):
+    """
+    Receive an image (base64) from WhatsApp, analyze it with Groq Vision,
+    and return an interpreted text description for the bot pipeline.
+    """
+    from services.vision import analyze_image
+
+    try:
+        data = await request.json()
+        image_base64 = data.get("image_base64", "")
+        sender_id = data.get("sender_id", "")
+        caption = data.get("caption", "")
+
+        if not image_base64:
+            return {"interpreted_text": None, "status": "error", "error": "No image data"}
+
+        interpreted = analyze_image(image_base64, caption=caption)
+
+        if interpreted:
+            # Combine caption with vision interpretation for the bot
+            if caption:
+                combined = f"[Imagen: {interpreted}] {caption}"
+            else:
+                combined = f"[La clienta envió una imagen: {interpreted}]"
+            return {"interpreted_text": combined, "status": "ok"}
+        else:
+            return {"interpreted_text": caption or None, "status": "no_vision"}
+    except Exception as e:
+        return {"interpreted_text": None, "status": "error", "error": str(e)}
 
 
 if __name__ == "__main__":

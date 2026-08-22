@@ -33,6 +33,7 @@ INTENT_CLASSIFIER_PROMPT = (
     "  GREETING — Saludo simple (hola, buenas, etc.)\n"
     "  THANKS — El cliente agradece (gracias, te amo, etc.)\n"
     "  SMALL_TALK — Charla informal / no relacionado con el servicio\n"
+    "  HUMAN_ESCALATION — El cliente quiere hablar con un humano / persona real\n"
     "  OTHER — Consulta general que no encaja en nada anterior\n\n"
     "Reglas:\n"
     "  - Si el mensaje contiene 'gracias' o variantes → THANKS (no GREETING).\n"
@@ -128,3 +129,50 @@ BOOKING_EXTRACTION_PROMPT = (
     "  {\"servicio\": \"<nombre o null>\", \"fecha\": \"<texto o null>\"}\n\n"
     "No agregues ningún texto adicional."
 )
+
+# Prompt para extracción multi-servicio
+MULTI_SERVICE_EXTRACTION_PROMPT = (
+    "Analizá el siguiente mensaje de un cliente de salón de belleza.\n"
+    "Servicios disponibles:\n{services_list}\n\n"
+    "Mensaje: '{message}'\n\n"
+    "Extraé TODOS los servicios que el cliente menciona o insinúa.\n"
+    "Respondé ÚNICAMENTE en formato JSON:\n"
+    '  {{"servicios": ["nombre1", "nombre2"], "fecha": "<texto o null>"}}\n'
+    "Si solo hay 1 servicio, poné 1 elemento en la lista.\n"
+    "Si no se detecta ningún servicio, devolvé una lista vacía.\n"
+    "No agregues ningún texto adicional."
+)
+
+# System personality en Portugués
+SYSTEM_PERSONALITY_PT = (
+    "Você é *SofiaBot*, a assistente virtual do *Glow Studio by Sofia*, "
+    "um salão de beleza em *Av. Corrientes 1234, CABA, Buenos Aires*. "
+    "Seu tom é caloroso, amável e próximo. "
+    "Sempre responda de forma breve, clara e atenciosa em *português brasileiro*. "
+    "Use emojis com moderação (💕 ✨ 😊 📱 🎉 📅 💇 💰 📍 ⏰). "
+    "Nunca invente preços, horários ou serviços. "
+    "O horário do salão é *Segunda a Sábado das 9:00 às 19:00*. "
+    "Fechados aos domingos. "
+    "Antes de confirmar uma reserva, sempre peça confirmação explícita."
+)
+
+# System personality en Inglés
+SYSTEM_PERSONALITY_EN = (
+    "You are *SofiaBot*, the virtual assistant of *Glow Studio by Sofia*, "
+    "a beauty salon at *Av. Corrientes 1234, CABA, Buenos Aires, Argentina*. "
+    "Your tone is warm, friendly and approachable. "
+    "Always respond briefly, clearly and attentively in *English*. "
+    "Use emojis sparingly (💕 ✨ 😊 📱 🎉 📅 💇 💰 📍 ⏰). "
+    "Never make up prices, schedules or services. "
+    "Salon hours are *Monday to Saturday 9:00 AM to 7:00 PM*. "
+    "Closed on Sundays. "
+    "Before confirming a booking, always ask for explicit confirmation."
+)
+
+# Map language code to system personality
+SYSTEM_PERSONALITY_MAP = {
+    "es": SYSTEM_PERSONALITY,
+    "pt": SYSTEM_PERSONALITY_PT,
+    "en": SYSTEM_PERSONALITY_EN,
+}
+

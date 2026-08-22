@@ -20,6 +20,8 @@ from services.database import (
     get_conversation_state,
     save_conversation_state,
     delete_conversation_state,
+    get_customer_history,
+    get_gallery_image_for_category,
 )
 from services.calendar import (
     create_appointment_via_api,
@@ -34,14 +36,18 @@ from services.phone_utils import normalize_phone
 from services.llm_pool import llm_pool
 from services.faq_handler import get_faq_response
 from services.intent_classifier import classify_intent
+from services.language_detector import detect_language, t
+from services.escalation import escalate_to_human, build_escalation_summary
 from services.prompts import (
     SYSTEM_PERSONALITY,
+    SYSTEM_PERSONALITY_MAP,
     AVAILABILITY_PROMPT,
     SERVICE_HELP_PROMPT,
     DATE_CLARIFICATION_PROMPT,
     GENERAL_FALLBACK_PROMPT,
     CLOSING_PROMPT,
     BOOKING_EXTRACTION_PROMPT,
+    MULTI_SERVICE_EXTRACTION_PROMPT,
 )
 
 logger = logging.getLogger("glow_bot.agent")
@@ -63,11 +69,15 @@ def get_conversation(sender_id: str) -> dict:
     new_state = {
         "stage": "greeting",
         "selected_service": None,
+        "selected_services": [],  # Multi-service support (Func 24)
         "selected_date": None,
         "selected_time": None,
         "customer_name": None,
         "customer_phone": None,
         "chat_history": [],
+        "language": "es",  # Detected language (Func 27)
+        "last_message_at": datetime.now(TZ_AR).isoformat(),  # Context persistence (Func 25)
+        "fallback_count": 0,  # Auto-escalation counter (Func 28)
         # Temp fields for multi-step flows
         "cancelling_apt": None,
         "rescheduling_apt": None,
@@ -194,7 +204,67 @@ def _parse_message_with_llm(message: str, services: list[dict]) -> dict:
     return {"servicio": None, "fecha": None}
 
 
-# ── Date Parsing ─────────────────────────────────────────────────────────
+def _parse_multi_service(message: str, services: list[dict]) -> dict:
+    """Use LLM to extract MULTIPLE service names + date from a message (Func 24)."""
+    services_list = "\n".join([f"  - {s['name']}" for s in services])
+    prompt = MULTI_SERVICE_EXTRACTION_PROMPT.format(
+        services_list=services_list,
+        message=message,
+    )
+
+    try:
+        raw = llm_pool.get_completion([], system_msg=prompt)
+        if raw:
+            raw = raw.strip()
+            json_start = raw.find("{")
+            json_end = raw.rfind("}")
+            if json_start >= 0 and json_end >= 0:
+                data = json.loads(raw[json_start:json_end + 1])
+                return {
+                    "servicios": data.get("servicios", []),
+                    "fecha": data.get("fecha"),
+                }
+    except Exception as e:
+        logger.warning(f"Multi-service extraction failed: {e}")
+
+    return {"servicios": [], "fecha": None}
+
+
+def _build_recommendation(sender_id: str) -> str:
+    """Build a personalized recommendation based on customer history (Func 22)."""
+    try:
+        clean_phone = normalize_phone(sender_id)
+        history = get_customer_history(clean_phone)
+        if not history:
+            return ""
+
+        last = history[0]
+        last_date = last.get("date")
+        if not last_date:
+            return ""
+
+        if isinstance(last_date, str):
+            last_dt = datetime.fromisoformat(last_date.replace("Z", "+00:00"))
+        else:
+            last_dt = last_date
+
+        if last_dt.tzinfo is None:
+            last_dt = TZ_AR.localize(last_dt)
+
+        days_ago = (datetime.now(TZ_AR) - last_dt.astimezone(TZ_AR)).days
+        service_name = last.get("service_name", "tu último servicio")
+
+        if days_ago >= 14:
+            return (
+                f"\n\n💡 La última vez te hiciste *{service_name}* "
+                f"hace {days_ago} días. ¿Te gustaría renovarlo? 😊"
+            )
+    except Exception as e:
+        logger.warning(f"Error building recommendation: {e}")
+
+    return ""
+
+
 
 
 def parse_date(text: str) -> Optional[tuple[str, str]]:
@@ -277,10 +347,51 @@ async def process_message(
     sender_id: str,
     message: str,
     platform: str = "INSTAGRAM",
-) -> str:
-    """Process an incoming message and return the bot's response."""
+) -> str | dict:
+    """Process an incoming message and return the bot's response.
+    
+    Returns either a plain string or a dict with {"response": str, "image_url": str|None}.
+    """
     conv = get_conversation(sender_id)
     chat_history = conv["chat_history"]
+
+    # ── Func 27: Detect language on first message or if not set ────
+    lang = conv.get("language", "es")
+    if conv["stage"] == "greeting" or not conv.get("language"):
+        lang = detect_language(message)
+        conv["language"] = lang
+
+    # ── Func 25: Context persistence — check session freshness ────
+    last_msg_str = conv.get("last_message_at")
+    if last_msg_str and conv["stage"] != "greeting":
+        try:
+            last_msg_dt = datetime.fromisoformat(last_msg_str)
+            if last_msg_dt.tzinfo is None:
+                last_msg_dt = TZ_AR.localize(last_msg_dt)
+            elapsed = (datetime.now(TZ_AR) - last_msg_dt).total_seconds()
+
+            if elapsed > 86400:  # > 24 hours — session expired
+                logger.info(f"Session expired for {sender_id} ({elapsed/3600:.1f}h)")
+                conversations.pop(sender_id, None)
+                delete_conversation_state(sender_id)
+                conv = get_conversation(sender_id)
+                conv["language"] = lang
+                chat_history = conv["chat_history"]
+                # Will fall through to greeting stage naturally
+            elif elapsed > 300:  # > 5 minutes — welcome back with context
+                service = conv.get("selected_service")
+                if service and conv["stage"] not in ("greeting", "human_escalated"):
+                    welcome_back = t("welcome_back", lang, service=service.get("name", "tu servicio"))
+                    chat_history.append({"role": "user", "parts": [message]})
+                    chat_history.append({"role": "model", "parts": [welcome_back]})
+                    conv["last_message_at"] = datetime.now(TZ_AR).isoformat()
+                    save_conversation_state(sender_id, conv)
+                    return welcome_back
+        except Exception as e:
+            logger.warning(f"Error checking session freshness: {e}")
+
+    # Update last_message_at timestamp
+    conv["last_message_at"] = datetime.now(TZ_AR).isoformat()
 
     # Add user message to history
     chat_history.append({"role": "user", "parts": [message]})
@@ -322,6 +433,42 @@ async def process_message(
             "greeting", "service_selection", "date_selection",
             "name_input", "phone_input", "confirmation",
         }
+
+        # ── Func 28: HUMAN_ESCALATION (always handled, any stage) ────
+        if intent == "HUMAN_ESCALATION":
+            conv["stage"] = "human_escalated"
+            sender_name = message  # Will be overridden by pushName in WhatsApp
+            summary = build_escalation_summary(conv, message)
+            await escalate_to_human(sender_id, sender_name, summary, message)
+            response = t("human_escalation", lang)
+            chat_history.append({"role": "model", "parts": [response]})
+            save_conversation_state(sender_id, conv)
+            return response
+
+        # ── Func 28: Auto-escalation after 3 consecutive OTHER/fallback ────
+        if intent == "OTHER":
+            conv["fallback_count"] = conv.get("fallback_count", 0) + 1
+            if conv["fallback_count"] >= 3:
+                conv["stage"] = "human_escalated"
+                summary = build_escalation_summary(conv, message)
+                await escalate_to_human(sender_id, "Cliente", summary, message)
+                response = (
+                    "Parece que no estoy entendiendo bien lo que necesitás. 😔\n\n"
+                    + t("human_escalation", lang)
+                )
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return response
+        else:
+            # Reset fallback counter on successful intent match
+            conv["fallback_count"] = 0
+
+        # ── Func 28: If already escalated, pass through to human ────
+        if conv["stage"] == "human_escalated":
+            response = t("human_notified", lang)
+            chat_history.append({"role": "model", "parts": [response]})
+            save_conversation_state(sender_id, conv)
+            return response
 
         # En etapas de booking flujo, CANCEL_APPOINTMENT y RESCHEDULE_APPOINTMENT
         # deben ser atendidos incluso si estamos en medio del flujo.
@@ -474,7 +621,44 @@ async def process_message(
         if stage == "greeting":
             services = get_services()
             catalog = format_services_catalog(services)
-            response = f"¡Hola! 😊 Bienvenida a *Glow Studio by Sofia* ✨\n\n{catalog}"
+
+            # ── Func 24: Check if message contains booking with multiple services ────
+            if intent == "BOOKING" and len(message.split()) > 3:
+                multi = _parse_multi_service(message, services)
+                matched_services = []
+                for sname in multi.get("servicios", []):
+                    s = get_service_by_name(sname)
+                    if s:
+                        matched_services.append(s)
+
+                if len(matched_services) >= 2:
+                    conv["selected_services"] = matched_services
+                    total_price = sum(s["price"] for s in matched_services)
+                    total_duration = sum(s["duration"] for s in matched_services)
+                    details = "\n".join([
+                        f"  💇 *{s['name']}* — {_format_price(s['price'])} ({s['duration']}min)"
+                        for s in matched_services
+                    ])
+                    # Use first service as primary
+                    conv["selected_service"] = matched_services[0]
+
+                    response = t("multi_service_summary", lang,
+                        count=len(matched_services),
+                        details=details,
+                        price=_format_price(total_price),
+                        duration=f"{total_duration}min",
+                    )
+                    response += f"\n\n{t('ask_date', lang)}"
+                    conv["stage"] = "date_selection"
+                    chat_history.append({"role": "model", "parts": [response]})
+                    save_conversation_state(sender_id, conv)
+                    return response
+
+            # ── Func 22: Personalized recommendation for returning customers ────
+            recommendation = _build_recommendation(sender_id)
+
+            greeting = t("greeting", lang)
+            response = f"{greeting}\n\n{catalog}{recommendation}"
             conv["stage"] = "service_selection"
             chat_history.append({"role": "model", "parts": [response]})
             save_conversation_state(sender_id, conv)
@@ -504,11 +688,16 @@ async def process_message(
                 response = (
                     f"¡Excelente elección! ✨ *{service['name']}* — {price} ({duration})\n\n"
                     f"Nuestros horarios son Lunes a Sábado de 9:00 a 19:00.\n\n"
-                    f"Podés decirme algo como: _\"martes 14hs\"_ o _\"mañana a las 10\"_"
+                    f"{t('ask_date', lang)}"
                 )
                 conv["stage"] = "date_selection"
                 chat_history.append({"role": "model", "parts": [response]})
                 save_conversation_state(sender_id, conv)
+
+                # ── Func 23: Send portfolio image if available ────
+                gallery = get_gallery_image_for_category(service.get("category", ""))
+                if gallery and gallery.get("url"):
+                    return {"response": response, "image_url": gallery["url"]}
                 return response
 
             # Service not found by name/number → LLM help
@@ -607,13 +796,21 @@ async def process_message(
 
             if phone_str:
                 conv["customer_phone"] = phone_str
-                service = conv["selected_service"]
+                selected_services = conv.get("selected_services", [])
+                if len(selected_services) >= 2:
+                    service_display = " + ".join([s["name"] for s in selected_services])
+                    total_price = sum(s["price"] for s in selected_services)
+                    price = _format_price(total_price)
+                else:
+                    service = conv["selected_service"]
+                    service_display = service["name"]
+                    price = _format_price(service["price"])
+
                 display_date = _format_date_display(conv["selected_date"])
-                price = _format_price(service["price"])
 
                 response = (
                     f"✨ *Resumen de tu turno:*\n\n"
-                    f"💇 Servicio: *{service['name']}*\n"
+                    f"💇 Servicio: *{service_display}*\n"
                     f"💰 Precio: {price}\n"
                     f"📅 Fecha: *{display_date} a las {conv['selected_time']}hs*\n"
                     f"👤 Nombre: *{conv['customer_name']}*\n"
@@ -637,6 +834,14 @@ async def process_message(
 
             if confirmed is True:
                 service = conv["selected_service"]
+                selected_services = conv.get("selected_services", [])
+                if len(selected_services) >= 2:
+                    service_name_full = " + ".join([s["name"] for s in selected_services])
+                    booking_notes = f"Servicios combinados: {service_name_full} (via {platform} bot)"
+                else:
+                    service_name_full = service["name"]
+                    booking_notes = f"Reservado via {platform} bot"
+
                 date_str = conv["selected_date"]
                 time_str = conv["selected_time"]
                 name = conv["customer_name"]
@@ -649,14 +854,14 @@ async def process_message(
                     customer_name=name,
                     customer_phone=phone,
                     source=platform,
-                    notes=f"Reservado via {platform} bot",
+                    notes=booking_notes,
                 )
 
                 if result and not result.get("conflict"):
                     display_date = _format_date_display(date_str)
                     date_time_str = f"{display_date} a las {time_str}hs"
 
-                    await send_whatsapp_notification(name, service["name"], date_time_str)
+                    await send_whatsapp_notification(name, service_name_full, date_time_str)
 
                     response = (
                         f"🎉 *¡Turno confirmado!*\n\n"

@@ -22,6 +22,7 @@ class MessageRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     response: str
+    image_url: Optional[str] = None  # URL of portfolio image to send
     action: Optional[str] = None  # e.g., "book_appointment", "show_services"
     data: Optional[dict] = None
 

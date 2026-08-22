@@ -198,6 +198,46 @@ export async function initNativeWhatsApp(): Promise<void> {
           }
         }
 
+        // Handle image messages via Groq Vision analysis
+        const hasImage = msg.message.imageMessage;
+        if (!textMessage && hasImage) {
+          try {
+            const buffer = await downloadMediaMessage(msg, 'buffer', {}, {
+              logger,
+              reuploadRequest: sock!.updateMediaMessage,
+            });
+
+            if (buffer && buffer.length > 0) {
+              const base64Image = Buffer.from(buffer as any).toString('base64');
+              console.log(`🖼️ Image received from ${msg.key.remoteJid}, analyzing with Vision AI...`);
+
+              const visionResp = await fetch(`${BOT_URL}/analyze-image`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  image_base64: base64Image,
+                  sender_id: msg.key.remoteJid,
+                  caption: hasImage.caption || '',
+                }),
+              });
+
+              if (visionResp.ok) {
+                const visionData = (await visionResp.json()) as { interpreted_text: string | null; status: string };
+                if (visionData.interpreted_text) {
+                  console.log(`🖼️ Image interpreted: "${visionData.interpreted_text.substring(0, 80)}..."`);
+                  textMessage = visionData.interpreted_text;
+                }
+              }
+            }
+          } catch (imgErr: any) {
+            console.warn(`⚠️ Image analysis error: ${imgErr.message}`);
+            // Fall back to caption if available
+            if (hasImage.caption) {
+              textMessage = hasImage.caption;
+            }
+          }
+        }
+
         if (!textMessage) continue;
 
         const senderName = msg.pushName || remoteJid.split('@')[0];
@@ -248,8 +288,9 @@ export async function initNativeWhatsApp(): Promise<void> {
             });
 
             if (agentResponse.ok) {
-              const data = (await agentResponse.json()) as { response: string };
+              const data = (await agentResponse.json()) as { response: string; image_url?: string };
               let reply = data.response;
+              const imageUrl = data.image_url;
               reply = addHumanDynamicVariation(reply);
 
               console.log(`🤖 Native WA Bot reply for ${remoteJid}: ${reply.substring(0, 100)}...`);
@@ -281,9 +322,18 @@ export async function initNativeWhatsApp(): Promise<void> {
                   await sock.sendPresenceUpdate('composing', remoteJid);
                   await new Promise((res) => setTimeout(res, typingDelay));
 
-                  // 2. Enviar el mensaje directamente (la entrega del mensaje limpia el estado 'composing' automáticamente)
+                  // 2. Enviar el mensaje (con imagen del portfolio si está disponible)
                   try {
-                    await sock.sendMessage(remoteJid, { text: reply }, { quoted: msg });
+                    if (imageUrl) {
+                      // Send portfolio image with text as caption
+                      console.log(`🖼️ Sending portfolio image to ${remoteJid}: ${imageUrl}`);
+                      await sock.sendMessage(remoteJid, {
+                        image: { url: imageUrl },
+                        caption: reply,
+                      }, { quoted: msg });
+                    } else {
+                      await sock.sendMessage(remoteJid, { text: reply }, { quoted: msg });
+                    }
                     console.log(`✅ Native WA reply sent to ${remoteJid} (quoted msg)`);
                   } catch (e1) {
                     console.error(`⚠️ Error sending quoted to ${remoteJid}, trying standard send:`, e1);

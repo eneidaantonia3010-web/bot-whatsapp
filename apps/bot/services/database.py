@@ -205,3 +205,49 @@ def delete_conversation_state(sender_id: str) -> bool:
         return False
 
 
+def get_customer_history(phone: str) -> list[dict]:
+    """Fetch the last 10 appointments for a customer by phone number.
+    Used for personalized recommendations."""
+    if not phone or len(phone) < 6:
+        return []
+    try:
+        # Use last 8 digits for flexible matching
+        phone_suffix = phone[-8:] if len(phone) >= 8 else phone
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT a.date, a.status, s.name as service_name,
+                           s.id as service_id, s.duration, s.price, s.category
+                    FROM appointments a
+                    JOIN services s ON a.service_id = s.id
+                    JOIN customers c ON a.customer_id = c.id
+                    WHERE (c.phone LIKE %s)
+                      AND a.status IN ('COMPLETED', 'CONFIRMED', 'PENDING')
+                    ORDER BY a.date DESC
+                    LIMIT 10
+                """, (f"%{phone_suffix}%",))
+                return [dict(row) for row in cur.fetchall()]
+    except Exception as e:
+        logger.warning(f"Error fetching customer history: {e}")
+        return []
+
+
+def get_gallery_image_for_category(category: str) -> Optional[dict]:
+    """Get a gallery image URL for a service category.
+    Used to send portfolio photos when a service is selected."""
+    if not category:
+        return None
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT url, alt FROM gallery_images '
+                    'WHERE active = true AND LOWER(category) = %s '
+                    'ORDER BY "order" ASC LIMIT 1',
+                    (category.lower(),)
+                )
+                row = cur.fetchone()
+                return dict(row) if row else None
+    except Exception as e:
+        logger.warning(f"Error fetching gallery image: {e}")
+        return None

@@ -7,6 +7,7 @@ import {
   getNativeStatus,
   getNativeQRBase64,
   logoutNativeWhatsApp,
+  sendNativeWhatsAppMessage,
 } from '../services/whatsapp-native';
 
 export const whatsappAdminRouter = Router();
@@ -97,3 +98,24 @@ whatsappAdminRouter.get('/qr', (_req: Request, res: Response) => {
     status,
   });
 });
+
+// POST /api/admin/whatsapp/send — Send an outbound message (used for escalation and alerts)
+whatsappAdminRouter.post('/send', async (req: Request, res: Response) => {
+  try {
+    const { to, message } = req.body;
+    if (!to || !message) {
+      return res.status(400).json({ error: 'to and message fields are required' });
+    }
+
+    const success = await sendNativeWhatsAppMessage(to, message);
+    if (success) {
+      return res.json({ status: 'ok', sent: true });
+    } else {
+      return res.status(500).json({ error: 'Failed to send WhatsApp message' });
+    }
+  } catch (error: any) {
+    console.error('Error sending WhatsApp message via admin endpoint:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+

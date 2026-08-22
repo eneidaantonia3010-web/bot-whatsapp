@@ -22,6 +22,7 @@ VALID_INTENTS = [
     "GREETING",
     "THANKS",
     "SMALL_TALK",
+    "HUMAN_ESCALATION",
     "OTHER",
 ]
 
@@ -120,6 +121,18 @@ _CANCELACION_POLICIA_KEYWORDS = frozenset({
     "atraso", "retraso", "demora", "tardé", "tarde",
 })
 
+_HUMAN_ESCALATION_KEYWORDS = frozenset({
+    "hablar con alguien", "hablar con una persona", "hablar con sofia",
+    "hablar con sofía", "quiero hablar con alguien", "quiero hablar con una persona",
+    "operador", "operadora", "humano", "persona real", "agente",
+    "no me entendés", "no me entiende", "no entiendo nada",
+    "ayuda real", "ayuda humana", "asistente real",
+    "talk to someone", "real person", "human agent",
+    "falar com alguém", "pessoa real", "atendente",
+    "quiero un humano", "pasame con alguien", "pasame con sofia",
+    "necesito hablar con alguien",
+})
+
 
 def _classify_by_rules(text: str) -> str | None:
     """Clasificación rápida basada en reglas deterministas."""
@@ -168,6 +181,10 @@ def _classify_by_rules(text: str) -> str | None:
     # FAQ cancelación
     if any(w in t for w in _CANCELACION_POLICIA_KEYWORDS):
         return "FAQ_CANCELACION"
+
+    # HUMAN_ESCALATION
+    if any(w in t for w in _HUMAN_ESCALATION_KEYWORDS):
+        return "HUMAN_ESCALATION"
 
     # BOOKING: keywords de dese o reserva
     if any(w in t for w in _BOOKING_KEYWORDS):

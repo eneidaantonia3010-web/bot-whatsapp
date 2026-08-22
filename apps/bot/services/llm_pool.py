@@ -9,7 +9,7 @@ import logging
 from typing import Optional
 
 from groq import Groq
-from groq.types import ChatCompletion
+from groq.types.chat import ChatCompletion
 
 logger = logging.getLogger("glow_bot.llm_pool")
 

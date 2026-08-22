@@ -47,25 +47,33 @@ def get_pool():
 
 @contextmanager
 def get_db_connection():
-    """Context manager for acquiring and releasing database connections from the pool."""
-    pool = get_pool()
-    if not pool:
+    """On-demand database connection manager optimized for Neon Scale-to-Zero auto-suspend."""
+    if not HAS_PSYCOPG2:
         yield None
         return
 
-    conn = pool.getconn()
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url:
+        yield None
+        return
+
+    conn = None
     try:
-        if conn.closed != 0:
-            pool.putconn(conn, close=True)
-            conn = pool.getconn()
+        conn = psycopg2.connect(
+            database_url,
+            cursor_factory=RealDictCursor,
+            connect_timeout=10,
+        )
+        conn.autocommit = True
         yield conn
-    except Exception:
+    except Exception as e:
+        logger.error(f"Database query connection error: {e}")
         if conn:
             conn.rollback()
         raise
     finally:
-        if conn:
-            pool.putconn(conn)
+        if conn and not conn.closed:
+            conn.close()
 
 
 def get_services() -> list[dict]:

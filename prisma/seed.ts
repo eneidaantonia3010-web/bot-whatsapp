@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...\n');
 
-  // ---- ADMIN USER ----
+  // ---- ADMIN USERS ----
   const admin = await prisma.user.upsert({
     where: { email: 'sofia@glowstudio.com' },
     update: {},
@@ -22,6 +22,18 @@ async function main() {
     },
   });
   console.log(`✅ Admin user created: ${admin.email}`);
+
+  const admin2 = await prisma.user.upsert({
+    where: { email: 'admin@glowstudio.com' },
+    update: {},
+    create: {
+      email: 'admin@glowstudio.com',
+      name: 'Glow Studio Admin',
+      password: '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36zQv2s1mDEQYfO37VMJhxO', // hashed "admin123"
+      role: Role.ADMIN,
+    },
+  });
+  console.log(`✅ Admin user created: ${admin2.email}`);
 
   // ---- SERVICES ----
   const servicesData = [

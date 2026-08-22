@@ -5,8 +5,8 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: npx pnpm install --config.block-exotic-subdeps=false --no-frozen-lockfile && cd apps/api && npx prisma generate --schema=../../prisma/schema.prisma && npx pnpm run build
-    startCommand: cd apps/api && npx pnpm run start
+    buildCommand: cd apps/api && npm install --include=dev && npx prisma generate --schema=../../prisma/schema.prisma && npm run build
+    startCommand: cd apps/api && npm run start
     envVars:
       - key: NODE_ENV
         value: production

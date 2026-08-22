@@ -74,3 +74,15 @@ services:
         sync: false
       - key: WHATSAPP_TOKEN
         sync: false
+
+  # --- Next.js Frontend (Web) ---
+  - type: web
+    name: glow-studio-web
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm install -g pnpm && pnpm install && cd apps/web && pnpm run build
+    startCommand: cd apps/web && pnpm run start
+    envVars:
+      - key: NODE_ENV
+        value: production

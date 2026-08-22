@@ -81,7 +81,7 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: cd apps/web && npm install && npm run build
+    buildCommand: cd apps/web && npm install --include=dev && npm run build
     startCommand: cd apps/web && npm run start
     envVars:
       - key: NODE_ENV

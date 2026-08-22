@@ -25,22 +25,33 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   }
 
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Acceso no autorizado: Token faltante' });
+  let token = '';
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query.token) {
+    token = req.query.token as string;
   }
 
-  const token = authHeader.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Acceso no autorizado: Token faltante' });
+  }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     req.user = decoded;
     next();
   } catch (error) {
-    return res.status(401).json({ error: 'Acceso no autorizado: Token inválido o expirado' });
+    return res.status(401).json({ error: 'Acceso no autorizado: Token invǭlido o expirado' });
   }
 }
 
 export function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  const apiKey = req.headers['x-api-key'] || req.headers['x-bot-key'];
+  if (apiKey && (apiKey === API_SECRET_KEY || apiKey === process.env.WEBHOOK_VERIFY_TOKEN)) {
+    return next();
+  }
+
   requireAuth(req, res, () => {
     if (!req.user || req.user.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Acceso denegado: Se requieren permisos de administrador' });

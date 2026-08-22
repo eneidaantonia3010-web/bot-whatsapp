@@ -79,7 +79,7 @@ async function transcribeAudioMessage(msg: any): Promise<string | null> {
 
     // Create FormData with the audio file
     const formData = new FormData();
-    const blob = new Blob([buffer], { type: 'audio/ogg' });
+    const blob = new Blob([buffer as any], { type: 'audio/ogg' });
     formData.append('file', blob, 'voice_message.ogg');
 
     // Send to bot transcription endpoint
@@ -129,7 +129,7 @@ export async function initNativeWhatsApp(): Promise<void> {
     sock.ev.on('creds.update', saveCreds);
 
     // Connection updates
-    sock.ev.on('connection.update', async (update) => {
+    sock.ev.on('connection.update', async (update: any) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
@@ -173,7 +173,7 @@ export async function initNativeWhatsApp(): Promise<void> {
     });
 
     // Incoming messages handler
-    sock.ev.on('messages.upsert', async (m) => {
+    sock.ev.on('messages.upsert', async (m: any) => {
       if (m.type !== 'notify') return;
 
       for (const msg of m.messages) {

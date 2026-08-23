@@ -10,7 +10,7 @@ psycopg2-binary==2.9.10
 python-dotenv==1.0.1
 pydantic==2.10.0
 httpx==0.28.0
-pytz==2024.2
+pytz==2026.3.post1
 
 dateparser==1.2.0
 phonenumbers==8.13.52

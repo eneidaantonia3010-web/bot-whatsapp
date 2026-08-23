@@ -14,6 +14,7 @@ export const createAppointmentSchema = z.object({
   customerEmail: z.string().email({ message: 'Email inválido.' }).optional().nullable().or(z.literal('')),
   notes: z.string().optional().nullable(),
   source: z.enum(['INSTAGRAM', 'WHATSAPP', 'WEB']).optional().default('WEB'),
+  recurrence: z.enum(['NONE', 'WEEKLY', 'BIWEEKLY', 'MONTHLY']).optional().default('NONE'),
 });
 
 export const updateAppointmentSchema = z.object({

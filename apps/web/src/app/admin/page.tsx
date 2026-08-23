@@ -42,6 +42,11 @@ import {
   QrCode,
   ArrowClockwise,
   UserCircle,
+  Lock,
+  LockSimple,
+  Hourglass,
+  CalendarPlus,
+  ClockAfternoon,
 } from '@phosphor-icons/react';
 
 import { SERVICES_STATIC } from '@/lib/constants';
@@ -63,6 +68,11 @@ import {
   deleteService,
   getCustomers,
   getWhatsAppStatus,
+  getBlockedTimes,
+  createBlockedTime,
+  deleteBlockedTime,
+  getWaitlist,
+  deleteWaitlistEntry,
 } from '@/lib/api';
 
 import { getToken, removeToken } from '@/lib/auth';
@@ -171,6 +181,78 @@ export default function AdminPage() {
 
   // Calendar View State
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+  const [blockedTimes, setBlockedTimes] = useState<any[]>([]);
+  const [waitlist, setWaitlist] = useState<any[]>([]);
+  const [showBlockModal, setShowBlockModal] = useState<boolean>(false);
+  const [showWaitlistModal, setShowWaitlistModal] = useState<boolean>(false);
+  const [blockForm, setBlockForm] = useState({
+    startDate: '',
+    endDate: '',
+    reason: '',
+    allDay: false,
+  });
+
+  // Dynamic Week Generator Helper
+  const getWeekDays = (offset: number) => {
+    const today = new Date();
+    const currentDay = today.getDay();
+    const diffToMon = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + diffToMon + offset * 7);
+    monday.setHours(0, 0, 0, 0);
+
+    const days = [];
+    const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+      const monthName = d.toLocaleDateString('es-AR', { month: 'short' });
+      const label = `${dayNames[i]} ${d.getDate()} ${monthName}`;
+      const isToday = d.toDateString() === today.toDateString();
+      days.push({ date: d, dateStr, label, shortDay: dayNames[i], isToday });
+    }
+    return days;
+  };
+
+  // Blocked Time Handlers
+  const handleCreateBlockedTime = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!blockForm.startDate || !blockForm.endDate || !blockForm.reason) {
+      addToast('error', 'Error', 'Completá todos los campos.');
+      return;
+    }
+    try {
+      const created = await createBlockedTime(blockForm);
+      setBlockedTimes((prev) => [...prev, created]);
+      setShowBlockModal(false);
+      setBlockForm({ startDate: '', endDate: '', reason: '', allDay: false });
+      addToast('success', 'Horario Bloqueado', 'El bloqueo ha sido registrado.');
+    } catch (err: any) {
+      addToast('error', 'Error', err.message || 'No se pudo crear el bloqueo.');
+    }
+  };
+
+  const handleDeleteBlockedTime = async (id: string) => {
+    try {
+      await deleteBlockedTime(id);
+      setBlockedTimes((prev) => prev.filter((b) => b.id !== id));
+      addToast('info', 'Bloqueo Eliminado', 'El horario ha sido liberado.');
+    } catch (err: any) {
+      addToast('error', 'Error', err.message || 'No se pudo eliminar el bloqueo.');
+    }
+  };
+
+  const handleDeleteWaitlist = async (id: string) => {
+    try {
+      await deleteWaitlistEntry(id);
+      setWaitlist((prev) => prev.filter((w) => w.id !== id));
+      addToast('info', 'Lista de Espera', 'Entrada eliminada.');
+    } catch (err: any) {
+      addToast('error', 'Error', err.message || 'No se pudo eliminar.');
+    }
+  };
 
   // Services Tab State
   const [servicesList, setServicesList] = useState<any[]>(SERVICES_STATIC as any[]);
@@ -248,16 +330,20 @@ export default function AdminPage() {
       }
 
       try {
-        const [apts, metrics, financial, srvs, custs, wa] = await Promise.all([
+        const [apts, metrics, financial, srvs, custs, wa, blk, wl] = await Promise.all([
           getAppointments().catch(() => null),
           getDashboardMetrics().catch(() => null),
           getFinancialAnalytics().catch(() => null),
           getServices().catch(() => null),
           getCustomers().catch(() => null),
           getWhatsAppStatus().catch(() => null),
+          getBlockedTimes().catch(() => null),
+          getWaitlist().catch(() => null),
         ]);
 
         if (wa) setWaStatus(wa);
+        if (blk && Array.isArray(blk)) setBlockedTimes(blk);
+        if (wl && Array.isArray(wl)) setWaitlist(wl);
 
         if (apts && apts.length > 0) {
           setAppointments(
@@ -898,82 +984,233 @@ export default function AdminPage() {
           {/* ==================================================== */}
           {activeTab === 'calendar' && (
             <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+              {/* Header & Controls */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/10">
                 <div>
                   <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
                     <CalendarBlank className="w-5 h-5 text-pink-400" /> Agenda Interactiva de Turnos
                   </h2>
-                  <p className="text-xs text-slate-400">Visualizá los bloques de horarios y la disponibilidad del salón.</p>
+                  <p className="text-xs text-slate-400">Visualizá los turnos reales agendados, bloqueos de horarios y lista de espera.</p>
                 </div>
 
-                <div className="flex items-center gap-2 bg-white/[0.03] p-1 rounded-2xl border border-white/10">
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Week Navigation */}
+                  <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-2xl border border-white/10">
+                    <button
+                      onClick={() => setWeekOffset((prev) => prev - 1)}
+                      className="p-1.5 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-all text-xs flex items-center gap-1"
+                      title="Semana Anterior"
+                    >
+                      <CaretLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setWeekOffset(0)}
+                      className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${
+                        weekOffset === 0 ? 'bg-pink-500/20 text-pink-300 font-semibold border border-pink-500/30' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Hoy
+                    </button>
+                    <button
+                      onClick={() => setWeekOffset((prev) => prev + 1)}
+                      className="p-1.5 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-all text-xs flex items-center gap-1"
+                      title="Semana Siguiente"
+                    >
+                      <CaretRight className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Block Time Button (Func 5) */}
                   <button
-                    onClick={() => setCalendarView('week')}
-                    className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                      calendarView === 'week' ? 'bg-pink-500 text-white font-semibold shadow-md shadow-pink-500/30' : 'text-slate-400 hover:text-white'
-                    }`}
+                    onClick={() => setShowBlockModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-semibold bg-white/[0.05] hover:bg-white/[0.1] text-amber-300 border border-amber-400/30 hover:border-amber-400/50 transition-all shadow-sm"
                   >
-                    Vista Semanal
+                    <Lock className="w-3.5 h-3.5" /> Bloquear Horario / Feriado
                   </button>
+
+                  {/* Waitlist Modal Toggle (Func 2) */}
                   <button
-                    onClick={() => setCalendarView('month')}
-                    className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                      calendarView === 'month' ? 'bg-pink-500 text-white font-semibold shadow-md shadow-pink-500/30' : 'text-slate-400 hover:text-white'
-                    }`}
+                    onClick={() => setShowWaitlistModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-semibold bg-white/[0.05] hover:bg-white/[0.1] text-purple-300 border border-purple-400/30 hover:border-purple-400/50 transition-all shadow-sm"
                   >
-                    Vista Mensual
+                    <Hourglass className="w-3.5 h-3.5" /> Lista de Espera ({waitlist.filter((w) => w.status === 'WAITING').length})
                   </button>
+
+                  {/* View Toggle */}
+                  <div className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-2xl border border-white/10">
+                    <button
+                      onClick={() => setCalendarView('week')}
+                      className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${
+                        calendarView === 'week' ? 'bg-pink-500 text-white font-semibold shadow-md shadow-pink-500/30' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Semana
+                    </button>
+                    <button
+                      onClick={() => setCalendarView('month')}
+                      className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${
+                        calendarView === 'month' ? 'bg-pink-500 text-white font-semibold shadow-md shadow-pink-500/30' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Mes
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Weekly Calendar Matrix */}
+              {/* Dynamic Weekly Matrix (Func 6) */}
               {calendarView === 'week' ? (
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-                  {['Lun 20', 'Mar 21', 'Mié 22', 'Jue 23', 'Vie 24', 'Sáb 25'].map((dayStr, idx) => (
-                    <div key={idx} className="dark-glass-card rounded-2xl p-4 border border-white/10 space-y-3">
-                      <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                        <span className="text-xs font-bold text-pink-300 font-display">{dayStr}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">Julio 2026</span>
-                      </div>
-                      <div className="space-y-2">
-                        {appointments
-                          .filter((_, aIdx) => aIdx % 6 === idx)
-                          .map((apt) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {getWeekDays(weekOffset).map((day, idx) => {
+                    const dayAppointments = appointments.filter((apt) => apt.date === day.dateStr);
+                    const dayBlocks = blockedTimes.filter((b) => {
+                      const bStart = b.startDate ? b.startDate.split('T')[0] : '';
+                      const bEnd = b.endDate ? b.endDate.split('T')[0] : '';
+                      return day.dateStr >= bStart && day.dateStr <= bEnd;
+                    });
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`dark-glass-card rounded-2xl p-4 border transition-all ${
+                          day.isToday ? 'border-pink-500/50 bg-pink-500/[0.03] shadow-lg shadow-pink-500/10' : 'border-white/10'
+                        } space-y-3 flex flex-col min-h-[380px]`}
+                      >
+                        <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-xs font-bold font-display ${day.isToday ? 'text-pink-400 font-extrabold' : 'text-slate-200'}`}>
+                              {day.label}
+                            </span>
+                            {day.isToday && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-pink-500 text-white font-bold">HOY</span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {dayAppointments.length} turnos
+                          </span>
+                        </div>
+
+                        <div className="space-y-2 flex-1 overflow-y-auto max-h-[420px] pr-0.5">
+                          {/* Blocked Times on this day (Func 5) */}
+                          {dayBlocks.map((b) => (
                             <div
-                              key={apt.id}
-                              onClick={() => setSelectedAppointment(apt)}
-                              className="p-2.5 rounded-xl bg-pink-500/10 border border-pink-500/20 hover:border-pink-500/50 transition-all cursor-pointer group"
+                              key={b.id}
+                              className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 relative group"
                             >
-                              <span className="text-[10px] font-mono text-pink-400 font-bold block">{apt.time}hs</span>
-                              <p className="text-xs font-semibold text-white truncate group-hover:text-pink-300">{apt.customerName}</p>
-                              <p className="text-[10px] text-slate-400 truncate">{apt.service}</p>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-mono text-amber-400 font-bold flex items-center gap-1">
+                                  <LockSimple className="w-3 h-3" /> {b.allDay ? 'DÍA COMPLETO' : 'BLOQUEADO'}
+                                </span>
+                                <button
+                                  onClick={() => handleDeleteBlockedTime(b.id)}
+                                  className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                                  title="Eliminar bloqueo"
+                                >
+                                  <Trash className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <p className="text-xs font-semibold mt-1 truncate">{b.reason}</p>
+                              {!b.allDay && (
+                                <p className="text-[10px] text-amber-300/70 font-mono">
+                                  {new Date(b.startDate).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })} - {new Date(b.endDate).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                </p>
+                              )}
                             </div>
                           ))}
-                        {appointments.filter((_, aIdx) => aIdx % 6 === idx).length === 0 && (
-                          <p className="text-[10px] text-slate-600 text-center py-4">Sin turnos</p>
-                        )}
+
+                          {/* Real Appointments */}
+                          {dayAppointments
+                            .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+                            .map((apt) => {
+                              const isConfirmed = apt.status === 'CONFIRMED';
+                              const isPending = apt.status === 'PENDING';
+                              const isCancelled = apt.status === 'CANCELLED';
+
+                              return (
+                                <div
+                                  key={apt.id}
+                                  onClick={() => setSelectedAppointment(apt)}
+                                  className={`p-2.5 rounded-xl border transition-all cursor-pointer group ${
+                                    isConfirmed
+                                      ? 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/60'
+                                      : isPending
+                                      ? 'bg-amber-500/10 border-amber-500/30 hover:border-amber-500/60'
+                                      : isCancelled
+                                      ? 'bg-rose-500/10 border-rose-500/30 opacity-60'
+                                      : 'bg-pink-500/10 border-pink-500/20 hover:border-pink-500/50'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-mono text-pink-300 font-bold">
+                                      {apt.time || '10:00'}hs
+                                    </span>
+                                    <span
+                                      className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
+                                        isConfirmed
+                                          ? 'bg-emerald-500/20 text-emerald-300'
+                                          : isPending
+                                          ? 'bg-amber-500/20 text-amber-300'
+                                          : isCancelled
+                                          ? 'bg-rose-500/20 text-rose-300'
+                                          : 'bg-slate-500/20 text-slate-300'
+                                      }`}
+                                    >
+                                      {apt.status}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs font-semibold text-white truncate group-hover:text-pink-300 mt-1">
+                                    {apt.customerName}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 truncate">{apt.service}</p>
+                                  {apt.price > 0 && (
+                                    <p className="text-[9px] font-mono text-slate-500 mt-1">${apt.price.toLocaleString('es-AR')}</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                          {dayAppointments.length === 0 && dayBlocks.length === 0 && (
+                            <div className="h-full flex flex-col items-center justify-center text-center py-10 opacity-40">
+                              <CalendarCheck className="w-8 h-8 text-slate-600 mb-1" />
+                              <p className="text-[10px] text-slate-500">Sin turnos</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
-                /* Month Grid Placeholder */
-                <div className="grid grid-cols-7 gap-2">
-                  {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((d) => (
-                    <div key={d} className="py-2 text-center text-xs font-bold text-slate-400 border-b border-white/10">
-                      {d}
-                    </div>
-                  ))}
-                  {Array.from({ length: 31 }).map((_, i) => (
-                    <div key={i} className="dark-glass-card h-24 p-2 rounded-xl border border-white/5 flex flex-col justify-between hover:border-pink-500/30 transition-all">
-                      <span className="text-xs font-mono font-semibold text-slate-300">{i + 1}</span>
-                      {i % 4 === 0 && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300 truncate">
-                          2 Turnos
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                /* Month Grid */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-7 gap-2">
+                    {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((d) => (
+                      <div key={d} className="py-2 text-center text-xs font-bold text-slate-400 border-b border-white/10">
+                        {d}
+                      </div>
+                    ))}
+                    {Array.from({ length: 31 }).map((_, i) => {
+                      const dayNumber = i + 1;
+                      const monthDayStr = `2026-08-${dayNumber.toString().padStart(2, '0')}`;
+                      const count = appointments.filter((a) => a.date === monthDayStr).length;
+
+                      return (
+                        <div
+                          key={i}
+                          className="dark-glass-card h-24 p-2.5 rounded-xl border border-white/5 flex flex-col justify-between hover:border-pink-500/30 transition-all cursor-pointer"
+                        >
+                          <span className="text-xs font-mono font-semibold text-slate-300">{dayNumber}</span>
+                          {count > 0 ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300 truncate">
+                              {count} {count === 1 ? 'Turno' : 'Turnos'}
+                            </span>
+                          ) : (
+                            <span className="text-[9px] text-slate-600">Libre</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </motion.div>
@@ -1490,6 +1727,151 @@ export default function AdminPage() {
                     )}
                   </div>
                 ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ==================================================== */}
+      {/* 6. MODAL BLOQUEAR HORARIOS / FERIADOS (Func 5) */}
+      {/* ==================================================== */}
+      <AnimatePresence>
+        {showBlockModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowBlockModal(false)} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-lg dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-5 z-10">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
+                  <Lock className="w-5 h-5 text-amber-400" /> Bloquear Horario / Feriado
+                </h3>
+                <button onClick={() => setShowBlockModal(false)} className="p-1 rounded-xl hover:bg-white/10 text-slate-400">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateBlockedTime} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Motivo del Bloqueo</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Feriado Nacional, Almuerzo, Vacaciones Sofía"
+                    required
+                    value={blockForm.reason}
+                    onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
+                    className="dark-glass-input rounded-xl px-3 py-2 w-full"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="allDayCheck"
+                    checked={blockForm.allDay}
+                    onChange={(e) => setBlockForm({ ...blockForm, allDay: e.target.checked })}
+                    className="rounded bg-white/10 border-white/20 text-pink-500 focus:ring-0"
+                  />
+                  <label htmlFor="allDayCheck" className="text-slate-300 text-xs cursor-pointer">
+                    Bloquear día completo (09:00 a 19:00)
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Fecha & Hora Inicio</label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={blockForm.startDate}
+                      onChange={(e) => setBlockForm({ ...blockForm, startDate: e.target.value })}
+                      className="dark-glass-input rounded-xl px-3 py-2 w-full text-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Fecha & Hora Fin</label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={blockForm.endDate}
+                      onChange={(e) => setBlockForm({ ...blockForm, endDate: e.target.value })}
+                      className="dark-glass-input rounded-xl px-3 py-2 w-full text-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold shadow-lg shadow-amber-500/20 transition-all">
+                  Guardar Bloqueo de Horario
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ==================================================== */}
+      {/* 7. MODAL LISTA DE ESPERA INTELIGENTE (Func 2) */}
+      {/* ==================================================== */}
+      <AnimatePresence>
+        {showWaitlistModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowWaitlistModal(false)} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-2xl dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-5 z-10">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
+                  <Hourglass className="w-5 h-5 text-purple-400" /> Lista de Espera Inteligente
+                </h3>
+                <button onClick={() => setShowWaitlistModal(false)} className="p-1 rounded-xl hover:bg-white/10 text-slate-400">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-400">
+                Cuando una clienta cancela un turno, el bot le envía una notificación automática por WhatsApp a la primera clienta en espera.
+              </p>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {waitlist.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500 text-xs">
+                    <Hourglass className="w-8 h-8 mx-auto mb-2 opacity-40 text-purple-400" />
+                    No hay clientas en lista de espera en este momento.
+                  </div>
+                ) : (
+                  waitlist.map((w) => (
+                    <div key={w.id} className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-white">{w.customer?.name || 'Clienta'}</p>
+                          <span
+                            className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${
+                              w.status === 'WAITING'
+                                ? 'bg-purple-500/20 text-purple-300'
+                                : w.status === 'OFFERED'
+                                ? 'bg-amber-500/20 text-amber-300'
+                                : w.status === 'BOOKED'
+                                ? 'bg-emerald-500/20 text-emerald-300'
+                                : 'bg-slate-500/20 text-slate-400'
+                            }`}
+                          >
+                            {w.status === 'WAITING' ? 'EN ESPERA' : w.status === 'OFFERED' ? 'OFERTADO' : w.status === 'BOOKED' ? 'RESERVÓ' : w.status}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          💇 {w.service?.name} • 📅 {w.preferredDate ? new Date(w.preferredDate).toLocaleDateString('es-AR') : 'Fecha libre'} {w.timeRange ? `(${w.timeRange})` : ''}
+                        </p>
+                        {w.customer?.phone && (
+                          <p className="text-[10px] text-slate-500 font-mono">📱 {w.customer.phone}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleDeleteWaitlist(w.id)}
+                        className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors"
+                        title="Eliminar de lista"
+                      >
+                        <Trash className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </motion.div>
           </div>

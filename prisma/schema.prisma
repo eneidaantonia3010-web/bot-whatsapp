@@ -27,6 +27,21 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+enum RecurrenceInterval {
+  NONE
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum WaitlistStatus {
+  WAITING
+  OFFERED
+  BOOKED
+  EXPIRED
+  CANCELLED
+}
+
 enum Platform {
   INSTAGRAM
   WHATSAPP
@@ -64,6 +79,7 @@ model Service {
   active       Boolean       @default(true)
   order        Int           @default(0)
   appointments Appointment[]
+  waitlists    Waitlist[]
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
 
@@ -71,44 +87,84 @@ model Service {
 }
 
 model Customer {
-  id            String        @id @default(cuid())
-  name          String
-  phone         String?
-  email         String?
-  instagram     String?
-  notes         String?
-  blocked       Boolean       @default(false)
-  blockedReason String?       @map("blocked_reason")
-  appointments  Appointment[]
-  messages      MessageLog[]
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
+  id                     String        @id @default(cuid())
+  name                   String
+  phone                  String?
+  email                  String?
+  instagram              String?
+  notes                  String?
+  blocked                Boolean       @default(false)
+  blockedReason          String?       @map("blocked_reason")
+  lateCancellationsCount Int           @default(0) @map("late_cancellations_count")
+  appointments           Appointment[]
+  waitlists              Waitlist[]
+  messages               MessageLog[]
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
 
   @@map("customers")
 }
 
-
 model Appointment {
-  id            String            @id @default(cuid())
-  date          DateTime
-  endDate       DateTime          @map("end_date")
-  status        AppointmentStatus @default(PENDING)
-  notes         String?
-  customerId    String            @map("customer_id")
-  customer      Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  serviceId     String            @map("service_id")
-  service       Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  calendarEventId String?         @unique @map("calendar_event_id")
-  source        Platform          @default(WEB)
-  review        Review?
-  createdAt     DateTime          @default(now()) @map("created_at")
-  updatedAt     DateTime          @updatedAt @map("updated_at")
+  id              String             @id @default(cuid())
+  date            DateTime
+  endDate         DateTime           @map("end_date")
+  status          AppointmentStatus  @default(PENDING)
+  notes           String?
+  recurrence      RecurrenceInterval @default(NONE)
+  lateCancellation Boolean           @default(false) @map("late_cancellation")
+  reminderSent24h Boolean            @default(false) @map("reminder_sent_24h")
+  reminderSent1h  Boolean            @default(false) @map("reminder_sent_1h")
+  customerId      String             @map("customer_id")
+  customer        Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId       String             @map("service_id")
+  service         Service            @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  calendarEventId String?            @unique @map("calendar_event_id")
+  source          Platform           @default(WEB)
+  review          Review?
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
 
   @@index([date])
   @@index([customerId])
   @@index([serviceId])
   @@index([status])
   @@map("appointments")
+}
+
+model Waitlist {
+  id            String         @id @default(cuid())
+  customerId    String         @map("customer_id")
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId     String         @map("service_id")
+  service       Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  preferredDate DateTime       @map("preferred_date")
+  timeRange     String?        @map("time_range") // e.g. "mañana", "tarde", "14:00-18:00"
+  status        WaitlistStatus @default(WAITING)
+  offeredAt     DateTime?      @map("offered_at")
+  notes         String?
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  @@index([customerId])
+  @@index([serviceId])
+  @@index([preferredDate])
+  @@index([status])
+  @@map("waitlist")
+}
+
+model BlockedTime {
+  id        String   @id @default(cuid())
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+  reason    String   // e.g. "Vacaciones", "Feriado", "Almuerzo"
+  allDay    Boolean  @default(false) @map("all_day")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([startDate])
+  @@index([endDate])
+  @@map("blocked_times")
 }
 
 model Review {

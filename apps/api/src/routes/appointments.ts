@@ -148,20 +148,90 @@ appointmentsRouter.post('/:id/cancel', async (req: Request, res: Response) => {
       }
     }
 
-    const updatedNotes = reason
+    // ── Func 8: Check if cancellation is within 4 hours (Late Cancellation) ──
+    const now = new Date();
+    const diffHours = (existing.date.getTime() - now.getTime()) / (1000 * 60 * 60);
+    const isLateCancellation = diffHours < 4;
+
+    let updatedNotes = reason
       ? `${existing.notes ? `${existing.notes} | ` : ''}Cancelado: ${reason}`
       : existing.notes;
+
+    if (isLateCancellation) {
+      updatedNotes = `${updatedNotes ? `${updatedNotes} | ` : ''}[Cancelación con menos de 4hs de anticipación]`;
+      // Increment customer's late cancellations count
+      await prisma.customer.update({
+        where: { id: existing.customerId },
+        data: { lateCancellationsCount: { increment: 1 } },
+      }).catch((e) => console.warn('Warning updating customer late cancellation count:', e));
+    }
 
     const updated = await prisma.appointment.update({
       where: { id: id as string },
       data: {
         status: 'CANCELLED',
         notes: updatedNotes,
+        lateCancellation: isLateCancellation,
       },
       include: { service: true, customer: true },
     });
 
-    console.log(`🗑️ Appointment ${id} cancelled successfully`);
+    console.log(`🗑️ Appointment ${id} cancelled successfully (Late: ${isLateCancellation})`);
+
+    // ── Func 2: Smart Waitlist Notification ──
+    try {
+      const aptDateStart = new Date(existing.date);
+      aptDateStart.setHours(0, 0, 0, 0);
+      const aptDateEnd = new Date(existing.date);
+      aptDateEnd.setHours(23, 59, 59, 999);
+
+      const waitingClient = await prisma.waitlist.findFirst({
+        where: {
+          serviceId: existing.serviceId,
+          preferredDate: { gte: aptDateStart, lte: aptDateEnd },
+          status: 'WAITING',
+        },
+        include: { customer: true, service: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (waitingClient && waitingClient.customer?.phone) {
+        const timeStr = existing.date.toLocaleTimeString('es-AR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone: 'America/Argentina/Buenos_Aires',
+        });
+        const dateStr = existing.date.toLocaleDateString('es-AR', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          timeZone: 'America/Argentina/Buenos_Aires',
+        });
+
+        const waitlistMsg = (
+          `🎉 *¡Buenas noticias ${waitingClient.customer.name}!* 💕\n\n` +
+          `Se acaba de liberar un turno para *${waitingClient.service.name}* el *${dateStr}* a las *${timeStr}hs* en *Glow Studio*.\n\n` +
+          `👉 *Respondé SÍ a este mensaje si querés tomarlo antes de que se ocupe.* ¡Te esperamos! ✨`
+        );
+
+        const { sendWhatsAppMessage } = await import('../services/whatsapp');
+        await sendWhatsAppMessage({
+          to: waitingClient.customer.phone,
+          message: waitlistMsg,
+        });
+
+        await prisma.waitlist.update({
+          where: { id: waitingClient.id },
+          data: { status: 'OFFERED', offeredAt: new Date() },
+        });
+
+        console.log(`📢 Smart Waitlist: Sent freed slot offer to ${waitingClient.customer.name} (${waitingClient.customer.phone})`);
+      }
+    } catch (waitlistErr: any) {
+      console.warn('⚠️ Error notifying waitlist on cancellation:', waitlistErr.message);
+    }
+
     res.json(updated);
   } catch (error) {
     console.error('Error cancelling appointment:', error);
@@ -283,7 +353,7 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Datos de reserva inválidos', details: parseResult.error.flatten() });
     }
 
-    const { date, serviceId, customerName, customerPhone, customerEmail, notes, source } = parseResult.data;
+    const { date, serviceId, customerName, customerPhone, customerEmail, notes, source, recurrence } = parseResult.data;
 
 
     // Get service for duration
@@ -330,8 +400,19 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'El horario seleccionado ya no está disponible.' });
     }
 
-    // Create Google Calendar event
+    // ── Func 5: Check against Blocked Times ──
+    const blockedConflict = await prisma.blockedTime.findFirst({
+      where: {
+        startDate: { lt: endDate },
+        endDate: { gt: startDate },
+      },
+    });
 
+    if (blockedConflict) {
+      return res.status(409).json({ error: `El horario está bloqueado (${blockedConflict.reason}).` });
+    }
+
+    // Create Google Calendar event
     const calendarEventId = await createCalendarEvent({
       summary: `${service.name} — ${customerName}`,
       description: `Cliente: ${customerName}\nTeléfono: ${customerPhone}\n${notes ? `Notas: ${notes}` : ''}`,
@@ -339,13 +420,14 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
       endTime: endDate,
     });
 
-    // Create appointment
+    // ── Func 4: Create appointment with recurrence ──
     const appointment = await prisma.appointment.create({
       data: {
         date: startDate,
         endDate,
         status: 'PENDING',
         notes,
+        recurrence: (recurrence || 'NONE') as any,
         customerId: customer.id,
         serviceId: service.id,
         calendarEventId,
@@ -356,6 +438,26 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
         service: true,
       },
     });
+
+    // ── Func 2: If booking was from waitlist, update waitlist status to BOOKED ──
+    try {
+      const waitlistEntry = await prisma.waitlist.findFirst({
+        where: {
+          customerId: customer.id,
+          serviceId: service.id,
+          status: { in: ['WAITING', 'OFFERED'] },
+        },
+      });
+      if (waitlistEntry) {
+        await prisma.waitlist.update({
+          where: { id: waitlistEntry.id },
+          data: { status: 'BOOKED' },
+        });
+        console.log(`📋 Waitlist entry ${waitlistEntry.id} marked as BOOKED`);
+      }
+    } catch (wErr: any) {
+      console.warn('Warning updating waitlist entry to BOOKED:', wErr.message);
+    }
 
     // Format date for notifications
     const dateStr = startDate.toLocaleDateString('es-AR', {
@@ -451,6 +553,14 @@ appointmentsRouter.get('/availability', async (req: Request, res: Response) => {
       },
     });
 
+    // Get blocked times for the day
+    const blockedTimes = await prisma.blockedTime.findMany({
+      where: {
+        startDate: { lt: dayEnd },
+        endDate: { gt: dayStart },
+      },
+    });
+
     // Get Google Calendar busy times
     const busyTimes = await getFreeBusy(dayStart, dayEnd);
 
@@ -476,6 +586,13 @@ appointmentsRouter.get('/availability', async (req: Request, res: Response) => {
           return slotStart < aptEnd && slotEnd > aptStart;
         });
 
+        // Check against blocked times
+        const hasBlockedConflict = blockedTimes.some((b: any) => {
+          const bStart = new Date(b.startDate);
+          const bEnd = new Date(b.endDate);
+          return slotStart < bEnd && slotEnd > bStart;
+        });
+
         // Check against Google Calendar busy times
         const calBusy = busyTimes.some((busy) => {
           const busyStart = new Date(busy.start);
@@ -485,7 +602,7 @@ appointmentsRouter.get('/availability', async (req: Request, res: Response) => {
 
         slots.push({
           time: `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`,
-          available: !hasConflict && !calBusy,
+          available: !hasConflict && !hasBlockedConflict && !calBusy,
         });
       }
     }

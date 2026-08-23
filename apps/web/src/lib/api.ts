@@ -163,6 +163,39 @@ export const getWhatsAppStatus = () =>
 
 
 
+// Blocked Times / Holidays
+export const getBlockedTimes = () =>
+  fetchAPI<Array<{ id: string; startDate: string; endDate: string; reason: string; allDay: boolean }>>('/api/blocked-times');
+
+export const createBlockedTime = (data: { startDate: string; endDate: string; reason: string; allDay?: boolean }) =>
+  fetchAPI<{ id: string; startDate: string; endDate: string; reason: string; allDay: boolean }>('/api/blocked-times', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const deleteBlockedTime = (id: string) =>
+  fetchAPI<{ status: string }>(`/api/blocked-times/${id}`, {
+    method: 'DELETE',
+  });
+
+// Smart Waitlist
+export const getWaitlist = () =>
+  fetchAPI<Array<{
+    id: string;
+    preferredDate: string;
+    timeRange?: string;
+    status: 'WAITING' | 'OFFERED' | 'BOOKED' | 'EXPIRED' | 'CANCELLED';
+    notes?: string;
+    createdAt: string;
+    customer: { id: string; name: string; phone?: string };
+    service: { id: string; name: string; price: number };
+  }>>('/api/waitlist');
+
+export const deleteWaitlistEntry = (id: string) =>
+  fetchAPI<{ status: string }>(`/api/waitlist/${id}`, {
+    method: 'DELETE',
+  });
+
 export const getExportAppointmentsUrl = () => `${API_URL}/api/exports/appointments.csv`;
 export const getExportCustomersUrl = () => `${API_URL}/api/exports/customers.csv`;
 

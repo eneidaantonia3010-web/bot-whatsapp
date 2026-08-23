@@ -145,3 +145,36 @@ async def reschedule_appointment(appointment_id: str, new_date: str) -> dict | N
         logger.exception(f"Error rescheduling appointment: {e}")
         return None
 
+
+async def add_to_waitlist_via_api(
+    customer_name: str,
+    customer_phone: str,
+    service_id: str,
+    preferred_date: str,
+    time_range: str = "cualquiera",
+    notes: str = "Anotada via bot",
+) -> dict | None:
+    """Add a customer to the smart waitlist via API."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{API_URL}/api/waitlist",
+                json={
+                    "customerName": customer_name,
+                    "customerPhone": customer_phone,
+                    "serviceId": service_id,
+                    "preferredDate": preferred_date,
+                    "timeRange": time_range,
+                    "notes": notes,
+                },
+                timeout=10.0,
+            )
+            if response.status_code in (200, 201):
+                logger.info(f"Customer {customer_name} added to waitlist successfully")
+                return response.json()
+            return None
+    except Exception as e:
+        logger.exception(f"Error adding to waitlist via API: {e}")
+        return None
+
+

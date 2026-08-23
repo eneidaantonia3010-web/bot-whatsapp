@@ -30,6 +30,7 @@ from services.calendar import (
     confirm_upcoming_appointment,
     cancel_appointment,
     reschedule_appointment,
+    add_to_waitlist_via_api,
 )
 from services.whatsapp import send_whatsapp_notification
 from services.phone_utils import normalize_phone
@@ -912,12 +913,30 @@ async def process_message(
             confirmed = _is_close_confirmation_answer(message)
 
             if confirmed is True and apt:
+                # ── Func 8: Calculate if cancellation is late (< 4 hours) ──
+                policy_note = ""
+                apt_date_raw = apt.get("date")
+                if apt_date_raw:
+                    try:
+                        if isinstance(apt_date_raw, str):
+                            apt_dt = datetime.fromisoformat(apt_date_raw.replace("Z", "+00:00")).astimezone(TZ_AR)
+                        else:
+                            apt_dt = apt_date_raw.astimezone(TZ_AR)
+                        diff_hours = (apt_dt - datetime.now(TZ_AR)).total_seconds() / 3600
+                        if diff_hours < 4:
+                            policy_note = (
+                                "\n\n_📌 Para futuras ocasiones, te recordamos que solicitamos avisar con al menos 4 horas de anticipación "
+                                "para que otra persona pueda aprovechar el espacio. ¡Muchas gracias por tu comprensión!_ 💕"
+                            )
+                    except Exception as e:
+                        logger.warning(f"Error calculating cancellation diff: {e}")
+
                 await cancel_appointment(apt["id"])
                 service_name = apt.get("service", {}).get("name", "tu servicio")
                 date_display = format_appointment_datetime(apt.get("date"))
                 response = (
                     f"✅ Listo, tu turno para *{service_name}* del *{date_display}* "
-                    f"ha sido cancelado con éxito.\n\n"
+                    f"ha sido cancelado con éxito.{policy_note}\n\n"
                     f"Cuando quieras volver a visitarnos, estamos para ayudarte 💕"
                 )
                 conversations.pop(sender_id, None)

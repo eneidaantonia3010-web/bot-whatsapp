@@ -22,6 +22,8 @@ import { exportsRouter } from './routes/exports';
 import { authRouter } from './routes/auth';
 import { usersRouter } from './routes/users';
 import { whatsappAdminRouter } from './routes/whatsapp-admin';
+import { blockedTimesRouter } from './routes/blocked-times';
+import { waitlistRouter } from './routes/waitlist';
 import { instagramWebhookRouter } from './routes/webhooks/instagram';
 import { whatsappWebhookRouter } from './routes/webhooks/whatsapp';
 import { evolutionWebhookRouter } from './routes/webhooks/evolution';
@@ -72,6 +74,8 @@ app.use('/api/users', usersRouter);
 app.use('/api/services', publicApiLimiter, servicesRouter);
 app.use('/api/gallery', publicApiLimiter, galleryRouter);
 app.use('/api/appointments', appointmentCreationLimiter, appointmentsRouter);
+app.use('/api/blocked-times', blockedTimesRouter);
+app.use('/api/waitlist', waitlistRouter);
 
 // Protected Administrative Endpoints
 app.use('/api/whatsapp-admin', requireAdmin, whatsappAdminRouter);

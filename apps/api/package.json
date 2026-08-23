@@ -9,7 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@prisma/client": "^6.9.0",
+    "@prisma/client": "^7.9.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",

@@ -46,10 +46,10 @@ app.use(helmet());
 app.use(compression());
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests from Vercel, localhost, or the configured frontend url
-    if (!origin || origin.includes('vercel.app') || origin.includes('localhost') || origin === config.FRONTEND_URL) {
-      return callback(null, true);
-    }
+    if (!origin) return callback(null, true);
+    if (origin === config.FRONTEND_URL) return callback(null, true);
+    if (/^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin)) return callback(null, true);
+    if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) return callback(null, true);
     return callback(new Error('No permitido por CORS'));
   },
   credentials: true,
@@ -78,10 +78,9 @@ app.use('/api/appointments', appointmentCreationLimiter, appointmentsRouter);
 app.use('/api/blocked-times', blockedTimesRouter);
 app.use('/api/waitlist', waitlistRouter);
 
-// Protected Administrative Endpoints
+// Protected Administrative Endpoints (require JWT token or x-api-key)
 app.use('/api/whatsapp-admin', requireAdmin, whatsappAdminRouter);
-// Public QR access (scanning requires physical phone — not a security risk)
-app.use('/api/admin/whatsapp', whatsappAdminRouter);
+app.use('/api/admin/whatsapp', requireAdmin, whatsappAdminRouter);
 app.use('/api/customers', requireAuth, customersRouter);
 app.use('/api/messages', requireAuth, messagesRouter);
 app.use('/api/admin', requireAdmin, adminRouter);

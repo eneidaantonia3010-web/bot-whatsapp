@@ -5,6 +5,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../services/prisma';
 import { z } from 'zod';
+import { requireAdmin } from '../middleware/auth';
 
 export const blockedTimesRouter = Router();
 
@@ -43,8 +44,8 @@ blockedTimesRouter.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/blocked-times — Create a new blocked time or holiday
-blockedTimesRouter.post('/', async (req: Request, res: Response) => {
+// POST /api/blocked-times — Create a new blocked time or holiday (admin only)
+blockedTimesRouter.post('/', requireAdmin, async (req: Request, res: Response) => {
   try {
     const parseResult = createBlockedTimeSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -77,8 +78,8 @@ blockedTimesRouter.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/blocked-times/:id — Delete a blocked time
-blockedTimesRouter.delete('/:id', async (req: Request, res: Response) => {
+// DELETE /api/blocked-times/:id — Delete a blocked time (admin only)
+blockedTimesRouter.delete('/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await prisma.blockedTime.delete({

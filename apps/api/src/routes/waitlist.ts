@@ -5,6 +5,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../services/prisma';
 import { z } from 'zod';
+import { requireAdmin } from '../middleware/auth';
 
 export const waitlistRouter = Router();
 
@@ -19,8 +20,8 @@ const addToWaitlistSchema = z.object({
   notes: z.string().optional().nullable(),
 });
 
-// GET /api/waitlist — List all waitlist entries (with status, date filters)
-waitlistRouter.get('/', async (req: Request, res: Response) => {
+// GET /api/waitlist — List all waitlist entries (admin only)
+waitlistRouter.get('/', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { status, date, serviceId } = req.query;
     const where: any = {};
@@ -113,8 +114,8 @@ waitlistRouter.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/waitlist/:id — Remove from waitlist
-waitlistRouter.delete('/:id', async (req: Request, res: Response) => {
+// DELETE /api/waitlist/:id — Remove from waitlist (admin only)
+waitlistRouter.delete('/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await prisma.waitlist.delete({

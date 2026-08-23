@@ -28,19 +28,6 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
 // Authentication
 export const loginUser = async (credentials: { email: string; password: string }) => {
-  // Fallback / Backdoor for testing UI without backend DB
-  if (credentials.email === 'admin@glowstudio.com' && credentials.password === 'admin123') {
-    return {
-      token: 'mock-jwt-token-for-testing',
-      user: {
-        id: '1',
-        email: 'admin@glowstudio.com',
-        name: 'Sofía (Administradora)',
-        role: 'ADMIN' as const
-      }
-    };
-  }
-
   return fetchAPI<{ token: string; user: { id: string; email: string; name: string; role: 'ADMIN' | 'STAFF'; image?: string } }>(
     '/api/auth/login',
     {
@@ -51,16 +38,6 @@ export const loginUser = async (credentials: { email: string; password: string }
 };
 
 export const getCurrentUser = async () => {
-  const token = getAuthHeaders().Authorization;
-  if (token === 'Bearer mock-jwt-token-for-testing') {
-    return {
-      id: '1',
-      email: 'admin@glowstudio.com',
-      name: 'Sofía (Administradora)',
-      role: 'ADMIN' as const
-    };
-  }
-
   return fetchAPI<{ id: string; email: string; name: string; role: 'ADMIN' | 'STAFF'; image?: string }>('/api/auth/me');
 };
 

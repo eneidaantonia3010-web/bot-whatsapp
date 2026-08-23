@@ -53,6 +53,7 @@ skills-lock.json
 agent-skills/
 
 # Scratch / temporary scripts
+scratch/
 scratch_*.py
 save_qr.py
 qr*.html

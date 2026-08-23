@@ -65,7 +65,7 @@ def get_db_connection():
     conn = None
     try:
         conn = psycopg2.connect(
-            database_url,
+            db_url,
             cursor_factory=RealDictCursor,
             connect_timeout=10,
         )

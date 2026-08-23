@@ -1,0 +1,57 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-api:
+    name: Build & Type-Check API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Root & API
+        run: |
+          npm install
+          cd apps/api && npm install
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=prisma/schema.prisma
+      - name: Build API TypeScript
+        run: cd apps/api && npm run build
+
+  validate-web:
+    name: Build & Type-Check Web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Web
+        run: cd apps/web && npm install
+      - name: Build Next.js
+        run: cd apps/web && npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://glow-studio-api-2vzt.onrender.com
+
+  validate-bot:
+    name: Validate Python Bot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Bot Dependencies
+        run: |
+          cd apps/bot
+          pip install -r requirements.txt
+      - name: Syntax & Import Check
+        run: |
+          cd apps/bot
+          python -c "import config, main, agent; print('Bot imports successfully verified!')"

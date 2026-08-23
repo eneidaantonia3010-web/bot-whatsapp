@@ -3,6 +3,7 @@ import { prisma } from '../services/prisma';
 import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent, getFreeBusy } from '../services/calendar';
 import { sendWhatsAppNotification, sendBookingConfirmation } from '../services/whatsapp';
 import { createAppointmentSchema, updateAppointmentSchema } from '../schemas/appointment';
+import { requireAdmin } from '../middleware/auth';
 
 export const appointmentsRouter = Router();
 
@@ -307,8 +308,8 @@ appointmentsRouter.post('/:id/reschedule', async (req: Request, res: Response) =
   }
 });
 
-// GET /api/appointments — List appointments with optional filters
-appointmentsRouter.get('/', async (req: Request, res: Response) => {
+// GET /api/appointments — List appointments with optional filters (admin only)
+appointmentsRouter.get('/', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { status, date, serviceId, limit = '50' } = req.query;
 
@@ -517,8 +518,8 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /api/appointments/:id — Update appointment status
-appointmentsRouter.patch('/:id', async (req: Request, res: Response) => {
+// PATCH /api/appointments/:id — Update appointment status (admin only)
+appointmentsRouter.patch('/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
     const parseResult = updateAppointmentSchema.safeParse(req.body);
     if (!parseResult.success) {

@@ -49,7 +49,7 @@ import {
   ClockAfternoon,
 } from '@phosphor-icons/react';
 
-import { SERVICES_STATIC } from '@/lib/constants';
+import { SERVICES_STATIC, API_URL } from '@/lib/constants';
 import { formatPrice, formatDuration } from '@/lib/utils';
 import {
   getAppointments,
@@ -605,7 +605,7 @@ export default function AdminPage() {
                     </span>
                   ) : (
                     <a
-                      href={`${process.env.NEXT_PUBLIC_API_URL || 'https://glow-studio-api-2vzt.onrender.com'}/api/admin/whatsapp/qr?format=html`}
+                      href={`${API_URL}/api/admin/whatsapp/qr?format=html`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 text-rose-400 font-semibold bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full animate-bounce hover:bg-rose-500/20"

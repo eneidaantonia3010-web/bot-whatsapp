@@ -5,7 +5,10 @@ import hashlib
 import bcrypt # Needs pip install bcrypt
 
 def seed_admin():
-    DATABASE_URL = "postgresql://neondb_owner:npg_xK7S3qpWEMsD@ep-polished-paper-ac3ia287-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require"
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        print("DATABASE_URL not set")
+        return
     
     # Actually wait, we need to hash the password properly so bcrypt.compare in Node matches it.
     # We can just use the hash from a node script, or generate one in python.

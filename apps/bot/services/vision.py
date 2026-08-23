@@ -8,6 +8,11 @@ import logging
 from typing import Optional
 from groq import Groq
 
+try:
+    from config import GROQ_API_KEY
+except ImportError:
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+
 logger = logging.getLogger("glow_bot.vision")
 
 
@@ -22,7 +27,8 @@ def analyze_image(image_base64: str, caption: str = "") -> Optional[str]:
     Returns a brief Spanish description of what the image shows,
     relevant to beauty salon services.
     """
-    groq_keys = [k.strip() for k in os.getenv("GROQ_API_KEY", "").split(",") if k.strip()]
+    raw_keys = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
+    groq_keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
     if not groq_keys:
         logger.warning("No GROQ_API_KEY configured for vision")
         return None

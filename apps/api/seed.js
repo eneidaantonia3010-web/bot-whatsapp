@@ -1,5 +1,10 @@
 const { Client } = require('pg');
-const client = new Client({ connectionString: 'postgresql://neondb_owner:npg_xK7S3qpWEMsD@ep-polished-paper-ac3ia287-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require' });
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error('DATABASE_URL environment variable is required.');
+  process.exit(1);
+}
+const client = new Client({ connectionString });
 
 client.connect()
   .then(() => client.query(`

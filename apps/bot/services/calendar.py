@@ -8,7 +8,10 @@ import httpx
 
 logger = logging.getLogger("glow_bot.calendar")
 
-API_URL = os.getenv("API_URL", "https://glow-studio-api-2vzt.onrender.com")
+try:
+    from config import API_URL
+except ImportError:
+    API_URL = os.getenv("API_URL", "https://glow-studio-api-2vzt.onrender.com")
 
 
 async def create_appointment_via_api(

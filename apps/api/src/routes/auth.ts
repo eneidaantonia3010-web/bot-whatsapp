@@ -9,13 +9,9 @@ import { z } from 'zod';
 import { prisma } from '../services/prisma';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { authLimiter } from '../middleware/rate-limit';
+import { config } from '../config';
 
 export const authRouter = Router();
-const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET;
-
-if (!JWT_SECRET) {
-  throw new Error("CRITICAL: JWT_SECRET or NEXTAUTH_SECRET environment variable is missing.");
-}
 
 // POST /api/auth/login — Authenticate user
 const loginSchema = z.object({
@@ -52,7 +48,7 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
         name: user.name,
         role: user.role,
       },
-      JWT_SECRET,
+      config.JWT_SECRET,
       { expiresIn: '7d' }
     );
 

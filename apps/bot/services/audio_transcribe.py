@@ -3,13 +3,16 @@
 # ============================================
 
 import os
-from typing import Optional
-from groq import Groq
-
-
-import tempfile
+import logging
 from typing import Optional, Union
 from groq import Groq
+
+try:
+    from config import GROQ_API_KEY
+except ImportError:
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+
+logger = logging.getLogger("glow_bot.audio")
 
 
 def transcribe_audio_bytes(audio_bytes: bytes, filename: str = "audio.ogg") -> Optional[str]:
@@ -17,7 +20,8 @@ def transcribe_audio_bytes(audio_bytes: bytes, filename: str = "audio.ogg") -> O
     if not audio_bytes:
         return None
 
-    groq_keys = [k.strip() for k in os.getenv("GROQ_API_KEY", "").split(",") if k.strip()]
+    raw_keys = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
+    groq_keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
     if not groq_keys:
         return None
 

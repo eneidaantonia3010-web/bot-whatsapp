@@ -18,6 +18,11 @@ except ImportError:
     ThreadedConnectionPool = None
     RealDictCursor = None
 
+try:
+    from config import DATABASE_URL
+except ImportError:
+    DATABASE_URL = os.getenv("DATABASE_URL", "")
+
 logger = logging.getLogger("glow_bot.database")
 
 _pool: Optional[Any] = None if not HAS_PSYCOPG2 else None
@@ -31,15 +36,15 @@ def get_pool():
         return None
 
     if _pool is None or getattr(_pool, "closed", False):
-        database_url = os.getenv("DATABASE_URL", "")
-        if not database_url:
+        db_url = DATABASE_URL or os.getenv("DATABASE_URL", "")
+        if not db_url:
             raise ValueError("DATABASE_URL not set")
         minconn = int(os.getenv("DB_MIN_CONN", "1"))
         maxconn = int(os.getenv("DB_MAX_CONN", "10"))
         _pool = ThreadedConnectionPool(
             minconn=minconn,
             maxconn=maxconn,
-            dsn=database_url,
+            dsn=db_url,
             cursor_factory=RealDictCursor
         )
     return _pool
@@ -52,8 +57,8 @@ def get_db_connection():
         yield None
         return
 
-    database_url = os.getenv("DATABASE_URL", "")
-    if not database_url:
+    db_url = DATABASE_URL or os.getenv("DATABASE_URL", "")
+    if not db_url:
         yield None
         return
 

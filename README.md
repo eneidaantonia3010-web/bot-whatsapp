@@ -19,20 +19,25 @@
 - SEO optimizado
 
 ### 🔧 Backend (Express + TypeScript)
-- API REST completa (CRUD servicios, turnos, clientes)
-- Webhooks para Instagram DMs y WhatsApp
-- Integración Google Calendar
-- Notificaciones WhatsApp via Evolution API
+- API REST completa (CRUD servicios, turnos, clientes, bloqueos de horarios, lista de espera)
+- Webhooks seguros para Instagram DMs y WhatsApp con validación de firmas HMAC
+- Integración bidireccional con Google Calendar API v3
+- Servicio In-App nativo de WhatsApp (Baileys + PostgreSQL Store) con simulación anti-ban de presencia
+- Cron jobs inteligentes: recordatorios automáticos (24h y 45m), re-engagement, expiración de lista de espera
 
-### 🤖 Bot IA (Python + Gemini)
-- Agente conversacional con Gemini 2.0 Flash
-- Flujo de reserva completo por Instagram/WhatsApp
-- Tono cálido y profesional (español argentino)
-- Derivación a humano cuando no entiende
+### 🤖 Bot IA (Python + FastAPI + Groq Cloud)
+- Motor conversacional multi-modelo con **Groq Cloud**:
+  - **LLaMA 3.1 8B Instant** para razonamiento y extracción de intenciones
+  - **LLaMA 3.2 11B Vision** para interpretar fotos de referencia (cortes, peinados, uñas)
+  - **Whisper Large v3 Turbo** para transcripción de notas de voz
+- Soporte trilingüe con detección automática (**Español**, **Portugués**, **Inglés**)
+- Persistencia de estado en PostgreSQL con bloqueos de concurrencia por remitente
+- Escalación humana automática a Sofía por WhatsApp ante consultas complejas
+- Gestión conversacional completa: reservas multi-servicio, reagendamientos, cancelaciones pedagógicas y lista de espera
 
-### 💾 Base de Datos (Neon PostgreSQL)
-- Prisma ORM con 6 modelos
-- Seed con datos ficticios (20 clientes, 6 servicios, 30 imágenes, 10 turnos)
+### 💾 Base de Datos (Neon PostgreSQL Serverless)
+- Prisma ORM con 8 modelos relacionales (`Appointment`, `Customer`, `Service`, `BlockedTime`, `Waitlist`, `User`, `MessageLog`, `BaileysAuth`)
+- Connection pooler PgBouncer optimizado para Scale-to-Zero auto-suspend
 
 ---
 
@@ -96,7 +101,7 @@ npm run dev:bot
 - **Web**: http://localhost:3000
 - **Admin**: http://localhost:3000/admin
 - **API**: https://glow-studio-api-2vzt.onrender.com/api/health
-- **Bot**: https://glow-studio-bot-altn.onrender.com/health
+- **Bot**: https://glow-studio-bot-alrb.onrender.com/health
 
 ---
 

@@ -1,18 +1,10 @@
-// ============================================
-// Instagram Webhook Routes (Meta)
-// ============================================
-
 import { Router, Request, Response } from 'express';
 import { prisma } from '../../services/prisma';
+import { config } from '../../config';
+import { verifyMetaSignature } from '../../services/webhook-security';
+import { enqueueForSender } from '../../services/message-queue';
 
 export const instagramWebhookRouter = Router();
-
-const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || process.env.WEBHOOK_VERIFY_TOKEN || '';
-let BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-altn.onrender.com';
-if (process.env.NODE_ENV === 'production' && (!process.env.BOT_URL || BOT_URL.includes('localhost'))) {
-  BOT_URL = 'https://glow-studio-bot-altn.onrender.com';
-}
-const PAGE_ACCESS_TOKEN = process.env.META_PAGE_ACCESS_TOKEN || '';
 
 // GET — Webhook verification (Meta challenge)
 instagramWebhookRouter.get('/', (req: Request, res: Response) => {
@@ -20,7 +12,7 @@ instagramWebhookRouter.get('/', (req: Request, res: Response) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+  if (mode === 'subscribe' && token === config.WEBHOOK_VERIFY_TOKEN) {
     console.log('✅ Instagram webhook verified');
     return res.status(200).send(challenge);
   }
@@ -32,6 +24,12 @@ instagramWebhookRouter.get('/', (req: Request, res: Response) => {
 // POST — Receive Instagram DMs
 instagramWebhookRouter.post('/', async (req: Request, res: Response) => {
   try {
+    // Validate signature if header is present
+    if (req.headers['x-hub-signature-256'] && !verifyMetaSignature(req)) {
+      console.warn('❌ Invalid signature on Instagram webhook');
+      return res.status(403).send('Invalid signature');
+    }
+
     const body = req.body;
 
     // Quick 200 response to Meta (required within 20s)
@@ -63,40 +61,42 @@ instagramWebhookRouter.post('/', async (req: Request, res: Response) => {
             },
           });
 
-          // Forward to AI agent for processing
-          try {
-            const agentResponse = await fetch(`${BOT_URL}/process-message`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                message,
-                sender_id: senderId,
-                platform: 'INSTAGRAM',
-              }),
-            });
-
-            if (agentResponse.ok) {
-              const data = await agentResponse.json() as { response: string };
-              const reply = data.response;
-
-              // Save outbound response
-              await prisma.messageLog.create({
-                data: {
+          // Forward to AI agent for processing via Sender Queue
+          enqueueForSender(senderId, async () => {
+            try {
+              const agentResponse = await fetch(`${config.BOT_URL}/process-message`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  message,
+                  sender_id: senderId,
                   platform: 'INSTAGRAM',
-                  senderId,
-                  message: reply,
-                  direction: 'OUTBOUND',
-                },
+                }),
               });
 
-              // Send reply via Instagram Messaging API
-              if (PAGE_ACCESS_TOKEN) {
-                await sendInstagramReply(senderId, reply);
+              if (agentResponse.ok) {
+                const data = await agentResponse.json() as { response: string };
+                const reply = data.response;
+
+                // Save outbound response
+                await prisma.messageLog.create({
+                  data: {
+                    platform: 'INSTAGRAM',
+                    senderId,
+                    message: reply,
+                    direction: 'OUTBOUND',
+                  },
+                });
+
+                // Send reply via Instagram Messaging API
+                if (config.META_PAGE_ACCESS_TOKEN) {
+                  await sendInstagramReply(senderId, reply);
+                }
               }
+            } catch (error) {
+              console.error('❌ Error processing IG message with bot:', error);
             }
-          } catch (error) {
-            console.error('❌ Error processing IG message with bot:', error);
-          }
+          });
         }
       }
     }
@@ -107,12 +107,13 @@ instagramWebhookRouter.post('/', async (req: Request, res: Response) => {
 
 async function sendInstagramReply(recipientId: string, message: string) {
   try {
-    const graphDomain = PAGE_ACCESS_TOKEN.startsWith('IG') 
+    const token = config.META_PAGE_ACCESS_TOKEN;
+    const graphDomain = token.startsWith('IG') 
       ? 'graph.instagram.com/v21.0' 
       : 'graph.facebook.com/v18.0';
 
     const response = await fetch(
-      `https://${graphDomain}/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+      `https://${graphDomain}/me/messages?access_token=${token}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

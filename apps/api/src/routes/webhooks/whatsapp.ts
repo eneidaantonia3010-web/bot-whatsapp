@@ -5,11 +5,11 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../../services/prisma';
 import { sendWhatsAppMessage } from '../../services/whatsapp';
+import { config } from '../../config';
+import { verifyMetaSignature } from '../../services/webhook-security';
+import { enqueueForSender } from '../../services/message-queue';
 
 export const whatsappWebhookRouter = Router();
-
-const BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-altn.onrender.com';
-const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || '';
 
 // GET — Webhook verification (Meta challenge)
 whatsappWebhookRouter.get('/', (req: Request, res: Response) => {
@@ -17,7 +17,7 @@ whatsappWebhookRouter.get('/', (req: Request, res: Response) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+  if (mode === 'subscribe' && token === config.WEBHOOK_VERIFY_TOKEN) {
     console.log('✅ Meta WhatsApp webhook verified');
     return res.status(200).send(challenge);
   }
@@ -29,6 +29,12 @@ whatsappWebhookRouter.get('/', (req: Request, res: Response) => {
 // POST — Receive WhatsApp messages from Meta
 whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
   try {
+    // Validate signature if header is present
+    if (req.headers['x-hub-signature-256'] && !verifyMetaSignature(req)) {
+      console.warn('❌ Invalid signature on Meta WhatsApp webhook');
+      return res.status(403).send('Invalid signature');
+    }
+
     // Quick 200 response to Meta to prevent retries
     res.status(200).send('EVENT_RECEIVED');
 
@@ -66,38 +72,40 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
               },
             });
             
-            // Forward to AI Bot
-            try {
-              const agentResponse = await fetch(`${BOT_URL}/process-message`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  message: messageText,
-                  sender_id: senderId,
-                  platform: 'WHATSAPP',
-                }),
-              });
-              
-              if (agentResponse.ok) {
-                 const data = await agentResponse.json() as { response: string };
-                 const reply = data.response;
-                 
-                 // Save outbound response to DB
-                 await prisma.messageLog.create({
-                   data: {
-                     platform: 'WHATSAPP',
-                     senderId,
-                     message: reply,
-                     direction: 'OUTBOUND',
-                   },
-                 });
-                 
-                 // Send back via Meta Graph API
-                 await sendWhatsAppMessage({ to: senderId, message: reply });
+            // Forward to AI Bot via Sender Queue
+            enqueueForSender(senderId, async () => {
+              try {
+                const agentResponse = await fetch(`${config.BOT_URL}/process-message`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    message: messageText,
+                    sender_id: senderId,
+                    platform: 'WHATSAPP',
+                  }),
+                });
+                
+                if (agentResponse.ok) {
+                   const data = await agentResponse.json() as { response: string };
+                   const reply = data.response;
+                   
+                   // Save outbound response to DB
+                   await prisma.messageLog.create({
+                     data: {
+                       platform: 'WHATSAPP',
+                       senderId,
+                       message: reply,
+                       direction: 'OUTBOUND',
+                     },
+                   });
+                   
+                   // Send back via WhatsApp
+                   await sendWhatsAppMessage({ to: senderId, message: reply });
+                }
+              } catch (error) {
+                console.error('❌ Error processing WA message with bot:', error);
               }
-            } catch (error) {
-              console.error('❌ Error processing WA message with bot:', error);
-            }
+            });
           }
         }
       }

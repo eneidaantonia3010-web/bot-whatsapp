@@ -61,3 +61,12 @@ qr*.md
 
 # Render accounts (sensitive)
 RENDER_ACCOUNTS.md
+
+# WhatsApp Session Auth & Credentials (CRITICAL SECURITY)
+auth_info_baileys/
+*auth_info*
+apps/api/auth_info_baileys/
+creds.json
+session-*.json
+pre-key-*.json
+app-state-sync-*.json

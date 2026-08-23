@@ -387,57 +387,74 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
     const endDate = new Date(startDate);
     endDate.setMinutes(endDate.getMinutes() + service.duration);
 
-    // Check for overlapping appointments
-    const overlapping = await prisma.appointment.findFirst({
-      where: {
-        status: { in: ['PENDING', 'CONFIRMED'] },
-        date: { lt: endDate },
-        endDate: { gt: startDate },
-      },
-    });
-
-    if (overlapping) {
-      return res.status(409).json({ error: 'El horario seleccionado ya no está disponible.' });
-    }
-
-    // ── Func 5: Check against Blocked Times ──
-    const blockedConflict = await prisma.blockedTime.findFirst({
-      where: {
-        startDate: { lt: endDate },
-        endDate: { gt: startDate },
-      },
-    });
-
-    if (blockedConflict) {
-      return res.status(409).json({ error: `El horario está bloqueado (${blockedConflict.reason}).` });
-    }
-
     // Create Google Calendar event
-    const calendarEventId = await createCalendarEvent({
-      summary: `${service.name} — ${customerName}`,
-      description: `Cliente: ${customerName}\nTeléfono: ${customerPhone}\n${notes ? `Notas: ${notes}` : ''}`,
-      startTime: startDate,
-      endTime: endDate,
-    });
+    let calendarEventId: string | null = null;
+    try {
+      calendarEventId = await createCalendarEvent({
+        summary: `${service.name} — ${customerName}`,
+        description: `Cliente: ${customerName}\nTeléfono: ${customerPhone}\n${notes ? `Notas: ${notes}` : ''}`,
+        startTime: startDate,
+        endTime: endDate,
+      });
+    } catch (calErr) {
+      console.warn('⚠️ Google Calendar sync error (continuing booking):', calErr);
+    }
 
-    // ── Func 4: Create appointment with recurrence ──
-    const appointment = await prisma.appointment.create({
-      data: {
-        date: startDate,
-        endDate,
-        status: 'PENDING',
-        notes,
-        recurrence: (recurrence || 'NONE') as any,
-        customerId: customer.id,
-        serviceId: service.id,
-        calendarEventId,
-        source: source as any,
-      },
-      include: {
-        customer: true,
-        service: true,
-      },
-    });
+    // ── Atomic transaction: check overlap & insert appointment (Prevents TOCTOU Race Condition) ──
+    let appointment;
+    try {
+      appointment = await prisma.$transaction(async (tx) => {
+        const overlapping = await tx.appointment.findFirst({
+          where: {
+            status: { in: ['PENDING', 'CONFIRMED'] },
+            date: { lt: endDate },
+            endDate: { gt: startDate },
+          },
+        });
+
+        if (overlapping) {
+          throw new Error('CONFLICT_OVERLAPPING');
+        }
+
+        const blockedConflict = await tx.blockedTime.findFirst({
+          where: {
+            startDate: { lt: endDate },
+            endDate: { gt: startDate },
+          },
+        });
+
+        if (blockedConflict) {
+          throw new Error(`CONFLICT_BLOCKED:${blockedConflict.reason}`);
+        }
+
+        return await tx.appointment.create({
+          data: {
+            date: startDate,
+            endDate,
+            status: 'PENDING',
+            notes,
+            recurrence: (recurrence || 'NONE') as any,
+            customerId: customer.id,
+            serviceId: service.id,
+            calendarEventId,
+            source: source as any,
+          },
+          include: {
+            customer: true,
+            service: true,
+          },
+        });
+      });
+    } catch (txErr: any) {
+      if (txErr.message === 'CONFLICT_OVERLAPPING') {
+        return res.status(409).json({ error: 'El horario seleccionado ya no está disponible.' });
+      }
+      if (txErr.message?.startsWith('CONFLICT_BLOCKED:')) {
+        const reason = txErr.message.split(':')[1];
+        return res.status(409).json({ error: `El horario está bloqueado (${reason}).` });
+      }
+      throw txErr;
+    }
 
     // ── Func 2: If booking was from waitlist, update waitlist status to BOOKED ──
     try {

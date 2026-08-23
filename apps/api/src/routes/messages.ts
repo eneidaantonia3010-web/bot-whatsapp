@@ -4,6 +4,7 @@
 
 import { Router, Request, Response } from 'express';
 import { prisma } from '../services/prisma';
+import { config } from '../config';
 
 export const messagesRouter = Router();
 
@@ -47,10 +48,9 @@ messagesRouter.post('/', async (req: Request, res: Response) => {
 
     // For web chatbot, try to get AI response from the bot service
     let botResponse = '';
-    const BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-altn.onrender.com';
 
     try {
-      const aiResponse = await fetch(`${BOT_URL}/process-message`, {
+      const aiResponse = await fetch(`${config.BOT_URL}/process-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, sender_id: senderId, platform }),
@@ -62,7 +62,7 @@ messagesRouter.post('/', async (req: Request, res: Response) => {
       }
     } catch {
       // Bot service not available, use fallback
-      botResponse = '¡Gracias por tu mensaje! ✨ Nuestro equipo te responderá pronto. También podés llamarnos al +54 11 5555-4444.';
+      botResponse = `¡Gracias por tu mensaje! ✨ Nuestro equipo te responderá pronto. También podés escribirnos al +${config.SALON_WHATSAPP}.`;
     }
 
     // Save outbound response

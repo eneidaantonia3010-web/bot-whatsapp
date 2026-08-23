@@ -3,13 +3,14 @@
 // ============================================
 
 import { google, calendar_v3 } from 'googleapis';
+import { config } from '../config';
 
 let calendarClient: calendar_v3.Calendar | null = null;
 
 function getCalendarClient(): calendar_v3.Calendar | null {
   if (calendarClient) return calendarClient;
 
-  const credentials = process.env.GOOGLE_CREDENTIALS;
+  const credentials = config.GOOGLE_CREDENTIALS;
   if (!credentials) {
     console.warn('⚠️ GOOGLE_CREDENTIALS not set. Calendar integration disabled.');
     return null;
@@ -30,7 +31,7 @@ function getCalendarClient(): calendar_v3.Calendar | null {
   }
 }
 
-const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary';
+const CALENDAR_ID = config.GOOGLE_CALENDAR_ID;
 
 export async function createCalendarEvent(data: {
   summary: string;

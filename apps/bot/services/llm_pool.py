@@ -11,6 +11,11 @@ from typing import Optional
 from groq import Groq
 from groq.types.chat import ChatCompletion
 
+try:
+    from config import GROQ_API_KEY
+except ImportError:
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+
 logger = logging.getLogger("glow_bot.llm_pool")
 
 
@@ -23,7 +28,7 @@ class LLMPool:
         self._reload_keys()
 
     def _reload_keys(self):
-        raw = os.getenv("GROQ_API_KEY", "")
+        raw = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
         keys = [k.strip() for k in raw.split(",") if k.strip()]
         self._clients = [Groq(api_key=k) for k in keys]
         logger.info(f"LLM pool initialized with {len(self._clients)} client(s)")

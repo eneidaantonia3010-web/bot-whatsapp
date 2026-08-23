@@ -10,13 +10,12 @@ import httpx
 
 logger = logging.getLogger("glow_bot.whatsapp")
 
-# Credenciales de Evolution API (deben configurarse via variables de entorno)
-EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "")
-EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "")
-INSTANCE_NAME = os.getenv("INSTANCE_NAME", "")
+try:
+    from config import API_URL, SALON_WHATSAPP
+except ImportError:
+    API_URL = os.getenv("API_URL", "https://glow-studio-api-2vzt.onrender.com")
+    SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491178296781")
 
-
-SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491178296781")
 
 async def send_whatsapp_notification(
     customer_name: str,
@@ -35,38 +34,24 @@ async def send_whatsapp_notification(
 
 
 async def send_message(to: str, text: str) -> bool:
-    """Envía un mensaje usando Evolution API."""
-    if not EVOLUTION_API_URL or not EVOLUTION_API_KEY:
-        logger.info(f"📱 [DRY RUN] WA to {to}: {text}")
-        return False
-
-    # Limpiar el número de destino (solo dígitos)
-    clean_number = to.replace("+", "").replace(" ", "").replace("-", "")
-    
-    # Asegurar el formato 549 para Argentina
-    if clean_number.startswith("54") and not clean_number.startswith("549") and len(clean_number) >= 12:
-        clean_number = clean_number[:2] + "9" + clean_number[2:]
-
+    """Envía un mensaje de WhatsApp a través de la API del salón (Baileys Nativo)."""
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{EVOLUTION_API_URL}/message/sendText/{INSTANCE_NAME}",
-                headers={
-                    "apikey": EVOLUTION_API_KEY,
-                    "Content-Type": "application/json",
-                },
+                f"{API_URL}/api/admin/whatsapp/send",
+                headers={"Content-Type": "application/json"},
                 json={
-                    "number": clean_number,
-                    "text": text,
+                    "to": to,
+                    "message": text,
                 },
                 timeout=10.0,
             )
             if response.status_code in [200, 201]:
-                logger.info(f"WA message sent to {to}")
+                logger.info(f"WA message sent to {to} via Express API")
                 return True
             else:
-                logger.error(f"WA error ({response.status_code}): {response.text}")
+                logger.warning(f"WA send via API returned {response.status_code}: {response.text}")
                 return False
     except Exception as e:
-        logger.exception(f"WA send failed: {e}")
+        logger.warning(f"WA send via API failed: {e}")
         return False

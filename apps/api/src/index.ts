@@ -33,9 +33,10 @@ import { initCronJobs } from './services/cron';
 import { prisma } from './services/prisma';
 import { ensureAdminUserExists } from './services/seed-user';
 import { initNativeWhatsApp } from './services/whatsapp-native';
+import { config } from './config';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = config.PORT;
 
 // Trust Render reverse proxy for rate-limiter IP detection
 app.set('trust proxy', 1);
@@ -46,7 +47,7 @@ app.use(compression());
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests from Vercel, localhost, or the configured frontend url
-    if (!origin || origin.includes('vercel.app') || origin.includes('localhost') || origin === process.env.FRONTEND_URL) {
+    if (!origin || origin.includes('vercel.app') || origin.includes('localhost') || origin === config.FRONTEND_URL) {
       return callback(null, true);
     }
     return callback(new Error('No permitido por CORS'));

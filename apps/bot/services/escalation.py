@@ -6,10 +6,13 @@ import os
 import logging
 import httpx
 
-logger = logging.getLogger("glow_bot.escalation")
+try:
+    from config import API_URL, SALON_WHATSAPP
+except ImportError:
+    API_URL = os.getenv("API_URL", "https://glow-studio-api-2vzt.onrender.com")
+    SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491178296781")
 
-API_URL = os.getenv("API_URL", "https://glow-studio-api-2vzt.onrender.com")
-SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491178296781")
+logger = logging.getLogger("glow_bot.escalation")
 
 
 def build_escalation_summary(conv: dict, last_message: str) -> str:

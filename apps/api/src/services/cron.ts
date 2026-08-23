@@ -1,10 +1,11 @@
 import cron from 'node-cron';
 import { prisma } from './prisma';
 import { sendSalonUpcomingAlert, sendCustomerReminder } from './whatsapp';
+import { config } from '../config';
 
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || '';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
-const INSTANCE_NAME = process.env.INSTANCE_NAME || 'glow-studio-5491178296781';
+const EVOLUTION_API_URL = config.EVOLUTION_API_URL;
+const EVOLUTION_API_KEY = config.EVOLUTION_API_KEY;
+const INSTANCE_NAME = config.INSTANCE_NAME;
 
 export function initCronJobs() {
   console.log('⏰ Initializing cron jobs for appointment reminders and WhatsApp keepalive...');

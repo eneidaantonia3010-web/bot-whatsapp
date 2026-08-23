@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChatCircle, X, PaperPlaneRight, Sparkle, SpinnerGap } from '@phosphor-icons/react';
 import { useTranslation } from '@/i18n/I18nContext';
+import { API_URL } from '@/lib/constants';
 
 interface Message {
   id: number;
@@ -65,7 +66,6 @@ export function Chatbot() {
     setIsTyping(true);
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://glow-studio-api-2vzt.onrender.com';
       const res = await fetch(`${API_URL}/api/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

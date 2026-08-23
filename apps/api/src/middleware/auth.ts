@@ -4,10 +4,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-
-const JWT_SECRET: string = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'Disjd12-9';
-const API_SECRET_KEY = process.env.API_SECRET_KEY;
-
+import { config } from '../config';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -20,7 +17,7 @@ export interface AuthenticatedRequest extends Request {
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   // Allow internal service-to-service requests via API key
   const apiKey = req.headers['x-api-key'] || req.headers['x-bot-key'];
-  if (apiKey && (apiKey === API_SECRET_KEY || apiKey === process.env.WEBHOOK_VERIFY_TOKEN)) {
+  if (apiKey && (apiKey === config.API_SECRET_KEY || apiKey === config.WEBHOOK_VERIFY_TOKEN)) {
     return next();
   }
 
@@ -38,17 +35,17 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, config.JWT_SECRET) as any;
     req.user = decoded;
     next();
   } catch (error) {
-    return res.status(401).json({ error: 'Acceso no autorizado: Token invǭlido o expirado' });
+    return res.status(401).json({ error: 'Acceso no autorizado: Token inválido o expirado' });
   }
 }
 
 export function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const apiKey = req.headers['x-api-key'] || req.headers['x-bot-key'];
-  if (apiKey && (apiKey === API_SECRET_KEY || apiKey === process.env.WEBHOOK_VERIFY_TOKEN)) {
+  if (apiKey && (apiKey === config.API_SECRET_KEY || apiKey === config.WEBHOOK_VERIFY_TOKEN)) {
     return next();
   }
 

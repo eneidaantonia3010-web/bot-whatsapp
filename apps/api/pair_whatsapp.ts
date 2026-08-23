@@ -9,7 +9,7 @@ import fs from 'fs';
 import path from 'path';
 
 const logger = pino({ level: 'error' });
-const DESKTOP_PATH = 'c:/Users/herct/Desktop/whatsapp_qr.png';
+const QR_PATH = process.env.QR_OUTPUT_PATH || path.join(process.cwd(), 'whatsapp_qr.png');
 const AUTH_FOLDER = path.join(__dirname, 'auth_info_baileys');
 
 async function run() {
@@ -42,7 +42,7 @@ async function run() {
       console.log('🖼️ Guardando imagen en el Escritorio...');
       
       try {
-        await QRCode.toFile(DESKTOP_PATH, qr, {
+        await QRCode.toFile(QR_PATH, qr, {
           width: 450,
           margin: 2,
           color: {
@@ -50,8 +50,8 @@ async function run() {
             light: '#ffffff',
           }
         });
-        console.log(`✅ ¡IMAGEN CREADA EN TU ESCRITORIO!: ${DESKTOP_PATH}`);
-        console.log('👉 Abre la imagen "whatsapp_qr.png" en tu Escritorio y escanéala con WhatsApp.');
+        console.log(`✅ ¡IMAGEN QR CREADA!: ${QR_PATH}`);
+        console.log('👉 Escanéala con WhatsApp.');
         console.log('=========================================\n');
       } catch (err) {
         console.error('Error guardando imagen QR:', err);

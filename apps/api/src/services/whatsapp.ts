@@ -1,17 +1,10 @@
 // ============================================
-// WhatsApp Service (Evolution API)
+// WhatsApp Service (Native Baileys + Optional Evolution Fallback)
 // ============================================
 
 import { withRetry } from '../utils/retry';
-
-// Credenciales de Evolution API (deben configurarse via variables de entorno)
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || '';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
-const INSTANCE_NAME = process.env.INSTANCE_NAME || '';
-
-
-
 import { sendNativeWhatsAppMessage, getNativeStatus } from './whatsapp-native';
+import { config } from '../config';
 
 interface SendMessageOptions {
   to: string;
@@ -26,9 +19,9 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): 
     if (sentNative) return true;
   }
 
-  // Fallback to Evolution API
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-    console.warn('⚠️ Evolution API no configurada. Mensaje no enviado.');
+  // Fallback to Evolution API only if explicitly configured
+  if (!config.EVOLUTION_API_URL || !config.EVOLUTION_API_KEY) {
+    console.warn('⚠️ Native WhatsApp no conectado y Evolution API no configurada. Mensaje no enviado.');
     return false;
   }
 
@@ -36,11 +29,11 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): 
     const targetNumber = to;
     return await withRetry(async () => {
       const response = await fetch(
-        `${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`,
+        `${config.EVOLUTION_API_URL}/message/sendText/${config.INSTANCE_NAME}`,
         {
           method: 'POST',
           headers: {
-            'apikey': EVOLUTION_API_KEY,
+            'apikey': config.EVOLUTION_API_KEY,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -55,7 +48,7 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): 
         throw new Error(`Evolution API HTTP ${response.status}: ${error}`);
       }
 
-      console.log(`✅ Mensaje enviado a ${to}`);
+      console.log(`✅ Mensaje enviado a ${to} vía Evolution fallback`);
       return true;
     }, { maxRetries: 3, baseDelayMs: 1000 });
   } catch (error) {
@@ -64,13 +57,12 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): 
   }
 }
 
-
 export async function sendWhatsAppNotification(data: {
   customerName: string;
   serviceName: string;
   dateTime: string;
 }): Promise<boolean> {
-  const salonPhone = process.env.SALON_WHATSAPP || '5491178296781';
+  const salonPhone = config.SALON_WHATSAPP;
   const message = `🔔 *Nuevo turno reservado*\n\n👤 ${data.customerName}\n💇 ${data.serviceName}\n📅 ${data.dateTime}\n\n_Reservado desde la web de Glow Studio_`;
 
   return sendWhatsAppMessage({ to: salonPhone, message });
@@ -95,7 +87,7 @@ export async function sendSalonUpcomingAlert(data: {
   serviceName: string;
   timeStr: string;
 }): Promise<boolean> {
-  const salonPhone = process.env.SALON_WHATSAPP || '5491178296781';
+  const salonPhone = config.SALON_WHATSAPP;
   const message = `⏳ *¡Turno en 45 minutos!*\n\n👤 ${data.customerName}\n💇 ${data.serviceName}\n⏰ ${data.timeStr}\n\n_El sistema le acaba de enviar un mensaje automático a la clienta para que confirme su asistencia._`;
 
   return sendWhatsAppMessage({ to: salonPhone, message });

@@ -10,9 +10,11 @@ import {
   sendNativeWhatsAppMessage,
 } from '../services/whatsapp-native';
 
+import { config } from '../config';
+
 export const whatsappAdminRouter = Router();
 
-const SALON_WHATSAPP = process.env.SALON_WHATSAPP || '5491178296781';
+const SALON_WHATSAPP = config.SALON_WHATSAPP;
 
 // GET /api/admin/whatsapp/status — Check native connection state
 whatsappAdminRouter.get('/status', (_req: Request, res: Response) => {

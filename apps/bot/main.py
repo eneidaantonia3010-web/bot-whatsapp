@@ -12,6 +12,14 @@ load_dotenv(dotenv_path="../../.env.local")
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+try:
+    from config import FRONTEND_URL, DEBUG_MODE, PORT, GROQ_API_KEY
+except ImportError:
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "")
+    DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    PORT = int(os.getenv("PORT", os.getenv("BOT_PORT", "8000")))
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+
 from models import MessageRequest, MessageResponse
 from agent import process_message
 
@@ -22,8 +30,10 @@ app = FastAPI(
 )
 
 # CORS Configuration
-cors_origins_raw = os.getenv("CORS_ORIGINS", os.getenv("FRONTEND_URL", ""))
+cors_origins_raw = os.getenv("CORS_ORIGINS", FRONTEND_URL)
 allowed_origins = [origin.strip() for origin in cors_origins_raw.split(",") if origin.strip()]
+if not allowed_origins:
+    allowed_origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,12 +62,10 @@ async def health_check():
 @app.get("/debug-agent")
 async def debug_agent():
     # Solo disponible si DEBUG_MODE está habilitado explícitamente
-    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
-    if not debug_mode:
+    if not DEBUG_MODE:
         return {"error": "Debug endpoint disabled in production. Set DEBUG_MODE=true to enable."}
 
-    groq_key = os.getenv("GROQ_API_KEY")
-    groq_keys = [k.strip() for k in (groq_key or "").split(",") if k.strip()]
+    groq_keys = [k.strip() for k in (GROQ_API_KEY or "").split(",") if k.strip()]
 
     return {
         "has_groq_key": bool(groq_keys),

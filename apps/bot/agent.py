@@ -5,13 +5,19 @@
 import os
 import json
 import re
+import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
 import pytz
 
 import dateparser
-from groq import Groq
+
+try:
+    from config import SALON_WHATSAPP, API_URL
+except ImportError:
+    SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491178296781")
+    API_URL = os.getenv("API_URL", "https://glow-studio-api-2vzt.onrender.com")
 
 from services.database import (
     get_services,
@@ -40,13 +46,9 @@ from services.intent_classifier import classify_intent
 from services.language_detector import detect_language, t
 from services.escalation import escalate_to_human, build_escalation_summary
 from services.prompts import (
-    SYSTEM_PERSONALITY,
-    SYSTEM_PERSONALITY_MAP,
-    AVAILABILITY_PROMPT,
     SERVICE_HELP_PROMPT,
     DATE_CLARIFICATION_PROMPT,
     GENERAL_FALLBACK_PROMPT,
-    CLOSING_PROMPT,
     BOOKING_EXTRACTION_PROMPT,
     MULTI_SERVICE_EXTRACTION_PROMPT,
 )
@@ -54,8 +56,14 @@ from services.prompts import (
 logger = logging.getLogger("glow_bot.agent")
 TZ_AR = pytz.timezone("America/Argentina/Buenos_Aires")
 
-# In-memory conversation state cache
+# In-memory conversation state cache and per-sender locks
 conversations: dict[str, dict] = {}
+_sender_locks: dict[str, asyncio.Lock] = {}
+
+def _get_sender_lock(sender_id: str) -> asyncio.Lock:
+    if sender_id not in _sender_locks:
+        _sender_locks[sender_id] = asyncio.Lock()
+    return _sender_locks[sender_id]
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -349,10 +357,18 @@ async def process_message(
     message: str,
     platform: str = "INSTAGRAM",
 ) -> str | dict:
-    """Process an incoming message and return the bot's response.
-    
-    Returns either a plain string or a dict with {"response": str, "image_url": str|None}.
-    """
+    """Process an incoming message with per-sender concurrency lock."""
+    lock = _get_sender_lock(sender_id)
+    async with lock:
+        return await _process_message_internal(sender_id, message, platform)
+
+
+async def _process_message_internal(
+    sender_id: str,
+    message: str,
+    platform: str = "INSTAGRAM",
+) -> str | dict:
+    """Internal message processing logic."""
     conv = get_conversation(sender_id)
     chat_history = conv["chat_history"]
 
@@ -885,7 +901,7 @@ async def process_message(
                     response = (
                         f"😔 Hubo un problema al reservar. "
                         f"Por favor, intentá de nuevo o escribinos por WhatsApp "
-                        f"al *+54 9 11 7829-6781* y te ayudamos personalmente. 💕"
+                        f"al *+{SALON_WHATSAPP}* y te ayudamos personalmente. 💕"
                     )
                     conversations.pop(sender_id, None)
                     delete_conversation_state(sender_id)
@@ -1078,8 +1094,8 @@ async def process_message(
         logger.exception(f"Agent error processing message: {e}")
         response = (
             "Disculpá, tuve un problema procesando tu mensaje. 😔\n"
-            "Podés intentar de nuevo o escribirnos por WhatsApp al "
-            "*+54 9 11 7829-6781*. ¡Te ayudamos encantadas! 💕"
+            f"Podés intentar de nuevo o escribirnos por WhatsApp al "
+            f"*+{SALON_WHATSAPP}*. ¡Te ayudamos encantadas! 💕"
         )
         chat_history.append({"role": "model", "parts": [response]})
         save_conversation_state(sender_id, conv)

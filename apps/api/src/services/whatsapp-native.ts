@@ -16,9 +16,10 @@ import pino from 'pino';
 import { usePrismaAuthState } from './baileys-store';
 import { prisma } from './prisma';
 import { enqueueForSender, enqueueGlobalOutbound } from './message-queue';
+import { config } from '../config';
 
-const BOT_URL = process.env.BOT_URL || 'https://glow-studio-bot-altn.onrender.com';
-const SALON_WHATSAPP = process.env.SALON_WHATSAPP || '5491178296781';
+const BOT_URL = config.BOT_URL;
+const SALON_WHATSAPP = config.SALON_WHATSAPP;
 
 let sock: ReturnType<typeof makeWASocket> | null = null;
 let currentQRBase64: string | null = null;

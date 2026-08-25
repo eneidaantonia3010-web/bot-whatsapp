@@ -84,10 +84,16 @@ async function transcribeAudioMessage(msg: any): Promise<string | null> {
     formData.append('file', blob, 'voice_message.ogg');
 
     // Send to bot transcription endpoint
+    const transController = new AbortController();
+    const transTimeout = setTimeout(() => transController.abort(), 20000); // 20s timeout for audio
+
     const response = await fetch(`${BOT_URL}/transcribe-audio-file`, {
       method: 'POST',
       body: formData,
+      signal: transController.signal
     });
+    
+    clearTimeout(transTimeout);
 
     if (response.ok) {
       const data = (await response.json()) as { text: string | null; status: string };
@@ -212,6 +218,9 @@ export async function initNativeWhatsApp(): Promise<void> {
               const base64Image = Buffer.from(buffer as any).toString('base64');
               console.log(`🖼️ Image received from ${msg.key.remoteJid}, analyzing with Vision AI...`);
 
+              const visionController = new AbortController();
+              const visionTimeout = setTimeout(() => visionController.abort(), 20000);
+
               const visionResp = await fetch(`${BOT_URL}/analyze-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -220,7 +229,10 @@ export async function initNativeWhatsApp(): Promise<void> {
                   sender_id: msg.key.remoteJid,
                   caption: hasImage.caption || '',
                 }),
+                signal: visionController.signal
               });
+              
+              clearTimeout(visionTimeout);
 
               if (visionResp.ok) {
                 const visionData = (await visionResp.json()) as { interpreted_text: string | null; status: string };
@@ -278,6 +290,10 @@ export async function initNativeWhatsApp(): Promise<void> {
           // Call Python AI Bot
           try {
             console.log(`🤖 Calling Python Bot at: ${BOT_URL}/process-message`);
+            
+            const botController = new AbortController();
+            const botTimeout = setTimeout(() => botController.abort(), 15000);
+            
             const agentResponse = await fetch(`${BOT_URL}/process-message`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -286,7 +302,10 @@ export async function initNativeWhatsApp(): Promise<void> {
                 sender_id: remoteJid,
                 platform: 'WHATSAPP',
               }),
+              signal: botController.signal
             });
+            
+            clearTimeout(botTimeout);
 
             if (agentResponse.ok) {
               const data = (await agentResponse.json()) as { response: string; image_url?: string };
@@ -326,16 +345,33 @@ export async function initNativeWhatsApp(): Promise<void> {
                   // 2. Enviar el mensaje (con imagen del portfolio si está disponible)
                   try {
                     if (imageUrl) {
-                      // Send portfolio image with text as caption
-                      console.log(`🖼️ Sending portfolio image to ${remoteJid}: ${imageUrl}`);
-                      await sock.sendMessage(remoteJid, {
-                        image: { url: imageUrl },
-                        caption: reply,
-                      }, { quoted: msg });
+                      console.log(`🖼️ Fetching portfolio image for ${remoteJid}: ${imageUrl}`);
+                      const imgController = new AbortController();
+                      const imgTimeout = setTimeout(() => imgController.abort(), 10000); // 10s timeout
+
+                      try {
+                        const imgRes = await fetch(imageUrl, { signal: imgController.signal });
+                        clearTimeout(imgTimeout);
+
+                        if (imgRes.ok) {
+                          const arrayBuf = await imgRes.arrayBuffer();
+                          const buffer = Buffer.from(arrayBuf);
+                          await sock.sendMessage(remoteJid, {
+                            image: buffer,
+                            caption: reply,
+                          }, { quoted: msg });
+                          console.log(`✅ Native WA reply sent to ${remoteJid} (with image)`);
+                        } else {
+                          throw new Error(`HTTP ${imgRes.status}`);
+                        }
+                      } catch (fetchErr: any) {
+                        console.error(`⚠️ Image fetch failed for ${remoteJid}: ${fetchErr.message}. Sending text only.`);
+                        await sock.sendMessage(remoteJid, { text: reply }, { quoted: msg });
+                      }
                     } else {
                       await sock.sendMessage(remoteJid, { text: reply }, { quoted: msg });
+                      console.log(`✅ Native WA reply sent to ${remoteJid} (text only)`);
                     }
-                    console.log(`✅ Native WA reply sent to ${remoteJid} (quoted msg)`);
                   } catch (e1) {
                     console.error(`⚠️ Error sending quoted to ${remoteJid}, trying standard send:`, e1);
                     await sock.sendMessage(remoteJid, { text: reply });

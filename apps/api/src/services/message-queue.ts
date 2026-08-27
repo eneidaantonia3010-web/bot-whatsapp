@@ -26,10 +26,10 @@ export function enqueueForSender<T>(senderId: string, task: () => Promise<T>): P
   return taskPromise;
 }
 
-// Global Outbound Queue (Ensures at least 5s gap between ANY WhatsApp outgoing messages)
+// Global Outbound Queue (Ensures at least 1s gap between WhatsApp outgoing messages)
 let globalOutboundChain: Promise<any> = Promise.resolve();
 let lastOutboundTimestamp = 0;
-const MIN_OUTBOUND_GAP_MS = 5000; // 5 segundos entre envíos
+const MIN_OUTBOUND_GAP_MS = 1000; // 1 segundo entre envíos para máxima fluidez
 
 export function enqueueGlobalOutbound<T>(task: () => Promise<T>): Promise<T> {
   const nextTask = globalOutboundChain.then(async () => {

@@ -28,6 +28,12 @@ logger = logging.getLogger("glow_bot.database")
 _pool: Optional[Any] = None if not HAS_PSYCOPG2 else None
 
 
+# In-memory service catalog cache with TTL
+_services_cache: list[dict] = []
+_services_cache_time: float = 0.0
+_CACHE_TTL = 120.0  # 2 minutes
+
+
 def get_pool():
     """Get or initialize the PostgreSQL connection pool."""
     global _pool
@@ -41,80 +47,164 @@ def get_pool():
             raise ValueError("DATABASE_URL not set")
         minconn = int(os.getenv("DB_MIN_CONN", "1"))
         maxconn = int(os.getenv("DB_MAX_CONN", "10"))
-        _pool = ThreadedConnectionPool(
-            minconn=minconn,
-            maxconn=maxconn,
-            dsn=db_url,
-            cursor_factory=RealDictCursor
-        )
+        try:
+            _pool = ThreadedConnectionPool(
+                minconn=minconn,
+                maxconn=maxconn,
+                dsn=db_url,
+                cursor_factory=RealDictCursor
+            )
+            logger.info("✅ PostgreSQL connection pool initialized successfully")
+        except Exception as e:
+            logger.error(f"Error initializing connection pool: {e}")
+            _pool = None
     return _pool
 
 
 @contextmanager
 def get_db_connection():
-    """On-demand database connection manager optimized for Neon Scale-to-Zero auto-suspend."""
+    """High-performance database connection manager with pooling & automatic failover."""
     if not HAS_PSYCOPG2:
         yield None
         return
 
-    db_url = DATABASE_URL or os.getenv("DATABASE_URL", "")
-    if not db_url:
-        yield None
-        return
-
+    pool = get_pool()
     conn = None
+    from_pool = False
+
     try:
-        conn = psycopg2.connect(
-            db_url,
-            cursor_factory=RealDictCursor,
-            connect_timeout=10,
-        )
-        conn.autocommit = True
+        if pool:
+            try:
+                conn = pool.getconn()
+                from_pool = True
+                conn.autocommit = True
+            except Exception as e:
+                logger.warning(f"Pool getconn failed, creating fallback connection: {e}")
+                conn = None
+
+        if conn is None:
+            db_url = DATABASE_URL or os.getenv("DATABASE_URL", "")
+            if not db_url:
+                yield None
+                return
+            conn = psycopg2.connect(
+                db_url,
+                cursor_factory=RealDictCursor,
+                connect_timeout=8,
+            )
+            conn.autocommit = True
+
         yield conn
     except Exception as e:
-        logger.error(f"Database query connection error: {e}")
+        logger.error(f"Database query error: {e}")
         if conn:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         raise
     finally:
-        if conn and not conn.closed:
-            conn.close()
+        if conn:
+            if from_pool and pool:
+                try:
+                    pool.putconn(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+            else:
+                try:
+                    if not conn.closed:
+                        conn.close()
+                except Exception:
+                    pass
 
 
 def get_services() -> list[dict]:
-    """Fetch all active services from the database."""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, name, description, price, duration, category "
-                'FROM services WHERE active = true ORDER BY "order" ASC'
-            )
-            return cur.fetchall()
+    """Fetch all active services from the database with fast in-memory cache."""
+    global _services_cache, _services_cache_time
+    import time
+    now = time.time()
+    if _services_cache and (now - _services_cache_time) < _CACHE_TTL:
+        return _services_cache
+
+    try:
+        with get_db_connection() as conn:
+            if not conn:
+                return _services_cache
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, name, description, price, duration, category "
+                    'FROM services WHERE active = true ORDER BY "order" ASC'
+                )
+                services = [dict(row) for row in cur.fetchall()]
+                if services:
+                    _services_cache = services
+                    _services_cache_time = now
+                return services
+    except Exception as e:
+        logger.error(f"Error fetching services: {e}")
+        return _services_cache
 
 
 def get_service_by_name(name: str) -> Optional[dict]:
-    """Find a service by partial name match."""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, name, description, price, duration, category "
-                "FROM services WHERE active = true AND LOWER(name) LIKE %s",
-                (f"%{name.lower()}%",),
-            )
-            return cur.fetchone()
+    """Find a service by partial name match using cache first."""
+    if not name:
+        return None
+    name_clean = name.lower().strip()
+    
+    # 1. Check memory cache first (0ms)
+    services = get_services()
+    for s in services:
+        if name_clean in s["name"].lower() or s["name"].lower() in name_clean:
+            return s
+
+    # 2. Database query fallback
+    try:
+        with get_db_connection() as conn:
+            if not conn:
+                return None
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, name, description, price, duration, category "
+                    "FROM services WHERE active = true AND LOWER(name) LIKE %s LIMIT 1",
+                    (f"%{name_clean}%",),
+                )
+                row = cur.fetchone()
+                return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"Error finding service by name: {e}")
+        return None
 
 
 def get_service_by_index(index: int) -> Optional[dict]:
-    """Get a service by its display order (1-based index)."""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                'SELECT id, name, description, price, duration, category '
-                'FROM services WHERE active = true ORDER BY "order" ASC '
-                "LIMIT 1 OFFSET %s",
-                (index - 1,),
-            )
-            return cur.fetchone()
+    """Get a service by its display order (1-based index) using cache first."""
+    if index <= 0:
+        return None
+
+    # 1. Check memory cache first (0ms)
+    services = get_services()
+    if services and 1 <= index <= len(services):
+        return services[index - 1]
+
+    # 2. Database query fallback
+    try:
+        with get_db_connection() as conn:
+            if not conn:
+                return None
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT id, name, description, price, duration, category '
+                    'FROM services WHERE active = true ORDER BY "order" ASC '
+                    "LIMIT 1 OFFSET %s",
+                    (index - 1,),
+                )
+                row = cur.fetchone()
+                return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"Error getting service by index: {e}")
+        return None
 
 
 def find_customer_by_instagram(ig_id: str) -> Optional[dict]:
@@ -237,22 +327,35 @@ def get_customer_history(phone: str) -> list[dict]:
         return []
 
 
+_gallery_cache: dict[str, dict] = {}
+
+
 def get_gallery_image_for_category(category: str) -> Optional[dict]:
-    """Get a gallery image URL for a service category.
+    """Get a gallery image URL for a service category with fast in-memory cache.
     Used to send portfolio photos when a service is selected."""
     if not category:
         return None
+    cat_key = category.lower().strip()
+    if cat_key in _gallery_cache:
+        return _gallery_cache[cat_key]
+
     try:
         with get_db_connection() as conn:
+            if not conn:
+                return None
             with conn.cursor() as cur:
                 cur.execute(
                     'SELECT url, alt FROM gallery_images '
                     'WHERE active = true AND LOWER(category) = %s '
                     'ORDER BY "order" ASC LIMIT 1',
-                    (category.lower(),)
+                    (cat_key,)
                 )
                 row = cur.fetchone()
-                return dict(row) if row else None
+                if row:
+                    data = dict(row)
+                    _gallery_cache[cat_key] = data
+                    return data
+                return None
     except Exception as e:
         logger.warning(f"Error fetching gallery image: {e}")
         return None

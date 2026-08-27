@@ -134,9 +134,28 @@ _HUMAN_ESCALATION_KEYWORDS = frozenset({
 })
 
 
+_NUMBER_CHOICES = frozenset({
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+    "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez",
+    "el 1", "el 2", "el 3", "el 4", "el 5", "el 6",
+    "la 1", "la 2", "la 3", "la 4", "la 5", "la 6",
+    "opcion 1", "opcion 2", "opcion 3", "opción 1", "opción 2", "opción 3",
+})
+
+_CONFIRMATION_CHOICES = frozenset({
+    "si", "sí", "yes", "dale", "ok", "confirmo", "confirmar",
+    "así es", "asi es", "perfecto", "vamos", "bueno", "acepto", "confirmado",
+    "no", "nope", "nah", "cancelar", "cambiar", "no quiero",
+})
+
+
 def _classify_by_rules(text: str) -> str | None:
-    """Clasificación rápida basada en reglas deterministas."""
+    """Clasificación rápida basada en reglas deterministas (0ms latency)."""
     t = text.lower().strip()
+
+    # Fast path para opciones numéricas y respuestas cortas de flujo
+    if t.isdigit() or t in _NUMBER_CHOICES:
+        return "OTHER"  # Dejar que la máquina de estados por etapa maneje el número directamente
 
     # THANKS tiene prioridad sobre GREETING
     if any(w in t for w in _THANKS_SET):
@@ -198,9 +217,10 @@ def classify_intent(message: str) -> str:
     Clasifica el mensaje del cliente en una de las categorías soportadas.
 
     Prioridad:
-      1. Reglas rápidas (keywords, sets)
-      2. LLM con prompt few-shot (para casos ambiguos)
-      3. Default: OTHER
+      1. Reglas rápidas (keywords, sets) -> 0ms
+      2. Si el mensaje es muy corto (< 4 palabras), retornar OTHER sin llamar al LLM
+      3. LLM con prompt few-shot (solo para mensajes complejos/largos)
+      4. Default: OTHER
     """
     text = message.lower().strip()
 
@@ -209,15 +229,19 @@ def classify_intent(message: str) -> str:
     if rule_result:
         return rule_result
 
-    # LLM classification fallback (puede ser costoso, usar con moderación)
+    # Si es un mensaje corto (ej. nombres, fechas cortas, etc.), no llamar al LLM
+    if len(text.split()) <= 2:
+        return "OTHER"
+
+    # LLM classification fallback (con timeout estricto para no bloquear)
     try:
         prompt = INTENT_CLASSIFIER_PROMPT.replace("{message}", message)
-        raw_res = llm_pool.get_completion([], system_msg=prompt)
+        raw_res = llm_pool.get_completion([], system_msg=prompt, timeout_sec=6, max_retries=1)
         if raw_res:
             cleaned = raw_res.strip().upper()
             for v in VALID_INTENTS:
                 if v in cleaned:
-                    logger.info(f"Intent LYY classified as {v}: {message[:50]}")
+                    logger.info(f"Intent classified as {v}: {message[:50]}")
                     return v
     except Exception as e:
         logger.warning(f"Intent classification LLM failed: {e}")

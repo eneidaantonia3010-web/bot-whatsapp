@@ -292,7 +292,7 @@ export async function initNativeWhatsApp(): Promise<void> {
             console.log(`🤖 Calling Python Bot at: ${BOT_URL}/process-message`);
             
             const botController = new AbortController();
-            const botTimeout = setTimeout(() => botController.abort(), 15000);
+            const botTimeout = setTimeout(() => botController.abort(), 45000); // 45s safety timeout
             
             const agentResponse = await fetch(`${BOT_URL}/process-message`, {
               method: 'POST',
@@ -329,25 +329,27 @@ export async function initNativeWhatsApp(): Promise<void> {
                 console.warn(`⚠️ DB outbound log warning: ${logErr.message}`);
               }
 
-              // Send reply via Global Outbound Queue (Anti-Ban 5s gap + presence simulation)
+              // Send reply via Global Outbound Queue (Fast, natural presence simulation)
               if (sock && connectionState === 'open') {
-                const sendJid = (msg.key as any).remoteJidAlt || (msg.key as any).participantPn || remoteJid;
+                const targetJid = remoteJid.endsWith('@lid') && ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
+                  ? ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
+                  : remoteJid;
 
                 await enqueueGlobalOutbound(async () => {
                   if (!sock || connectionState !== 'open') return;
 
-                  // 1. Simular presencia "composing" (escribiendo) durante 2.5 a 4 segundos
-                  const typingDelay = Math.floor(Math.random() * 1500) + 2500; // 2500ms - 4000ms
-                  console.log(`✍️ Simulating presence 'composing' for ${typingDelay}ms to ${remoteJid}... key:`, JSON.stringify(msg.key));
-                  await sock.sendPresenceUpdate('composing', remoteJid);
+                  // 1. Simular presencia "composing" (escribiendo) breve y natural (600ms - 1200ms)
+                  const typingDelay = Math.floor(Math.random() * 600) + 600;
+                  await sock.sendPresenceUpdate('composing', targetJid);
                   await new Promise((res) => setTimeout(res, typingDelay));
+                  await sock.sendPresenceUpdate('paused', targetJid);
 
                   // 2. Enviar el mensaje (con imagen del portfolio si está disponible)
                   try {
                     if (imageUrl) {
-                      console.log(`🖼️ Fetching portfolio image for ${remoteJid}: ${imageUrl}`);
+                      console.log(`🖼️ Fetching portfolio image for ${targetJid}: ${imageUrl}`);
                       const imgController = new AbortController();
-                      const imgTimeout = setTimeout(() => imgController.abort(), 10000); // 10s timeout
+                      const imgTimeout = setTimeout(() => imgController.abort(), 6000); // 6s timeout
 
                       try {
                         const imgRes = await fetch(imageUrl, { signal: imgController.signal });
@@ -356,34 +358,26 @@ export async function initNativeWhatsApp(): Promise<void> {
                         if (imgRes.ok) {
                           const arrayBuf = await imgRes.arrayBuffer();
                           const buffer = Buffer.from(arrayBuf);
-                          await sock.sendMessage(remoteJid, {
+                          await sock.sendMessage(targetJid, {
                             image: buffer,
+                            mimetype: 'image/jpeg',
                             caption: reply,
                           }, { quoted: msg });
-                          console.log(`✅ Native WA reply sent to ${remoteJid} (with image)`);
+                          console.log(`✅ Native WA reply sent to ${targetJid} (with image)`);
                         } else {
                           throw new Error(`HTTP ${imgRes.status}`);
                         }
                       } catch (fetchErr: any) {
-                        console.error(`⚠️ Image fetch failed for ${remoteJid}: ${fetchErr.message}. Sending text only.`);
-                        await sock.sendMessage(remoteJid, { text: reply }, { quoted: msg });
+                        console.error(`⚠️ Image fetch failed for ${targetJid}: ${fetchErr.message}. Sending text only.`);
+                        await sock.sendMessage(targetJid, { text: reply }, { quoted: msg });
                       }
                     } else {
-                      await sock.sendMessage(remoteJid, { text: reply }, { quoted: msg });
-                      console.log(`✅ Native WA reply sent to ${remoteJid} (text only)`);
+                      await sock.sendMessage(targetJid, { text: reply }, { quoted: msg });
+                      console.log(`✅ Native WA reply sent to ${targetJid} (text only)`);
                     }
                   } catch (e1) {
-                    console.error(`⚠️ Error sending quoted to ${remoteJid}, trying standard send:`, e1);
-                    await sock.sendMessage(remoteJid, { text: reply });
-                  }
-
-                  if (sendJid !== remoteJid) {
-                    try {
-                      await sock.sendMessage(sendJid, { text: reply });
-                      console.log(`✅ Native WA reply sent to alt JID ${sendJid}`);
-                    } catch (e2) {
-                      // ignore alt JID fallback error
-                    }
+                    console.error(`⚠️ Error sending to ${targetJid}, trying direct text fallback:`, e1);
+                    await sock.sendMessage(targetJid, { text: reply });
                   }
                 });
               }
@@ -430,7 +424,7 @@ export async function sendNativeWhatsAppMessage(to: string, message: string): Pr
       if (!sock || connectionState !== 'open') return false;
 
       // 1. Simular presencia 'composing'
-      const typingDelay = Math.floor(Math.random() * 1500) + 2000;
+      const typingDelay = Math.floor(Math.random() * 600) + 600;
       await sock.sendPresenceUpdate('composing', formattedJid);
       await new Promise((res) => setTimeout(res, typingDelay));
       await sock.sendPresenceUpdate('paused', formattedJid);

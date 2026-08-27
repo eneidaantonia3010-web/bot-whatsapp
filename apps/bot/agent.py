@@ -462,24 +462,6 @@ async def _process_message_internal(
             save_conversation_state(sender_id, conv)
             return response
 
-        # ── Func 28: Auto-escalation after 3 consecutive OTHER/fallback ────
-        if intent == "OTHER":
-            conv["fallback_count"] = conv.get("fallback_count", 0) + 1
-            if conv["fallback_count"] >= 3:
-                conv["stage"] = "human_escalated"
-                summary = build_escalation_summary(conv, message)
-                await escalate_to_human(sender_id, "Cliente", summary, message)
-                response = (
-                    "Parece que no estoy entendiendo bien lo que necesitás. 😔\n\n"
-                    + t("human_escalation", lang)
-                )
-                chat_history.append({"role": "model", "parts": [response]})
-                save_conversation_state(sender_id, conv)
-                return response
-        else:
-            # Reset fallback counter on successful intent match
-            conv["fallback_count"] = 0
-
         # ── Func 28: If already escalated, pass through to human ────
         if conv["stage"] == "human_escalated":
             response = t("human_notified", lang)

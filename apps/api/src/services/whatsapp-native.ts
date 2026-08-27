@@ -157,10 +157,12 @@ export async function initNativeWhatsApp(): Promise<void> {
         connectionState = 'open';
         currentQRBase64 = null; // Clear QR once connected
         console.log('🟢 Native WhatsApp: Connection OPEN & ACTIVE!');
-        try {
-          await sock.sendPresenceUpdate('available');
-        } catch (presenceErr) {
-          console.warn('⚠️ Error updating initial available presence:', presenceErr);
+        if (sock) {
+          try {
+            await sock.sendPresenceUpdate('available');
+          } catch (presenceErr) {
+            console.warn('⚠️ Error updating initial available presence:', presenceErr);
+          }
         }
       }
 

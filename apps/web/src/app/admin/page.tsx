@@ -77,6 +77,7 @@ import {
 
 import { getToken, removeToken } from '@/lib/auth';
 import { useTranslation } from '@/i18n/I18nContext';
+import { useRealtimeAppointments } from '@/hooks/useRealtimeAppointments';
 
 
 // ----------------------------------------------------
@@ -377,6 +378,51 @@ export default function AdminPage() {
 
     initAdmin();
   }, [router]);
+
+  // Realtime Live Event Listener (Server-Sent Events)
+  useRealtimeAppointments((event) => {
+    if (event.type === 'APPOINTMENT_CREATED') {
+      const apt = event.payload;
+      if (apt) {
+        const newApt: MockAppointment = {
+          id: apt.id,
+          customerName: apt.customer?.name || 'Cliente',
+          customerPhone: apt.customer?.phone || '',
+          service: apt.service?.name || 'Servicio',
+          category: apt.service?.category || 'cabello',
+          date: apt.date ? apt.date.split('T')[0] : '',
+          time: apt.date
+            ? new Date(apt.date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+            : '',
+          status: apt.status || 'PENDING',
+          source: apt.source || 'WEB',
+          price: apt.service?.price || 0,
+        };
+        setAppointments((prev) => [newApt, ...prev.filter((p) => p.id !== apt.id)]);
+        addToast(
+          'success',
+          '✨ Nueva Reserva en Vivo',
+          `${newApt.customerName} reservó ${newApt.service} para las ${newApt.time}hs.`
+        );
+      }
+    } else if (event.type === 'APPOINTMENT_CANCELLED') {
+      const apt = event.payload;
+      if (apt) {
+        setAppointments((prev) =>
+          prev.map((p) => (p.id === apt.id ? { ...p, status: 'CANCELLED' } : p))
+        );
+        addToast('info', 'Turno Cancelado', 'Un turno ha sido cancelado y su horario liberado.');
+      }
+    } else if (event.type === 'APPOINTMENT_RESCHEDULED' || event.type === 'APPOINTMENT_CONFIRMED') {
+      const apt = event.payload;
+      if (apt) {
+        setAppointments((prev) =>
+          prev.map((p) => (p.id === apt.id ? { ...p, status: apt.status, date: apt.date?.split('T')[0] || p.date } : p))
+        );
+        addToast('success', 'Turno Actualizado', 'La agenda se actualizó en tiempo real.');
+      }
+    }
+  });
 
   // Appointment Status Change Handler
   const handleStatusChange = async (id: string, newStatus: MockAppointment['status']) => {

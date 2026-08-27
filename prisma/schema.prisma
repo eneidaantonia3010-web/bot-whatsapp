@@ -93,6 +93,7 @@ model Customer {
   email                  String?
   instagram              String?
   notes                  String?
+  preferences            Json?         // Semantic memory: preferred styles, hair formulas, preferred times
   blocked                Boolean       @default(false)
   blockedReason          String?       @map("blocked_reason")
   lateCancellationsCount Int           @default(0) @map("late_cancellations_count")
@@ -105,8 +106,27 @@ model Customer {
   @@map("customers")
 }
 
+model Staff {
+  id           String        @id @default(cuid())
+  name         String
+  email        String?       @unique
+  phone        String?
+  avatarUrl    String?       @map("avatar_url")
+  bio          String?
+  specialties  String[]      @default([])
+  active       Boolean       @default(true)
+  calendarId   String?       @map("calendar_id")
+  workingHours Json?         @map("working_hours")
+  appointments Appointment[]
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@map("staff")
+}
+
 model Appointment {
   id              String             @id @default(cuid())
+  token           String             @unique @default(cuid())
   date            DateTime
   endDate         DateTime           @map("end_date")
   status          AppointmentStatus  @default(PENDING)
@@ -119,15 +139,19 @@ model Appointment {
   customer        Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
   serviceId       String             @map("service_id")
   service         Service            @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  staffId         String?            @map("staff_id")
+  staff           Staff?             @relation(fields: [staffId], references: [id], onDelete: SetNull)
   calendarEventId String?            @unique @map("calendar_event_id")
   source          Platform           @default(WEB)
   review          Review?
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
 
+  @@index([token])
   @@index([date])
   @@index([customerId])
   @@index([serviceId])
+  @@index([staffId])
   @@index([status])
   @@map("appointments")
 }

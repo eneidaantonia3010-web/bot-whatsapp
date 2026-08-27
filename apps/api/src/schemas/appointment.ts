@@ -13,6 +13,7 @@ export const createAppointmentSchema = z.object({
   customerPhone: z.string().min(6, { message: 'El teléfono debe tener al menos 6 dígitos.' }),
   customerEmail: z.string().email({ message: 'Email inválido.' }).optional().nullable().or(z.literal('')),
   notes: z.string().optional().nullable(),
+  staffId: z.string().optional().nullable(),
   source: z.enum(['INSTAGRAM', 'WHATSAPP', 'WEB']).optional().default('WEB'),
   recurrence: z.enum(['NONE', 'WEEKLY', 'BIWEEKLY', 'MONTHLY']).optional().default('NONE'),
 });

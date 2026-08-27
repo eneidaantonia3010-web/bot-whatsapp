@@ -359,3 +359,49 @@ def get_gallery_image_for_category(category: str) -> Optional[dict]:
     except Exception as e:
         logger.warning(f"Error fetching gallery image: {e}")
         return None
+
+
+def get_customer_preferences(phone: str) -> Optional[dict]:
+    """Retrieve semantic memory and preferences for a customer by phone number."""
+    if not phone or len(phone) < 6:
+        return None
+    try:
+        phone_suffix = phone[-8:] if len(phone) >= 8 else phone
+        with get_db_connection() as conn:
+            if not conn:
+                return None
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT preferences, name, notes FROM customers WHERE phone LIKE %s LIMIT 1",
+                    (f"%{phone_suffix}%",)
+                )
+                row = cur.fetchone()
+                if row and row.get("preferences"):
+                    val = row["preferences"]
+                    return json.loads(val) if isinstance(val, str) else val
+                return None
+    except Exception as e:
+        logger.warning(f"Error reading customer preferences: {e}")
+        return None
+
+
+def update_customer_preferences(phone: str, preferences: dict) -> bool:
+    """Update semantic memory and preferences for a customer by phone number."""
+    if not phone or not preferences:
+        return False
+    try:
+        phone_suffix = phone[-8:] if len(phone) >= 8 else phone
+        with get_db_connection() as conn:
+            if not conn:
+                return False
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE customers SET preferences = %s, updated_at = NOW() WHERE phone LIKE %s",
+                    (json.dumps(preferences), f"%{phone_suffix}%")
+                )
+                conn.commit()
+                return True
+    except Exception as e:
+        logger.warning(f"Error updating customer preferences: {e}")
+        return False
+

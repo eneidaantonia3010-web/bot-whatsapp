@@ -24,6 +24,8 @@ import { usersRouter } from './routes/users';
 import { whatsappAdminRouter } from './routes/whatsapp-admin';
 import { blockedTimesRouter } from './routes/blocked-times';
 import { waitlistRouter } from './routes/waitlist';
+import { staffRouter } from './routes/staff';
+import { realtimeRouter } from './routes/realtime';
 import { instagramWebhookRouter } from './routes/webhooks/instagram';
 import { whatsappWebhookRouter } from './routes/webhooks/whatsapp';
 import { evolutionWebhookRouter } from './routes/webhooks/evolution';
@@ -33,7 +35,17 @@ import { initCronJobs } from './services/cron';
 import { prisma } from './services/prisma';
 import { ensureAdminUserExists } from './services/seed-user';
 import { initNativeWhatsApp } from './services/whatsapp-native';
+import { logger } from './services/logger';
 import { config } from './config';
+
+// Global error traps to prevent node process death
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, 'Unhandled Promise Rejection');
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, 'Uncaught Exception in Node Runtime');
+});
 
 const app = express();
 const PORT = config.PORT;
@@ -72,9 +84,11 @@ app.use('/api/webhooks/evolution', webhookLimiter, evolutionWebhookRouter);
 // ---- Authentication & Public Routes ----
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/staff', staffRouter);
+app.use('/api/realtime', realtimeRouter);
 app.use('/api/services', publicApiLimiter, servicesRouter);
 app.use('/api/gallery', publicApiLimiter, galleryRouter);
-app.use('/api/appointments', appointmentCreationLimiter, appointmentsRouter);
+app.use('/api/appointments', appointmentsRouter);
 app.use('/api/blocked-times', blockedTimesRouter);
 app.use('/api/waitlist', waitlistRouter);
 

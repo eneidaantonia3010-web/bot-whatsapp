@@ -45,6 +45,8 @@ from services.faq_handler import get_faq_response
 from services.intent_classifier import classify_intent
 from services.language_detector import detect_language, t
 from services.escalation import escalate_to_human, build_escalation_summary
+from services.tts import synthesize_voice_note
+from services.memory import format_memory_system_context, remember_preference
 from services.prompts import (
     SERVICE_HELP_PROMPT,
     DATE_CLARIFICATION_PROMPT,
@@ -900,6 +902,50 @@ async def _process_message_internal(
 
             else:
                 response = "Escribí *sí* para confirmar o *no* para cambiar algo 😊"
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return response
+
+        # ---- SELECT_TIME (Conflict recovery) ----
+        elif stage == "select_time":
+            parsed = parse_date(message)
+            if not parsed and conv.get("selected_date"):
+                parsed = parse_date(f"{conv['selected_date']} {message}")
+
+            if parsed:
+                date_str, time_str = parsed
+                service = conv.get("selected_service")
+                if service:
+                    availability = await get_availability(date_str, service["id"])
+                    matching_slot = any(s["time"] == time_str and s.get("available") for s in availability)
+                    if availability and not matching_slot:
+                        available_times = [s["time"] for s in availability if s.get("available")][:4]
+                        times_str = ", ".join([f"*{t}hs*" for t in available_times]) if available_times else "ninguno libre"
+                        response = f"😔 A las *{time_str}hs* sigue ocupado. Horarios libres: {times_str}. ¿Cuál preferís? 😊"
+                        chat_history.append({"role": "model", "parts": [response]})
+                        save_conversation_state(sender_id, conv)
+                        return response
+
+                conv["selected_date"] = date_str
+                conv["selected_time"] = time_str
+                display_date = _format_date_display(date_str)
+                service_display = conv.get("selected_service", {}).get("name", "tu servicio")
+                price = _format_price(conv.get("selected_service", {}).get("price", 0))
+
+                response = (
+                    f"✨ *Horario actualizado:*\n\n"
+                    f"💇 Servicio: *{service_display}*\n"
+                    f"💰 Precio: {price}\n"
+                    f"📅 Nueva fecha: *{display_date} a las {time_str}hs*\n"
+                    f"👤 Nombre: *{conv.get('customer_name', '')}*\n\n"
+                    f"¿Confirmamos la reserva para este horario? Escribí *sí* 💕"
+                )
+                conv["stage"] = "confirmation"
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return response
+            else:
+                response = "No entendí el nuevo horario. Por favor escribí la hora que preferís (ejemplo: _14:00hs_ o _mañana a las 11_) 😊"
                 chat_history.append({"role": "model", "parts": [response]})
                 save_conversation_state(sender_id, conv)
                 return response

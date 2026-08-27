@@ -4,8 +4,153 @@ import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent, getFreeB
 import { sendWhatsAppNotification, sendBookingConfirmation } from '../services/whatsapp';
 import { createAppointmentSchema, updateAppointmentSchema } from '../schemas/appointment';
 import { requireAdmin } from '../middleware/auth';
+import { broadcastRealtimeEvent } from './realtime';
 
 export const appointmentsRouter = Router();
+
+// GET /api/appointments/by-token/:token — Self-service customer portal appointment lookup
+appointmentsRouter.get('/by-token/:token', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.params;
+    const appointment = await prisma.appointment.findUnique({
+      where: { token: token as string },
+      include: {
+        service: true,
+        customer: true,
+        staff: true,
+      },
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Turno no encontrado' });
+    }
+
+    res.json(appointment);
+  } catch (error) {
+    console.error('Error fetching appointment by token:', error);
+    res.status(500).json({ error: 'Error al obtener el turno' });
+  }
+});
+
+// POST /api/appointments/by-token/:token/reschedule — Self-service customer reschedule
+appointmentsRouter.post('/by-token/:token/reschedule', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.params;
+    const { newDate } = req.body;
+
+    if (!newDate || isNaN(Date.parse(newDate))) {
+      return res.status(400).json({ error: 'newDate es requerida y debe ser válida' });
+    }
+
+    const appointment = await prisma.appointment.findUnique({
+      where: { token: token as string },
+      include: { service: true, customer: true, staff: true },
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Turno no encontrado' });
+    }
+
+    if (appointment.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'No se puede reprogramar un turno cancelado' });
+    }
+
+    const startDate = new Date(newDate);
+    const endDate = new Date(startDate);
+    endDate.setMinutes(endDate.getMinutes() + appointment.service.duration);
+
+    // Overlap check
+    const overlapping = await prisma.appointment.findFirst({
+      where: {
+        id: { not: appointment.id },
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        date: { lt: endDate },
+        endDate: { gt: startDate },
+      },
+    });
+
+    if (overlapping) {
+      return res.status(409).json({ error: 'El horario seleccionado ya no está disponible.' });
+    }
+
+    // Update Google Calendar
+    if (appointment.calendarEventId) {
+      try {
+        await updateCalendarEvent(appointment.calendarEventId, {
+          summary: `${appointment.service.name} — ${appointment.customer.name}`,
+          startTime: startDate,
+          endTime: endDate,
+        });
+      } catch (calErr) {
+        console.warn('Google Calendar update warning:', calErr);
+      }
+    }
+
+    const updated = await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        date: startDate,
+        endDate,
+        status: 'CONFIRMED',
+      },
+      include: { service: true, customer: true, staff: true },
+    });
+
+    broadcastRealtimeEvent({
+      type: 'APPOINTMENT_RESCHEDULED',
+      payload: updated,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error rescheduling by token:', error);
+    res.status(500).json({ error: 'Error al reprogramar el turno' });
+  }
+});
+
+// POST /api/appointments/by-token/:token/cancel — Self-service customer cancel
+appointmentsRouter.post('/by-token/:token/cancel', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.params;
+    const { reason } = req.body;
+
+    const existing = await prisma.appointment.findUnique({
+      where: { token: token as string },
+      include: { service: true, customer: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Turno no encontrado' });
+    }
+
+    if (existing.calendarEventId) {
+      try {
+        await deleteCalendarEvent(existing.calendarEventId);
+      } catch (err) {
+        console.warn('Calendar delete warning:', err);
+      }
+    }
+
+    const updated = await prisma.appointment.update({
+      where: { id: existing.id },
+      data: {
+        status: 'CANCELLED',
+        notes: reason ? `${existing.notes || ''} | Cancelado por cliente: ${reason}` : existing.notes,
+      },
+      include: { service: true, customer: true },
+    });
+
+    broadcastRealtimeEvent({
+      type: 'APPOINTMENT_CANCELLED',
+      payload: updated,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error cancelling by token:', error);
+    res.status(500).json({ error: 'Error al cancelar el turno' });
+  }
+});
 
 // GET /api/appointments/customer/upcoming — Get upcoming active appointments for a customer
 appointmentsRouter.get('/customer/upcoming', async (req: Request, res: Response) => {
@@ -354,8 +499,7 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Datos de reserva inválidos', details: parseResult.error.flatten() });
     }
 
-    const { date, serviceId, customerName, customerPhone, customerEmail, notes, source, recurrence } = parseResult.data;
-
+    const { date, serviceId, customerName, customerPhone, customerEmail, notes, staffId, source, recurrence } = parseResult.data;
 
     // Get service for duration
     const service = await prisma.service.findUnique({ where: { id: serviceId } });
@@ -410,6 +554,7 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
             status: { in: ['PENDING', 'CONFIRMED'] },
             date: { lt: endDate },
             endDate: { gt: startDate },
+            ...(staffId ? { staffId } : {}),
           },
         });
 
@@ -437,12 +582,14 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
             recurrence: (recurrence || 'NONE') as any,
             customerId: customer.id,
             serviceId: service.id,
+            staffId: staffId || null,
             calendarEventId,
             source: source as any,
           },
           include: {
             customer: true,
             service: true,
+            staff: true,
           },
         });
       });
@@ -456,6 +603,12 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
       }
       throw txErr;
     }
+
+    // Broadcast to connected admin dashboards in real time
+    broadcastRealtimeEvent({
+      type: 'APPOINTMENT_CREATED',
+      payload: appointment,
+    });
 
     // ── Func 2: If booking was from waitlist, update waitlist status to BOOKED ──
     try {

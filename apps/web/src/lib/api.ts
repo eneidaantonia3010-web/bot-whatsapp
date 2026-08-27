@@ -182,3 +182,31 @@ export const sendChatMessage = (message: string, senderId: string) =>
     method: 'POST',
     body: JSON.stringify({ message, senderId, platform: 'WEB' }),
   });
+
+// Staff
+export const getStaff = () =>
+  fetchAPI<Array<{
+    id: string;
+    name: string;
+    avatarUrl?: string;
+    bio?: string;
+    specialties: string[];
+    active: boolean;
+  }>>('/api/staff');
+
+// Customer Self-Service Portal
+export const getAppointmentByToken = (token: string) =>
+  fetchAPI<Appointment & { staff?: { name: string; avatarUrl?: string } }>(`/api/appointments/by-token/${token}`);
+
+export const rescheduleAppointmentByToken = (token: string, newDate: string) =>
+  fetchAPI<Appointment>(`/api/appointments/by-token/${token}/reschedule`, {
+    method: 'POST',
+    body: JSON.stringify({ newDate }),
+  });
+
+export const cancelAppointmentByToken = (token: string, reason?: string) =>
+  fetchAPI<Appointment>(`/api/appointments/by-token/${token}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+

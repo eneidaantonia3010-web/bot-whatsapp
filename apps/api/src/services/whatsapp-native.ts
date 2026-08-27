@@ -129,7 +129,7 @@ export async function initNativeWhatsApp(): Promise<void> {
       browser: ['Glow Studio by Sofia', 'Chrome', '120.0.0'],
       generateHighQualityLinkPreview: true,
       syncFullHistory: false,
-      markOnlineOnConnect: false,
+      markOnlineOnConnect: true,
     });
 
     // Save creds on update
@@ -157,6 +157,11 @@ export async function initNativeWhatsApp(): Promise<void> {
         connectionState = 'open';
         currentQRBase64 = null; // Clear QR once connected
         console.log('🟢 Native WhatsApp: Connection OPEN & ACTIVE!');
+        try {
+          await sock.sendPresenceUpdate('available');
+        } catch (presenceErr) {
+          console.warn('⚠️ Error updating initial available presence:', presenceErr);
+        }
       }
 
       if (connection === 'close') {
@@ -255,6 +260,17 @@ export async function initNativeWhatsApp(): Promise<void> {
 
         const senderName = msg.pushName || remoteJid.split('@')[0];
 
+        // Send instant read receipt and start typing indicator
+        if (sock && connectionState === 'open') {
+          try {
+            await sock.readMessages([msg.key]);
+            await sock.presenceSubscribe(remoteJid);
+            await sock.sendPresenceUpdate('composing', remoteJid);
+          } catch (pErr) {
+            // Ignore presence startup error
+          }
+        }
+
         // Enqueue per sender to prevent race conditions
         await enqueueForSender(remoteJid, async () => {
           console.log(`📩 Native WA message from ${remoteJid} (${senderName}): ${textMessage}`);
@@ -329,7 +345,7 @@ export async function initNativeWhatsApp(): Promise<void> {
                 console.warn(`⚠️ DB outbound log warning: ${logErr.message}`);
               }
 
-              // Send reply via Global Outbound Queue (Fast, natural presence simulation)
+              // Send reply via Global Outbound Queue (Visible, natural presence simulation)
               if (sock && connectionState === 'open') {
                 const targetJid = remoteJid.endsWith('@lid') && ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
                   ? ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
@@ -338,11 +354,20 @@ export async function initNativeWhatsApp(): Promise<void> {
                 await enqueueGlobalOutbound(async () => {
                   if (!sock || connectionState !== 'open') return;
 
-                  // 1. Simular presencia "composing" (escribiendo) breve y natural (600ms - 1200ms)
-                  const typingDelay = Math.floor(Math.random() * 600) + 600;
-                  await sock.sendPresenceUpdate('composing', targetJid);
+                  // 1. Simular presencia "composing" (escribiendo) visible y natural (1.5s - 2.3s)
+                  const typingDelay = Math.floor(Math.random() * 800) + 1500;
+                  console.log(`✍️ Presence 'composing' (escribiendo...) for ${typingDelay}ms to ${targetJid}`);
+                  
+                  try {
+                    await sock.sendPresenceUpdate('composing', targetJid);
+                    if (targetJid !== remoteJid) {
+                      await sock.sendPresenceUpdate('composing', remoteJid);
+                    }
+                  } catch (ePresence) {
+                    console.warn('Presence update error:', ePresence);
+                  }
+
                   await new Promise((res) => setTimeout(res, typingDelay));
-                  await sock.sendPresenceUpdate('paused', targetJid);
 
                   // 2. Enviar el mensaje (con imagen del portfolio si está disponible)
                   try {
@@ -423,11 +448,15 @@ export async function sendNativeWhatsAppMessage(to: string, message: string): Pr
     return await enqueueGlobalOutbound(async () => {
       if (!sock || connectionState !== 'open') return false;
 
-      // 1. Simular presencia 'composing'
-      const typingDelay = Math.floor(Math.random() * 600) + 600;
-      await sock.sendPresenceUpdate('composing', formattedJid);
+      // 1. Simular presencia 'composing' (escribiendo...) visible (1.5s - 2.2s)
+      const typingDelay = Math.floor(Math.random() * 700) + 1500;
+      try {
+        await sock.presenceSubscribe(formattedJid);
+        await sock.sendPresenceUpdate('composing', formattedJid);
+      } catch (pErr) {
+        // ignore
+      }
       await new Promise((res) => setTimeout(res, typingDelay));
-      await sock.sendPresenceUpdate('paused', formattedJid);
 
       // 2. Enviar mensaje
       await sock.sendMessage(formattedJid, { text: dynamicMessage });

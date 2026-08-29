@@ -1,8 +1,7 @@
 // ============================================
-// WhatsApp Service (Native Baileys + Optional Evolution Fallback)
+// WhatsApp Service (Native Baileys únicamente)
 // ============================================
 
-import { withRetry } from '../utils/retry';
 import { sendNativeWhatsAppMessage, getNativeStatus } from './whatsapp-native';
 import { config } from '../config';
 
@@ -12,49 +11,17 @@ interface SendMessageOptions {
 }
 
 export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): Promise<boolean> {
-  // Try Native In-App WhatsApp Service first
   const nativeStatus = getNativeStatus();
-  if (nativeStatus.state === 'open') {
-    const sentNative = await sendNativeWhatsAppMessage(to, message);
-    if (sentNative) return true;
-  }
-
-  // Fallback to Evolution API only if explicitly configured
-  if (!config.EVOLUTION_API_URL || !config.EVOLUTION_API_KEY) {
-    console.warn('⚠️ Native WhatsApp no conectado y Evolution API no configurada. Mensaje no enviado.');
+  if (nativeStatus.state !== 'open') {
+    console.warn('⚠️ Native WhatsApp no conectado. Mensaje no enviado (reintentar cuando la sesión esté abierta).');
     return false;
   }
 
-  try {
-    const targetNumber = to;
-    return await withRetry(async () => {
-      const response = await fetch(
-        `${config.EVOLUTION_API_URL}/message/sendText/${config.INSTANCE_NAME}`,
-        {
-          method: 'POST',
-          headers: {
-            'apikey': config.EVOLUTION_API_KEY,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            number: targetNumber,
-            text: message,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Evolution API HTTP ${response.status}: ${error}`);
-      }
-
-      console.log(`✅ Mensaje enviado a ${to} vía Evolution fallback`);
-      return true;
-    }, { maxRetries: 3, baseDelayMs: 1000 });
-  } catch (error) {
-    console.error('❌ Falló el envío del mensaje de WhatsApp tras reintentos:', error);
-    return false;
+  const sentNative = await sendNativeWhatsAppMessage(to, message);
+  if (!sentNative) {
+    console.error(`❌ Falló el envío nativo del mensaje a ${to}`);
   }
+  return sentNative;
 }
 
 export async function sendWhatsAppNotification(data: {

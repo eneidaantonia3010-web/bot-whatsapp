@@ -9,9 +9,17 @@ import httpx
 logger = logging.getLogger("glow_bot.calendar")
 
 try:
-    from config import API_URL
+    from config import API_URL, API_SECRET_KEY
 except ImportError:
     API_URL = os.getenv("API_URL", "https://glow-studio-api-2vzt.onrender.com")
+    API_SECRET_KEY = os.getenv("API_SECRET_KEY", "")
+
+
+def _get_auth_headers() -> dict[str, str]:
+    headers = {}
+    if API_SECRET_KEY:
+        headers["x-api-key"] = API_SECRET_KEY
+    return headers
 
 
 async def create_appointment_via_api(
@@ -27,6 +35,7 @@ async def create_appointment_via_api(
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{API_URL}/api/appointments",
+                headers=_get_auth_headers(),
                 json={
                     "date": date,
                     "serviceId": service_id,
@@ -51,22 +60,23 @@ async def create_appointment_via_api(
         return None
 
 
-async def get_availability(date: str, service_id: str) -> list[dict]:
-    """Get available time slots from the Express API."""
+async def get_availability(date: str, service_id: str) -> list[dict] | None:
+    """Get available time slots from the Express API. Returns None on network/API failure."""
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{API_URL}/api/appointments/availability",
+                headers=_get_auth_headers(),
                 params={"date": date, "serviceId": service_id},
                 timeout=10.0,
             )
             if response.status_code == 200:
                 return response.json()
             logger.warning(f"Availability check non-200 status: {response.status_code}")
-            return []
+            return None
     except Exception as e:
         logger.exception(f"Availability check error: {e}")
-        return []
+        return None
 
 
 async def get_upcoming_appointments(phone: str = None, instagram: str = None) -> list[dict]:
@@ -81,6 +91,7 @@ async def get_upcoming_appointments(phone: str = None, instagram: str = None) ->
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{API_URL}/api/appointments/customer/upcoming",
+                headers=_get_auth_headers(),
                 params=params,
                 timeout=10.0,
             )
@@ -104,6 +115,7 @@ async def confirm_upcoming_appointment(phone: str = None, instagram: str = None)
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{API_URL}/api/appointments/confirm-upcoming",
+                headers=_get_auth_headers(),
                 json=payload,
                 timeout=10.0,
             )
@@ -121,6 +133,7 @@ async def cancel_appointment(appointment_id: str, reason: str = "Cancelado por c
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{API_URL}/api/appointments/{appointment_id}/cancel",
+                headers=_get_auth_headers(),
                 json={"reason": reason},
                 timeout=10.0,
             )
@@ -138,6 +151,7 @@ async def reschedule_appointment(appointment_id: str, new_date: str) -> dict | N
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{API_URL}/api/appointments/{appointment_id}/reschedule",
+                headers=_get_auth_headers(),
                 json={"newDate": new_date},
                 timeout=10.0,
             )
@@ -162,6 +176,7 @@ async def add_to_waitlist_via_api(
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{API_URL}/api/waitlist",
+                headers=_get_auth_headers(),
                 json={
                     "customerName": customer_name,
                     "customerPhone": customer_phone,

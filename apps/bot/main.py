@@ -9,19 +9,25 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path="../../.env")
 load_dotenv(dotenv_path="../../.env.local")
 
-from fastapi import FastAPI, UploadFile, File, Request
+from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Security, Depends, status
+from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
+import hmac
 
 try:
-    from config import FRONTEND_URL, DEBUG_MODE, PORT, GROQ_API_KEY
+    from config import FRONTEND_URL, DEBUG_MODE, PORT, GROQ_API_KEY, BOT_API_KEY, IS_PROD, GROQ_MODEL
 except ImportError:
     FRONTEND_URL = os.getenv("FRONTEND_URL", "")
     DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
     PORT = int(os.getenv("PORT", os.getenv("BOT_PORT", "8000")))
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+    BOT_API_KEY = os.getenv("BOT_API_KEY", os.getenv("API_SECRET_KEY", ""))
+    IS_PROD = os.getenv("NODE_ENV") == "production" or os.getenv("RENDER") == "true"
+    GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 from models import MessageRequest, MessageResponse
 from agent import process_message
+from services.database import get_pool
 
 app = FastAPI(
     title="Glow Studio AI Agent",
@@ -29,15 +35,48 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Authentication Dependency for Internal Bot Endpoints
+api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
+bot_key_header = APIKeyHeader(name="x-bot-key", auto_error=False)
+
+
+async def verify_bot_api_key(
+    x_api_key: str = Security(api_key_header),
+    x_bot_key: str = Security(bot_key_header),
+):
+    """Verify mutual internal API key between Express API and Python Bot."""
+    if not BOT_API_KEY:
+        if IS_PROD:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="BOT_API_KEY / API_SECRET_KEY not configured on server",
+            )
+        return True
+
+    provided_key = x_api_key or x_bot_key
+    if not provided_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing required x-api-key authentication header",
+        )
+
+    if not hmac.compare_digest(provided_key.strip(), BOT_API_KEY.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid bot API key",
+        )
+    return True
+
+
 # CORS Configuration
 cors_origins_raw = os.getenv("CORS_ORIGINS", FRONTEND_URL)
 allowed_origins = [origin.strip() for origin in cors_origins_raw.split(",") if origin.strip()]
-if not allowed_origins:
-    allowed_origins = ["*"]
+if not allowed_origins and not IS_PROD:
+    allowed_origins = ["http://localhost:3000", "http://localhost:3001"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=allowed_origins if allowed_origins else [FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,15 +87,27 @@ app.add_middleware(
 @app.head("/")
 async def root():
     """Root endpoint for UptimeRobot and health monitoring."""
-    return {"status": "ok", "service": "glow-studio-bot", "model": "groq-llama-3.1-8b-instant"}
+    return {"status": "ok", "service": "glow-studio-bot", "model": GROQ_MODEL}
 
 
 @app.get("/health")
 @app.head("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "ok", "service": "glow-studio-bot", "model": "groq-llama-3.1-8b-instant"}
-
+    """Deep health check endpoint verifying database connectivity and LLM readiness."""
+    db_status = "connected"
+    pool = get_pool()
+    if pool is None and IS_PROD:
+        db_status = "disconnected"
+    
+    groq_configured = bool((GROQ_API_KEY or "").strip())
+    
+    return {
+        "status": "ok" if (db_status == "connected" or not IS_PROD) and groq_configured else "degraded",
+        "service": "glow-studio-bot",
+        "model": GROQ_MODEL,
+        "database": db_status,
+        "groq_configured": groq_configured,
+    }
 
 
 @app.get("/debug-agent")
@@ -70,13 +121,11 @@ async def debug_agent():
     return {
         "has_groq_key": bool(groq_keys),
         "groq_keys_count": len(groq_keys),
+        "model": GROQ_MODEL,
     }
 
 
-
-
-
-@app.post("/process-message", response_model=MessageResponse)
+@app.post("/process-message", response_model=MessageResponse, dependencies=[Depends(verify_bot_api_key)])
 async def handle_message(request: MessageRequest):
     """
     Process an incoming message from any platform (Instagram, WhatsApp, Web).
@@ -98,7 +147,7 @@ async def handle_message(request: MessageRequest):
     return MessageResponse(response=result)
 
 
-@app.post("/reset-conversation/{sender_id}")
+@app.post("/reset-conversation/{sender_id}", dependencies=[Depends(verify_bot_api_key)])
 async def reset_conversation(sender_id: str):
     """Reset a conversation state for a specific sender."""
     from agent import conversations
@@ -108,7 +157,7 @@ async def reset_conversation(sender_id: str):
     return {"status": "ok", "message": f"Conversation reset for {sender_id}"}
 
 
-@app.post("/transcribe-audio")
+@app.post("/transcribe-audio", dependencies=[Depends(verify_bot_api_key)])
 async def transcribe_audio_endpoint(request: Request):
     """
     Receive raw audio bytes or JSON with base64 audio in the request body,
@@ -146,7 +195,7 @@ async def transcribe_audio_endpoint(request: Request):
         return {"text": None, "status": "error", "error": str(e)}
 
 
-@app.post("/transcribe-audio-file")
+@app.post("/transcribe-audio-file", dependencies=[Depends(verify_bot_api_key)])
 async def transcribe_audio_file_endpoint(file: UploadFile = File(...)):
     """
     Receive an audio file upload (multipart/form-data),
@@ -174,7 +223,7 @@ async def transcribe_audio_file_endpoint(file: UploadFile = File(...)):
 
 
 
-@app.post("/analyze-image")
+@app.post("/analyze-image", dependencies=[Depends(verify_bot_api_key)])
 async def analyze_image_endpoint(request: Request):
     """
     Receive an image (base64) from WhatsApp, analyze it with Groq Vision,

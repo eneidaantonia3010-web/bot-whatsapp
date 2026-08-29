@@ -22,11 +22,18 @@ FRONTEND_URL = os.getenv(
     "https://glow-studio-web.onrender.com" if IS_PROD else "http://localhost:3000"
 )
 
+# Authentication & Mutual Secrets
+API_SECRET_KEY = os.getenv("API_SECRET_KEY", "")
+BOT_API_KEY = os.getenv("BOT_API_KEY", API_SECRET_KEY)
+
 # Database
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # AI / LLM (Groq)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_FALLBACK_MODEL = os.getenv("GROQ_FALLBACK_MODEL", "llama-3.1-8b-instant")
+GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview")
 
 # WhatsApp & Salon Info
 SALON_WHATSAPP = "".join(c for c in os.getenv("SALON_WHATSAPP", "5491178296781") if c.isdigit())

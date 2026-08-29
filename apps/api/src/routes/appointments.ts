@@ -3,7 +3,7 @@ import { prisma } from '../services/prisma';
 import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent, getFreeBusy } from '../services/calendar';
 import { sendWhatsAppNotification, sendBookingConfirmation } from '../services/whatsapp';
 import { createAppointmentSchema, updateAppointmentSchema } from '../schemas/appointment';
-import { requireAdmin } from '../middleware/auth';
+import { requireAdmin, requireAuth } from '../middleware/auth';
 import { broadcastRealtimeEvent } from './realtime';
 
 export const appointmentsRouter = Router();
@@ -25,7 +25,21 @@ appointmentsRouter.get('/by-token/:token', async (req: Request, res: Response) =
       return res.status(404).json({ error: 'Turno no encontrado' });
     }
 
-    res.json(appointment);
+    // Mask customer phone/email for privacy on self-service token view
+    const maskedPhone = appointment.customer.phone
+      ? appointment.customer.phone.replace(/(\d{3})\d+(\d{2})/, '$1****$2')
+      : undefined;
+
+    const safeAppointment = {
+      ...appointment,
+      customer: {
+        id: appointment.customer.id,
+        name: appointment.customer.name,
+        phone: maskedPhone,
+      },
+    };
+
+    res.json(safeAppointment);
   } catch (error) {
     console.error('Error fetching appointment by token:', error);
     res.status(500).json({ error: 'Error al obtener el turno' });
@@ -153,7 +167,7 @@ appointmentsRouter.post('/by-token/:token/cancel', async (req: Request, res: Res
 });
 
 // GET /api/appointments/customer/upcoming — Get upcoming active appointments for a customer
-appointmentsRouter.get('/customer/upcoming', async (req: Request, res: Response) => {
+appointmentsRouter.get('/customer/upcoming', requireAuth, async (req: Request, res: Response) => {
   try {
     const { phone, instagram } = req.query;
     if (!phone && !instagram) {
@@ -271,7 +285,7 @@ appointmentsRouter.post('/confirm-upcoming', async (req: Request, res: Response)
 });
 
 // POST /api/appointments/:id/cancel — Cancel an appointment and delete Google Calendar event
-appointmentsRouter.post('/:id/cancel', async (req: Request, res: Response) => {
+appointmentsRouter.post('/:id/cancel', requireAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -320,6 +334,11 @@ appointmentsRouter.post('/:id/cancel', async (req: Request, res: Response) => {
         lateCancellation: isLateCancellation,
       },
       include: { service: true, customer: true },
+    });
+
+    broadcastRealtimeEvent({
+      type: 'APPOINTMENT_CANCELLED',
+      payload: updated,
     });
 
     console.log(`🗑️ Appointment ${id} cancelled successfully (Late: ${isLateCancellation})`);
@@ -386,7 +405,7 @@ appointmentsRouter.post('/:id/cancel', async (req: Request, res: Response) => {
 });
 
 // POST /api/appointments/:id/reschedule — Reschedule an appointment to a new date/time
-appointmentsRouter.post('/:id/reschedule', async (req: Request, res: Response) => {
+appointmentsRouter.post('/:id/reschedule', requireAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { newDate } = req.body;

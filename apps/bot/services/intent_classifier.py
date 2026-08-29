@@ -76,7 +76,9 @@ _RESCHEDULE_KEYWORDS = frozenset({
 
 _UBICACION_KEYWORDS = frozenset({
     "dónde queda", "donde queda", "dónde están", "donde están",
-    "dirección", "direccion", "ubicación", "ubicacion",
+    "dónde estan", "donde estan", "donde estan ubicados", "dónde están ubicados",
+    "donde queda el salon", "dónde queda el salón", "ubicados", "ubicacion",
+    "dirección", "direccion", "ubicación",
     "cómo llego", "como llego", "cómo llegar", "como llegar",
     "dirección completa", "cuál es la dirección", "cual es la direccion",
     "está cerca de", "está cerca", "está en", "queda en",
@@ -212,39 +214,57 @@ def _classify_by_rules(text: str) -> str | None:
     return None
 
 
+# Cache for LLM classifications (text hash -> intent)
+_intent_cache: dict[str, str] = {}
+_MAX_CACHE_ENTRIES = 500
+
+
 def classify_intent(message: str) -> str:
     """
     Clasifica el mensaje del cliente en una de las categorías soportadas.
 
     Prioridad:
       1. Reglas rápidas (keywords, sets) -> 0ms
-      2. Si el mensaje es muy corto (< 4 palabras), retornar OTHER sin llamar al LLM
-      3. LLM con prompt few-shot (solo para mensajes complejos/largos)
-      4. Default: OTHER
+      2. Cache en memoria de mensajes clasificados -> 0ms
+      3. Si el mensaje es muy corto (<= 2 palabras), retornar OTHER sin llamar al LLM
+      4. LLM con prompt few-shot optimizado (max_tokens=15)
+      5. Default: OTHER
     """
     text = message.lower().strip()
 
-    # Fast path: reglas deterministas
+    # Fast path 1: reglas deterministas
     rule_result = _classify_by_rules(text)
     if rule_result:
         return rule_result
 
-    # Si es un mensaje corto (ej. nombres, fechas cortas, etc.), no llamar al LLM
+    # Fast path 2: cache
+    if text in _intent_cache:
+        return _intent_cache[text]
+
+    # Fast path 3: mensajes cortos
     if len(text.split()) <= 2:
         return "OTHER"
 
-    # LLM classification fallback (con timeout estricto para no bloquear)
+    # LLM classification fallback (con timeout estricto y max_tokens=15)
     try:
         prompt = INTENT_CLASSIFIER_PROMPT.replace("{message}", message)
-        raw_res = llm_pool.get_completion([], system_msg=prompt, timeout_sec=6, max_retries=1)
+        raw_res = llm_pool.get_completion(
+            messages=[],
+            system_msg=prompt,
+            max_tokens=15,
+            timeout_sec=5,
+            max_retries=1,
+        )
         if raw_res:
             cleaned = raw_res.strip().upper()
             for v in VALID_INTENTS:
                 if v in cleaned:
                     logger.info(f"Intent classified as {v}: {message[:50]}")
+                    if len(_intent_cache) > _MAX_CACHE_ENTRIES:
+                        _intent_cache.clear()
+                    _intent_cache[text] = v
                     return v
     except Exception as e:
         logger.warning(f"Intent classification LLM failed: {e}")
 
-    # Si todo falla, algo general
     return "OTHER"

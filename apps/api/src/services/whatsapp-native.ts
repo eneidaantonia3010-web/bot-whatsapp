@@ -89,6 +89,9 @@ async function transcribeAudioMessage(msg: any): Promise<string | null> {
 
     const response = await fetch(`${BOT_URL}/transcribe-audio-file`, {
       method: 'POST',
+      headers: {
+        ...(config.API_SECRET_KEY ? { 'x-api-key': config.API_SECRET_KEY } : {}),
+      },
       body: formData,
       signal: transController.signal
     });
@@ -230,7 +233,10 @@ export async function initNativeWhatsApp(): Promise<void> {
 
               const visionResp = await fetch(`${BOT_URL}/analyze-image`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(config.API_SECRET_KEY ? { 'x-api-key': config.API_SECRET_KEY } : {}),
+                },
                 body: JSON.stringify({
                   image_base64: base64Image,
                   sender_id: msg.key.remoteJid,
@@ -314,7 +320,10 @@ export async function initNativeWhatsApp(): Promise<void> {
             
             const agentResponse = await fetch(`${BOT_URL}/process-message`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                ...(config.API_SECRET_KEY ? { 'x-api-key': config.API_SECRET_KEY } : {}),
+              },
               body: JSON.stringify({
                 message: textMessage,
                 sender_id: remoteJid,

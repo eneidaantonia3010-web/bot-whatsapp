@@ -1,43 +1,48 @@
 # 💅 Glow Studio by Sofia
 
-> **Aplicación web premium para salón de belleza** — Next.js 14 + Express + Python AI Agent + PostgreSQL (Neon)
+> **Plataforma Integral y Agente Inteligente para Salón de Belleza** — Next.js 16 + Express + Python AI Agent + PostgreSQL (Neon)
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Node](https://img.shields.io/badge/node-20+-green.svg)
+![Next.js](https://img.shields.io/badge/next.js-16.1-black.svg)
 ![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
+![Groq](https://img.shields.io/badge/groq-llama_3.3_70b-orange.svg)
 
 ---
 
-## ✨ Características
+## ✨ Características y Arquitectura
 
-### 🌐 Frontend (Next.js 14)
-- Landing page premium con Hero, Servicios, Galería, Equipo, Testimonios
-- Sistema de reservas con calendario interactivo
-- Panel de administración con métricas
-- Chatbot flotante con IA
-- Diseño responsive, animaciones Framer Motion
-- SEO optimizado
+### 🌐 Frontend (Next.js 16 + React 19)
+- Landing page premium: Hero, Catálogo de Servicios, Galería interactiva, Equipo, Testimonios
+- Sistema de reservas con calendario interactivo y selección de franjas horarias
+- Panel de administración con métricas financieras en tiempo real y gestión de turnos
+- Chatbot web flotante conectado en tiempo real con el motor de IA
+- Portal de autogestión de turnos para clientes (`/by-token/:token`) con PII enmascarado
+- Encabezados de seguridad HTTP (CSP, X-Frame-Options, Permissions-Policy) y timeouts con `AbortSignal`
 
-### 🔧 Backend (Express + TypeScript)
-- API REST completa (CRUD servicios, turnos, clientes, bloqueos de horarios, lista de espera)
-- Webhooks seguros para Instagram DMs y WhatsApp con validación de firmas HMAC
-- Integración bidireccional con Google Calendar API v3
-- Servicio In-App nativo de WhatsApp (Baileys + PostgreSQL Store) con simulación anti-ban de presencia
-- Cron jobs inteligentes: recordatorios automáticos (24h y 45m), re-engagement, expiración de lista de espera
+### 🔧 Backend (Express + TypeScript + Prisma 6)
+- API REST integral: CRUD servicios, turnos, clientes, bloqueos de horarios y lista de espera inteligente
+- Webhooks de Meta (WhatsApp & Instagram) con validación estricta de firmas HMAC-SHA256 sobre payload en crudo (`rawBody`)
+- Comparación de claves en tiempo constante (`crypto.timingSafeEqual`) contra ataques de temporización
+- Rate limiters especializados para creación de turnos y protección de endpoints SSE en tiempo real
+- Servicio WhatsApp nativo con Baileys multi-dispositivo y almacenamiento en Postgres
+- Cron jobs automáticos: recordatorios (24h y 45m antes), re-engagement a los 30 días, expiración de ofertas de lista de espera
 
 ### 🤖 Bot IA (Python + FastAPI + Groq Cloud)
-- Motor conversacional multi-modelo con **Groq Cloud**:
-  - **LLaMA 3.1 8B Instant** para razonamiento y extracción de intenciones
-  - **LLaMA 3.2 11B Vision** para interpretar fotos de referencia (cortes, peinados, uñas)
+- Motor conversacional multi-modelo con Groq:
+  - **LLaMA 3.3 70B Versatile** / **LLaMA 3.1 8B Instant** para razonamiento, intenciones y memoria semántica
+  - **LLaMA 3.2 11B Vision** para interpretar fotos de referencia (cortes, tintes, uñas)
   - **Whisper Large v3 Turbo** para transcripción de notas de voz
-- Soporte trilingüe con detección automática (**Español**, **Portugués**, **Inglés**)
-- Persistencia de estado en PostgreSQL con bloqueos de concurrencia por remitente
-- Escalación humana automática a Sofía por WhatsApp ante consultas complejas
-- Gestión conversacional completa: reservas multi-servicio, reagendamientos, cancelaciones pedagógicas y lista de espera
+- Soporte trilingüe continuo (**Español**, **Portugués**, **Inglés**)
+- Persistencia de estado y preferencias del cliente en PostgreSQL con bloqueos de concurrencia
+- Detección y blindaje anti prompt-injection con delimitadores estrictos
+- Auto-escalación inteligente a WhatsApp humano tras 3 fallos consecutivos
+- Manejo robusto de reservas multi-servicio con suma acumulada de duración y precio
+- Oferta proactiva de Lista de Espera ante falta de disponibilidad
 
 ### 💾 Base de Datos (Neon PostgreSQL Serverless)
-- Prisma ORM con 8 modelos relacionales (`Appointment`, `Customer`, `Service`, `BlockedTime`, `Waitlist`, `User`, `MessageLog`, `BaileysAuth`)
-- Connection pooler PgBouncer optimizado para Scale-to-Zero auto-suspend
+- Prisma ORM con modelos relacionales (`Appointment`, `Customer`, `Service`, `BlockedTime`, `Waitlist`, `User`, `MessageLog`, `BaileysAuth`)
+- Connection pooler con failover automático y reconexión resiliente
 
 ---
 

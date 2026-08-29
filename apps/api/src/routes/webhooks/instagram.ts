@@ -66,7 +66,10 @@ instagramWebhookRouter.post('/', async (req: Request, res: Response) => {
             try {
               const agentResponse = await fetch(`${config.BOT_URL}/process-message`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(config.API_SECRET_KEY ? { 'x-api-key': config.API_SECRET_KEY } : {}),
+                },
                 body: JSON.stringify({
                   message,
                   sender_id: senderId,

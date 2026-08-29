@@ -7,23 +7,39 @@ import { getAuthHeaders } from './auth';
 import type { Service, Appointment, GalleryImage, Customer, DashboardMetrics, TimeSlot } from '@/types';
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+
   const headers = {
     'Content-Type': 'application/json',
     ...getAuthHeaders(),
     ...options?.headers,
   };
 
-  const res = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const res = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers,
+      signal: options?.signal || controller.signal,
+    });
 
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `API Error: ${res.status} ${res.statusText}`);
+    if (res.status === 401 && typeof window !== 'undefined' && !endpoint.includes('/api/auth/login')) {
+      localStorage.removeItem('glow_auth_token');
+      localStorage.removeItem('glow_user');
+      if (window.location.pathname.startsWith('/admin') && window.location.pathname !== '/admin/login') {
+        window.location.href = '/admin/login';
+      }
+    }
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || `API Error: ${res.status} ${res.statusText}`);
+    }
+
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return res.json();
 }
 
 // Authentication

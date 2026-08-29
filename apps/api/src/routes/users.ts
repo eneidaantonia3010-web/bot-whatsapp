@@ -4,10 +4,25 @@
 
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import { prisma } from '../services/prisma';
 import { requireAdmin } from '../middleware/auth';
 
 export const usersRouter = Router();
+
+const createUserSchema = z.object({
+  email: z.string().email('Formato de correo electrónico inválido'),
+  name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').optional(),
+  password: z.string().min(10, 'La contraseña debe tener al menos 10 caracteres'),
+  role: z.enum(['ADMIN', 'STAFF']).optional().default('STAFF'),
+});
+
+const updateUserSchema = z.object({
+  email: z.string().email('Formato de correo electrónico inválido').optional(),
+  name: z.string().min(2).optional(),
+  password: z.string().min(10, 'La nueva contraseña debe tener al menos 10 caracteres').optional(),
+  role: z.enum(['ADMIN', 'STAFF']).optional(),
+});
 
 // Protect all user management endpoints with requireAdmin
 usersRouter.use(requireAdmin);
@@ -37,11 +52,12 @@ usersRouter.get('/', async (_req: Request, res: Response) => {
 // POST /api/users — Create a new user (Staff or Admin)
 usersRouter.post('/', async (req: Request, res: Response) => {
   try {
-    const { email, name, password, role } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios (email, contraseña)' });
+    const parseResult = createUserSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: parseResult.error.issues[0]?.message || 'Datos inválidos' });
     }
+
+    const { email, name, password, role } = parseResult.data;
 
     const existingUser = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
@@ -57,7 +73,7 @@ usersRouter.post('/', async (req: Request, res: Response) => {
         email: email.toLowerCase().trim(),
         name: name || null,
         password: hashedPassword,
-        role: role === 'STAFF' ? 'STAFF' : 'ADMIN',
+        role: role,
       },
       select: {
         id: true,
@@ -79,12 +95,17 @@ usersRouter.post('/', async (req: Request, res: Response) => {
 usersRouter.patch('/:id', async (req: Request, res: Response) => {
   try {
     const userId = req.params.id as string;
-    const { email, name, password, role } = req.body;
+    const parseResult = updateUserSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: parseResult.error.issues[0]?.message || 'Datos inválidos' });
+    }
+
+    const { email, name, password, role } = parseResult.data;
 
     const dataToUpdate: any = {};
     if (email) dataToUpdate.email = email.toLowerCase().trim();
     if (name !== undefined) dataToUpdate.name = name;
-    if (role) dataToUpdate.role = role === 'STAFF' ? 'STAFF' : 'ADMIN';
+    if (role) dataToUpdate.role = role;
     if (password) dataToUpdate.password = await bcrypt.hash(password, 10);
 
     const updatedUser = await prisma.user.update({

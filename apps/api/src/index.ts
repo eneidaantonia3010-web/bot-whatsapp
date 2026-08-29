@@ -27,8 +27,6 @@ import { waitlistRouter } from './routes/waitlist';
 import { staffRouter } from './routes/staff';
 import { realtimeRouter } from './routes/realtime';
 import { instagramWebhookRouter } from './routes/webhooks/instagram';
-import { whatsappWebhookRouter } from './routes/webhooks/whatsapp';
-import { evolutionWebhookRouter } from './routes/webhooks/evolution';
 import { requireAuth, requireAdmin } from './middleware/auth';
 import { appointmentCreationLimiter, publicApiLimiter, webhookLimiter } from './middleware/rate-limit';
 import { initCronJobs } from './services/cron';
@@ -60,35 +58,38 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (origin === config.FRONTEND_URL) return callback(null, true);
-    if (/^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin)) return callback(null, true);
+    if (/^https:\/\/glow-studio[a-zA-Z0-9-]*\.vercel\.app$/.test(origin)) return callback(null, true);
     if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) return callback(null, true);
     return callback(new Error('No permitido por CORS'));
   },
   credentials: true,
 }));
 
-app.use(express.json());
+app.use(express.json({
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 
-// Request logging
+// Request logging via structured logger
 app.use((req, _res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  logger.info({ method: req.method, path: req.path }, 'Incoming HTTP Request');
   next();
 });
 
 // ---- Webhooks (with high rate limit) ----
+// WhatsApp es 100% nativo (Baileys embebido en whatsapp-native.ts); no hay webhooks de WhatsApp.
 app.use('/api/webhooks/instagram', webhookLimiter, instagramWebhookRouter);
-app.use('/api/webhooks/whatsapp', webhookLimiter, whatsappWebhookRouter);
-app.use('/api/webhooks/evolution', webhookLimiter, evolutionWebhookRouter);
 
 // ---- Authentication & Public Routes ----
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/staff', staffRouter);
-app.use('/api/realtime', realtimeRouter);
+app.use('/api/realtime', requireAuth, realtimeRouter);
 app.use('/api/services', publicApiLimiter, servicesRouter);
 app.use('/api/gallery', publicApiLimiter, galleryRouter);
-app.use('/api/appointments', appointmentsRouter);
+app.use('/api/appointments', appointmentCreationLimiter, appointmentsRouter);
 app.use('/api/blocked-times', blockedTimesRouter);
 app.use('/api/waitlist', waitlistRouter);
 
@@ -102,13 +103,29 @@ app.use('/api/analytics', requireAdmin, analyticsRouter);
 app.use('/api/exports', requireAdmin, exportsRouter);
 
 
-// Health check
-app.get('/', (_req, res) => {
+// Deep Health check
+app.get('/', async (_req, res) => {
   res.json({ status: 'ok', service: 'glow-studio-api', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'glow-studio-api', timestamp: new Date().toISOString() });
+app.get('/api/health', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({
+      status: 'ok',
+      service: 'glow-studio-api',
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    res.status(503).json({
+      status: 'degraded',
+      service: 'glow-studio-api',
+      database: 'disconnected',
+      error: error?.message || 'Database unreachable',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // 404 Handler

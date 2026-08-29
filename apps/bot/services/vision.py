@@ -9,24 +9,16 @@ from typing import Optional
 from groq import Groq
 
 try:
-    from config import GROQ_API_KEY
+    from config import GROQ_API_KEY, GROQ_VISION_MODEL
 except ImportError:
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+    GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview")
 
 logger = logging.getLogger("glow_bot.vision")
 
 
 def analyze_image(image_base64: str, caption: str = "") -> Optional[str]:
-    """Use Groq's Llama 3.2 Vision to interpret a customer's image.
-    
-    Common use cases:
-    - Customer sends a reference photo of a hairstyle they want
-    - Customer sends a photo of their nails for inspiration
-    - Customer sends a photo asking 'can you do something like this?'
-    
-    Returns a brief Spanish description of what the image shows,
-    relevant to beauty salon services.
-    """
+    """Use Groq Vision to interpret a customer's image with key and model fallback."""
     raw_keys = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
     groq_keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
     if not groq_keys:
@@ -50,24 +42,30 @@ def analyze_image(image_base64: str, caption: str = "") -> Optional[str]:
         "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
     })
 
-    for key in groq_keys:
-        try:
-            client = Groq(api_key=key)
-            completion = client.chat.completions.create(
-                model="llama-3.2-11b-vision-preview",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-                temperature=0.5,
-                max_tokens=300,
-            )
-            result = completion.choices[0].message.content
-            if result:
-                logger.info(f"Vision analysis result: {result[:80]}...")
-                return result.strip()
-        except Exception as e:
-            logger.warning(f"Vision analysis failed with key: {e}")
-            continue
+    vision_models = [GROQ_VISION_MODEL, "llama-3.2-11b-vision-preview", "llama-3.2-90b-vision-preview"]
+    # De-duplicate while preserving order
+    seen = set()
+    models_to_try = [m for m in vision_models if m and not (m in seen or seen.add(m))]
+
+    for model_name in models_to_try:
+        for key in groq_keys:
+            try:
+                client = Groq(api_key=key)
+                completion = client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    temperature=0.5,
+                    max_tokens=300,
+                )
+                result = completion.choices[0].message.content
+                if result:
+                    logger.info(f"Vision analysis result ({model_name}): {result[:80]}...")
+                    return result.strip()
+            except Exception as e:
+                logger.warning(f"Vision analysis failed with key ({model_name}): {e}")
+                continue
 
     return None

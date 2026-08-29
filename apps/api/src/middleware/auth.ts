@@ -2,6 +2,7 @@
 // Authentication & Authorization Middleware
 // ============================================
 
+import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
@@ -14,10 +15,22 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
+function isValidApiKey(providedKey: string | string[] | undefined): boolean {
+  if (!providedKey || typeof providedKey !== 'string' || !config.API_SECRET_KEY) {
+    return false;
+  }
+  const providedBuffer = Buffer.from(providedKey);
+  const secretBuffer = Buffer.from(config.API_SECRET_KEY);
+  if (providedBuffer.length !== secretBuffer.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(providedBuffer, secretBuffer);
+}
+
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  // Allow internal service-to-service requests via API key
+  // Allow internal service-to-service requests via constant-time verified API key
   const apiKey = req.headers['x-api-key'] || req.headers['x-bot-key'];
-  if (apiKey && (apiKey === config.API_SECRET_KEY || apiKey === config.WEBHOOK_VERIFY_TOKEN)) {
+  if (isValidApiKey(apiKey)) {
     return next();
   }
 
@@ -45,7 +58,7 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
 
 export function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const apiKey = req.headers['x-api-key'] || req.headers['x-bot-key'];
-  if (apiKey && (apiKey === config.API_SECRET_KEY || apiKey === config.WEBHOOK_VERIFY_TOKEN)) {
+  if (isValidApiKey(apiKey)) {
     return next();
   }
 

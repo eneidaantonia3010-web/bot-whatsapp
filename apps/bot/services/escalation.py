@@ -7,10 +7,11 @@ import logging
 import httpx
 
 try:
-    from config import API_URL, SALON_WHATSAPP
+    from config import API_URL, SALON_WHATSAPP, API_SECRET_KEY
 except ImportError:
     API_URL = os.getenv("API_URL", "https://glow-studio-api-2vzt.onrender.com")
     SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491178296781")
+    API_SECRET_KEY = os.getenv("API_SECRET_KEY", "")
 
 logger = logging.getLogger("glow_bot.escalation")
 
@@ -64,11 +65,16 @@ async def escalate_to_human(
             f"_Para responder, abrí WhatsApp y escribile directamente._"
         )
         
+        headers = {}
+        if API_SECRET_KEY:
+            headers["x-api-key"] = API_SECRET_KEY
+
         # Send via the Express API's WhatsApp notification endpoint
         async with httpx.AsyncClient() as client:
             # Use the salon's own WhatsApp to notify
             response = await client.post(
                 f"{API_URL}/api/admin/whatsapp/send",
+                headers=headers,
                 json={
                     "to": SALON_WHATSAPP,
                     "message": notification,

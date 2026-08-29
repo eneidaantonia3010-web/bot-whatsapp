@@ -1,0 +1,11 @@
+{
+  "projectId": "3a755e3f-c892-457a-ac75-a57c345b28c3",
+  "type": "frontend",
+  "name": "Guest can view services on the home page",
+  "planSteps": [
+    { "type": "action", "description": "Navigate to the home page" },
+    { "type": "assertion", "description": "The page displays the Glow Studio by Sofia hero section or title" },
+    { "type": "action", "description": "Scroll down to the services section" },
+    { "type": "assertion", "description": "The page displays at least one service card or list item with a price" }
+  ]
+}

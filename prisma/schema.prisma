@@ -126,7 +126,7 @@ model Staff {
 
 model Appointment {
   id              String             @id @default(cuid())
-  token           String             @unique @default(cuid())
+  token           String?            @unique @default(cuid())
   date            DateTime
   endDate         DateTime           @map("end_date")
   status          AppointmentStatus  @default(PENDING)

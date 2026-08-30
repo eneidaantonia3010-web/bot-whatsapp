@@ -1,6 +1,6 @@
 // ============================================
 // Baileys PostgreSQL Session Auth Store
-// Uses dedicated baileys_sessions table with fallback to conversation_states
+// Dedicated table: baileys_sessions
 // ============================================
 
 import {
@@ -19,75 +19,31 @@ export async function usePrismaAuthState(): Promise<{
   saveCreds: () => Promise<void>;
   clearState: () => Promise<void>;
 }> {
-  const store = (prisma as any).baileysSession || prisma.conversationState;
-  const isDedicatedTable = !!(prisma as any).baileysSession;
-
-  // Load or initialize creds
-  let credsRecord: any = null;
-  try {
-    if (isDedicatedTable) {
-      credsRecord = await (prisma as any).baileysSession.findUnique({
-        where: { key: CREDS_KEY },
-      });
-    } else {
-      credsRecord = await prisma.conversationState.findUnique({
-        where: { senderId: CREDS_KEY },
-      });
-    }
-  } catch (err) {
-    // Fallback to conversationState if baileysSession table is not yet pushed
-    credsRecord = await prisma.conversationState.findUnique({
-      where: { senderId: CREDS_KEY },
-    });
-  }
+  // 1. Load or initialize credentials
+  const credsRecord = await prisma.baileysSession.findUnique({
+    where: { key: CREDS_KEY },
+  });
 
   let creds: AuthenticationCreds;
-  const rawState = credsRecord?.value || credsRecord?.state;
-  if (rawState) {
-    creds = JSON.parse(JSON.stringify(rawState), BufferJSON.reviver);
+  if (credsRecord && credsRecord.value) {
+    creds = JSON.parse(JSON.stringify(credsRecord.value), BufferJSON.reviver);
   } else {
     creds = initAuthCreds();
   }
 
+  // 2. Save credentials callback
   const saveCreds = async () => {
     const serializedCreds = JSON.parse(JSON.stringify(creds, BufferJSON.replacer));
-    try {
-      if (isDedicatedTable) {
-        await (prisma as any).baileysSession.upsert({
-          where: { key: CREDS_KEY },
-          create: { key: CREDS_KEY, value: serializedCreds },
-          update: { value: serializedCreds },
-        });
-      } else {
-        await prisma.conversationState.upsert({
-          where: { senderId: CREDS_KEY },
-          create: { senderId: CREDS_KEY, state: serializedCreds },
-          update: { state: serializedCreds },
-        });
-      }
-    } catch (err) {
-      await prisma.conversationState.upsert({
-        where: { senderId: CREDS_KEY },
-        create: { senderId: CREDS_KEY, state: serializedCreds },
-        update: { state: serializedCreds },
-      });
-    }
+    await prisma.baileysSession.upsert({
+      where: { key: CREDS_KEY },
+      create: { key: CREDS_KEY, value: serializedCreds },
+      update: { value: serializedCreds },
+    });
   };
 
+  // 3. Clear all authentication state on logout
   const clearState = async () => {
-    try {
-      if (isDedicatedTable) {
-        await (prisma as any).baileysSession.deleteMany({});
-      }
-    } catch (e) {}
-
-    await prisma.conversationState.deleteMany({
-      where: {
-        senderId: {
-          startsWith: 'baileys_',
-        },
-      },
-    });
+    await prisma.baileysSession.deleteMany({});
   };
 
   return {
@@ -99,26 +55,12 @@ export async function usePrismaAuthState(): Promise<{
           await Promise.all(
             ids.map(async (id) => {
               const key = `${KEY_PREFIX}${type}_${id}`;
-              let record: any = null;
-              try {
-                if (isDedicatedTable) {
-                  record = await (prisma as any).baileysSession.findUnique({
-                    where: { key },
-                  });
-                } else {
-                  record = await prisma.conversationState.findUnique({
-                    where: { senderId: key },
-                  });
-                }
-              } catch (e) {
-                record = await prisma.conversationState.findUnique({
-                  where: { senderId: key },
-                });
-              }
+              const record = await prisma.baileysSession.findUnique({
+                where: { key },
+              });
 
-              const val = record?.value || record?.state;
-              if (val) {
-                const value = JSON.parse(JSON.stringify(val), BufferJSON.reviver);
+              if (record && record.value) {
+                const value = JSON.parse(JSON.stringify(record.value), BufferJSON.reviver);
                 data[id] = value;
               }
             })
@@ -136,41 +78,18 @@ export async function usePrismaAuthState(): Promise<{
               const key = `${KEY_PREFIX}${category}_${id}`;
               if (value) {
                 const serializedValue = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
-                if (isDedicatedTable) {
-                  tasks.push(
-                    (prisma as any).baileysSession.upsert({
-                      where: { key },
-                      create: { key, value: serializedValue },
-                      update: { value: serializedValue },
-                    }).catch(() => {
-                      return prisma.conversationState.upsert({
-                        where: { senderId: key },
-                        create: { senderId: key, state: serializedValue },
-                        update: { state: serializedValue },
-                      });
-                    })
-                  );
-                } else {
-                  tasks.push(
-                    prisma.conversationState.upsert({
-                      where: { senderId: key },
-                      create: { senderId: key, state: serializedValue },
-                      update: { state: serializedValue },
-                    })
-                  );
-                }
-              } else {
-                if (isDedicatedTable) {
-                  tasks.push(
-                    (prisma as any).baileysSession.deleteMany({
-                      where: { key },
-                    }).catch(() => {})
-                  );
-                }
                 tasks.push(
-                  prisma.conversationState.deleteMany({
-                    where: { senderId: key },
-                  }).catch(() => {})
+                  prisma.baileysSession.upsert({
+                    where: { key },
+                    create: { key, value: serializedValue },
+                    update: { value: serializedValue },
+                  })
+                );
+              } else {
+                tasks.push(
+                  prisma.baileysSession.deleteMany({
+                    where: { key },
+                  })
                 );
               }
             }

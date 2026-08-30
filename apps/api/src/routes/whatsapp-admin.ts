@@ -6,6 +6,8 @@ import { Router, Request, Response } from 'express';
 import {
   getNativeStatus,
   getNativeQRBase64,
+  getNativePairingCode,
+  requestNativePairingCode,
   logoutNativeWhatsApp,
   sendNativeWhatsAppMessage,
 } from '../services/whatsapp-native';
@@ -20,6 +22,28 @@ const SALON_WHATSAPP = config.SALON_WHATSAPP;
 whatsappAdminRouter.get('/status', (_req: Request, res: Response) => {
   const status = getNativeStatus();
   return res.json(status);
+});
+
+// POST /api/admin/whatsapp/pairing-code — Generate 8-digit Pairing Code for phone number
+whatsappAdminRouter.post('/pairing-code', async (req: Request, res: Response) => {
+  const phone = req.body.phone || SALON_WHATSAPP;
+  if (!phone) {
+    return res.status(400).json({ error: 'Número de teléfono es requerido' });
+  }
+
+  const code = await requestNativePairingCode(phone);
+  if (code) {
+    return res.json({
+      status: 'ok',
+      phone,
+      pairingCode: code,
+      message: `Ingresa este código en tu WhatsApp: ${code}`,
+    });
+  } else {
+    return res.status(500).json({
+      error: 'No se pudo generar el código de vinculación. Verifica que el socket no esté ya conectado.',
+    });
+  }
 });
 
 // POST /api/admin/whatsapp/init — Restart or logout native instance

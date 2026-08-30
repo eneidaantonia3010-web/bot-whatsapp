@@ -3,38 +3,24 @@ import { prisma } from './prisma';
 import { sendSalonUpcomingAlert, sendCustomerReminder } from './whatsapp';
 import { config } from '../config';
 
-const EVOLUTION_API_URL = config.EVOLUTION_API_URL;
-const EVOLUTION_API_KEY = config.EVOLUTION_API_KEY;
-const INSTANCE_NAME = config.INSTANCE_NAME;
-
 export function initCronJobs() {
-  console.log('⏰ Initializing cron jobs for appointment reminders and WhatsApp keepalive...');
+  console.log('⏰ Initializing cron jobs for appointment reminders and WhatsApp monitor...');
 
-  // 1. Run every 10 minutes: Evolution API Connection Keepalive & Health Check
+  // 1. Run every 5 minutes: Native Baileys WhatsApp Connection Health Monitor
   cron.schedule(
-    '*/10 * * * *',
+    '*/5 * * * *',
     async () => {
-      if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return;
-
       try {
-        const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${INSTANCE_NAME}`, {
-          headers: { 'apikey': EVOLUTION_API_KEY },
-        });
-
-        if (response.ok) {
-          const data = (await response.json()) as any;
-          const state = data.instance?.state || data.state;
-          if (state === 'open') {
-            console.log(`💚 [Cron Health Check] Evolution API WhatsApp Connection OPEN (${INSTANCE_NAME})`);
-          } else {
-            console.warn(`⚠️ [Cron Health Check] Evolution API WhatsApp State: ${state}. Attempting reconnect...`);
-            await fetch(`${EVOLUTION_API_URL}/instance/connect/${INSTANCE_NAME}`, {
-              headers: { 'apikey': EVOLUTION_API_KEY },
-            });
-          }
+        const { getNativeStatus, initNativeWhatsApp } = await import('./whatsapp-native');
+        const status = getNativeStatus();
+        if (status.state === 'open') {
+          console.log(`💚 [Cron Health Check] Native Baileys WhatsApp socket OPEN (+${status.phone})`);
+        } else if (status.state === 'close') {
+          console.warn('⚠️ [Cron Health Check] Native Baileys WhatsApp socket is closed. Triggering reconnect...');
+          await initNativeWhatsApp();
         }
       } catch (error: any) {
-        console.error('❌ Error checking Evolution API WhatsApp health in cron:', error.message);
+        console.error('❌ Error checking Native WhatsApp health in cron:', error.message);
       }
     },
     { timezone: 'America/Argentina/Buenos_Aires' }

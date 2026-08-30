@@ -432,6 +432,35 @@ export async function initNativeWhatsApp(): Promise<void> {
   }
 }
 
+let currentPairingCode: string | null = null;
+
+export async function requestNativePairingCode(phoneNumber: string): Promise<string | null> {
+  if (!sock) {
+    console.warn('⚠️ Native WhatsApp socket is not initialized.');
+    return null;
+  }
+
+  if (connectionState === 'open') {
+    console.warn('⚠️ WhatsApp is already connected.');
+    return null;
+  }
+
+  try {
+    const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
+    const code = await sock.requestPairingCode(cleanPhone);
+    currentPairingCode = code;
+    console.log(`🔑 Pairing Code generated for ${cleanPhone}: ${code}`);
+    return code;
+  } catch (error) {
+    console.error('❌ Error generating Pairing Code:', error);
+    return null;
+  }
+}
+
+export function getNativePairingCode() {
+  return currentPairingCode;
+}
+
 export function getNativeStatus() {
   return {
     configured: true,
@@ -439,6 +468,7 @@ export function getNativeStatus() {
     phone: SALON_WHATSAPP,
     state: connectionState,
     hasQR: !!currentQRBase64,
+    pairingCode: currentPairingCode,
   };
 }
 

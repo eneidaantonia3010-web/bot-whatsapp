@@ -142,10 +142,11 @@ glow-studio/
 3. Suscribirse a eventos de mensajes
 4. Agregar `META_VERIFY_TOKEN` y `META_PAGE_ACCESS_TOKEN`
 
-### WhatsApp (Evolution API)
-1. Instalar Evolution API (self-hosted o en Render)
-2. Crear una instancia
-3. Agregar `EVOLUTION_API_URL` y `EVOLUTION_API_KEY`
+### WhatsApp (Baileys Nativo + PostgreSQL)
+1. Conexión WebSocket directa mediante `@whiskeysockets/baileys`
+2. Almacenamiento persistente de sesión y credenciales en PostgreSQL (`baileys_sessions`)
+3. Vinculación dual: Código QR en tiempo real en `/admin` o Pairing Code de 8 dígitos
+4. Soporte para audio por voz (Whisper) e imágenes de referencia (Groq Vision)
 
 ---
 

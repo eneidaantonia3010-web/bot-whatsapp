@@ -48,9 +48,5 @@ export const config = {
   // Google Calendar
   GOOGLE_CALENDAR_ID: process.env.GOOGLE_CALENDAR_ID || 'primary',
   GOOGLE_CREDENTIALS: process.env.GOOGLE_CREDENTIALS || '',
-
-  // Evolution API (legacy / optional)
-  EVOLUTION_API_URL: process.env.EVOLUTION_API_URL || '',
-  EVOLUTION_API_KEY: process.env.EVOLUTION_API_KEY || '',
   INSTANCE_NAME: process.env.INSTANCE_NAME || `glow-studio-${(process.env.SALON_WHATSAPP || '5491178296781').replace(/\D/g, '')}`,
 };

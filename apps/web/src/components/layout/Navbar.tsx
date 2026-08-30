@@ -13,15 +13,15 @@ export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const { language, setLanguage, t } = useTranslation();
 
-  if (pathname?.startsWith('/admin')) {
-    return null;
-  }
-
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
 
   const navItems = [
     { href: '#inicio', label: t('header.navHome') },

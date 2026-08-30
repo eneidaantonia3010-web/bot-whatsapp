@@ -125,6 +125,8 @@ describe('HTTP Integration Suite (Express API)', () => {
     });
 
     it('should return 401 Unauthorized when credentials do not exist', async () => {
+      const findUniqueSpy = vi.spyOn(prisma.user, 'findUnique').mockResolvedValueOnce(null);
+
       const res = await request(app)
         .post('/api/auth/login')
         .send({
@@ -134,6 +136,7 @@ describe('HTTP Integration Suite (Express API)', () => {
 
       expect(res.status).toBe(401);
       expect(res.body).toHaveProperty('error', 'Credenciales inválidas');
+      findUniqueSpy.mockRestore();
     });
   });
 

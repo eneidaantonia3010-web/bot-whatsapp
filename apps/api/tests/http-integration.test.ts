@@ -45,6 +45,18 @@ describe('HTTP Integration Suite (Express API)', () => {
 
   describe('GET /api/services', () => {
     it('should return 200 and an array of active salon services', async () => {
+      const mockServices = [
+        {
+          id: 'srv_1',
+          name: 'Corte y Estilo',
+          price: 25000,
+          duration: 45,
+          category: 'PELUQUERIA',
+          active: true,
+        },
+      ];
+      const findManySpy = vi.spyOn(prisma.service, 'findMany').mockResolvedValueOnce(mockServices as any);
+
       const res = await request(app).get('/api/services');
 
       expect(res.status).toBe(200);
@@ -58,6 +70,7 @@ describe('HTTP Integration Suite (Express API)', () => {
         expect(service).toHaveProperty('duration');
         expect(service).toHaveProperty('category');
       }
+      findManySpy.mockRestore();
     });
   });
 

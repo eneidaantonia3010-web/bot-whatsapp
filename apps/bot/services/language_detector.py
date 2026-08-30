@@ -60,7 +60,12 @@ def detect_language(text: str) -> LanguageCode:
 # i18n templates for static bot responses
 I18N = {
     "es": {
-        "greeting": "¡Hola! Bienvenida a *Glow Studio by Sofia* ✨",
+        "greeting": (
+            "¡Hola! Bienvenida a *Glow Studio by Sofia* ✨\n\n"
+            "Estos son nuestros servicios disponibles:\n\n"
+            "{catalog}\n\n"
+            "Escribí el *número* o *nombre* del servicio que te gustaría reservar 😊"
+        ),
         "select_service": "Escribí el número o nombre del servicio que te interesa 😊",
         "ask_date": "¿Qué día y horario te gustaría? (Ej: martes 14hs) 📅",
         "ask_name": "Para completar tu reserva, ¿cuál es tu *nombre completo*? 📝",
@@ -77,7 +82,12 @@ I18N = {
         "time_conflict": "⚠️ El horario de las *{time}* para el *{date}* ya se encuentra ocupado. 😔\n\n¿Te gustaría elegir otro horario?",
     },
     "pt": {
-        "greeting": "Olá! Bem-vinda ao *Glow Studio by Sofia* ✨",
+        "greeting": (
+            "Olá! Bem-vinda ao *Glow Studio by Sofia* ✨\n\n"
+            "Estes são nossos serviços disponíveis:\n\n"
+            "{catalog}\n\n"
+            "Digite o *número* ou *nome* do serviço que você gostaria de agendar 😊"
+        ),
         "select_service": "Escreva o número ou nome do serviço que te interessa 😊",
         "ask_date": "Qual dia e horário você gostaria? (Ex: terça 14h) 📅",
         "ask_name": "Para completar sua reserva, qual é seu *nome completo*? 📝",
@@ -94,7 +104,12 @@ I18N = {
         "time_conflict": "⚠️ O horário das *{time}* para o dia *{date}* já está ocupado. 😔\n\nGostaria de escolher outro horário?",
     },
     "en": {
-        "greeting": "Hello! Welcome to *Glow Studio by Sofia* ✨",
+        "greeting": (
+            "Hello! Welcome to *Glow Studio by Sofia* ✨\n\n"
+            "Here are our available services:\n\n"
+            "{catalog}\n\n"
+            "Type the *number* or *name* of the service you'd like to book 😊"
+        ),
         "select_service": "Type the number or name of the service you're interested in 😊",
         "ask_date": "What day and time would you like? (e.g., Tuesday 2pm) 📅",
         "ask_name": "To complete your booking, what's your *full name*? 📝",

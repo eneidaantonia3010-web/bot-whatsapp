@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/glowstudio?schema=public
+
 jobs:
   # ============================================================
   # 1. SHARED VALIDATION & PRISMA SCHEMA CHECK

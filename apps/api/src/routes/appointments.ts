@@ -668,6 +668,7 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
         customerName,
         serviceName: service.name,
         dateTime: dateTimeStr,
+        price: service.price,
       });
 
       if (customerPhone) {
@@ -676,6 +677,7 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
           customerName,
           serviceName: service.name,
           dateTime: dateTimeStr,
+          price: service.price,
         });
       }
     } catch (notifErr: any) {

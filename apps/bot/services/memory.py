@@ -64,3 +64,24 @@ def remember_preference(phone: str, key: str, value: str):
     current_prefs[key] = value
     update_customer_preferences(phone, current_prefs)
     logger.info(f"Remembered preference for {phone[-4:]}: {key} = {value}")
+
+
+def extract_and_remember_preferences(phone: str, message: str):
+    """Extract common preferences from customer message and save them."""
+    if not phone or not message:
+        return
+    text = message.lower().strip()
+
+    # Preferred time of day
+    if "a la mañana" in text or "temprano" in text:
+        remember_preference(phone, "preferred_time", "Mañana (9:00 - 13:00)")
+    elif "a la tarde" in text or "después de las 14" in text or "despues de las 14" in text:
+        remember_preference(phone, "preferred_time", "Tarde (14:00 - 19:00)")
+
+    # Preferred days
+    days = ["lunes", "martes", "miércoles", "miercoles", "jueves", "viernes", "sábado", "sabado"]
+    for d in days:
+        if f"los {d}" in text or f"siempre {d}" in text:
+            remember_preference(phone, "preferred_day", d.capitalize())
+            break
+

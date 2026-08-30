@@ -97,5 +97,6 @@ mi-bot-whatsapp/
 ## Historial de Reflexiones
 
 | Fecha | Resumen |
-|-------|---------|
 | 2026-08-14 | **Análisis Exhaustivo**: Se escaneó código fuente real (Python bot, Express API). Se descubrió que el bot usa Groq (LLaMA 3.1) en lugar de Gemini, y que la API inicializa un cliente nativo de WhatsApp local (Baileys) además de estar preparada para Evolution API. Se registró la arquitectura del App Router de Next.js y el enrutamiento de Express. |
+| 2026-08-30 | **Upgrades de WhatsApp, IA y Frontend**: Implementada reconexión Baileys con backoff exponencial + jitter gaussiano, cola persistente `MessageQueue` en Neon PostgreSQL con reintentos inteligentes y backoff 403. Motor de IA con scoring de confianza (`confidence >= 0.70`), memoria semántica extendida y extracción automática de preferencias. Frontend con Skeleton screens, `useOptimistic` de React 19 y PWA offline (Manifest + Service Worker). |
+

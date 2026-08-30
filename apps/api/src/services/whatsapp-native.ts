@@ -15,7 +15,14 @@ import QRCode from 'qrcode';
 import pino from 'pino';
 import { usePrismaAuthState } from './baileys-store';
 import { prisma } from './prisma';
-import { enqueueForSender, enqueueGlobalOutbound } from './message-queue';
+import {
+  enqueueForSender,
+  enqueueGlobalOutbound,
+  registerSocketForQueue,
+  startPersistentQueueWorker,
+  enqueuePersistentMessage,
+  triggerQueueDrain,
+} from './message-queue';
 import { config } from '../config';
 
 const BOT_URL = config.BOT_URL;
@@ -23,8 +30,17 @@ const SALON_WHATSAPP = config.SALON_WHATSAPP;
 
 let sock: ReturnType<typeof makeWASocket> | null = null;
 let currentQRBase64: string | null = null;
+let currentPairingCode: string | null = null;
 let connectionState: 'connecting' | 'open' | 'close' = 'connecting';
 let clearAuthState: (() => Promise<void>) | null = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 15;
+
+function getReconnectDelay(attempt: number): number {
+  const base = Math.min(1000 * Math.pow(2, attempt), 30000);
+  const jitter = base * 0.2 * (Math.random() * 2 - 1);
+  return Math.max(1000, Math.floor(base + jitter));
+}
 
 const logger = pino({ level: 'error' });
 
@@ -158,8 +174,15 @@ export async function initNativeWhatsApp(): Promise<void> {
 
       if (connection === 'open') {
         connectionState = 'open';
+        reconnectAttempts = 0; // Reset counter on successful connection
         currentQRBase64 = null; // Clear QR once connected
         console.log('🟢 Native WhatsApp: Connection OPEN & ACTIVE!');
+        
+        // Register active socket with persistent queue processor
+        registerSocketForQueue(() => sock, () => connectionState);
+        startPersistentQueueWorker(8000);
+        triggerQueueDrain();
+
         if (sock) {
           try {
             await sock.sendPresenceUpdate('available');
@@ -183,8 +206,18 @@ export async function initNativeWhatsApp(): Promise<void> {
         }
 
         if (shouldReconnect) {
-          console.log('🔄 Reconnecting Native WhatsApp in 5 seconds...');
-          setTimeout(initNativeWhatsApp, 5000);
+          if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            const delay = getReconnectDelay(reconnectAttempts);
+            reconnectAttempts++;
+            console.log(`🔄 Reconnecting Native WhatsApp in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+            setTimeout(initNativeWhatsApp, delay);
+          } else {
+            console.error('🚨 Max reconnection attempts reached for Native WhatsApp. Waiting 2 minutes before reset...');
+            setTimeout(() => {
+              reconnectAttempts = 0;
+              initNativeWhatsApp();
+            }, 120000);
+          }
         }
       }
     });
@@ -432,8 +465,6 @@ export async function initNativeWhatsApp(): Promise<void> {
   }
 }
 
-let currentPairingCode: string | null = null;
-
 export async function requestNativePairingCode(phoneNumber: string): Promise<string | null> {
   if (!sock) {
     console.warn('⚠️ Native WhatsApp socket is not initialized.');
@@ -477,17 +508,34 @@ export function getNativeQRBase64() {
 }
 
 export async function sendNativeWhatsAppMessage(to: string, message: string): Promise<boolean> {
+  const formattedJid = to.includes('@') ? to : `${to.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+  const dynamicMessage = addHumanDynamicVariation(message);
+
   if (!sock || connectionState !== 'open') {
-    console.warn('⚠️ Native WhatsApp is not open. Cannot send message.');
-    return false;
+    console.warn(`⚠️ Native WhatsApp is not currently open. Enqueueing message for ${formattedJid} in persistent DB queue.`);
+    try {
+      await enqueuePersistentMessage({
+        jid: formattedJid,
+        message: { text: dynamicMessage },
+        priority: 2, // High priority for manual/admin responses
+      });
+      return true;
+    } catch (qErr) {
+      console.error('❌ Failed to enqueue message into DB queue:', qErr);
+      return false;
+    }
   }
 
   try {
-    const formattedJid = to.includes('@') ? to : `${to.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
-    const dynamicMessage = addHumanDynamicVariation(message);
-
     return await enqueueGlobalOutbound(async () => {
-      if (!sock || connectionState !== 'open') return false;
+      if (!sock || connectionState !== 'open') {
+        await enqueuePersistentMessage({
+          jid: formattedJid,
+          message: { text: dynamicMessage },
+          priority: 2,
+        });
+        return true;
+      }
 
       // 1. Simular presencia 'composing' (escribiendo...) visible (1.5s - 2.2s)
       const typingDelay = Math.floor(Math.random() * 700) + 1500;
@@ -501,12 +549,25 @@ export async function sendNativeWhatsAppMessage(to: string, message: string): Pr
 
       // 2. Enviar mensaje
       await sock.sendMessage(formattedJid, { text: dynamicMessage });
+      
+      try {
+        await sock.sendPresenceUpdate('paused', formattedJid);
+      } catch {
+        // ignore
+      }
+
       console.log(`✅ Native WhatsApp message sent to ${formattedJid}`);
       return true;
     });
   } catch (error) {
     console.error(`❌ Error sending Native WhatsApp message to ${to}:`, error);
-    return false;
+    // Persist to queue on failure
+    await enqueuePersistentMessage({
+      jid: formattedJid,
+      message: { text: dynamicMessage },
+      priority: 2,
+    });
+    return true;
   }
 }
 

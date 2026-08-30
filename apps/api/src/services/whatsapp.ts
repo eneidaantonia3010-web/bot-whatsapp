@@ -28,9 +28,12 @@ export async function sendWhatsAppNotification(data: {
   customerName: string;
   serviceName: string;
   dateTime: string;
+  price?: number | string;
 }): Promise<boolean> {
   const salonPhone = config.SALON_WHATSAPP;
-  const message = `🔔 *Nuevo turno reservado*\n\n👤 ${data.customerName}\n💇 ${data.serviceName}\n📅 ${data.dateTime}\n\n_Reservado desde la web de Glow Studio_`;
+  const formattedPrice = data.price ? `$${Number(data.price).toLocaleString('es-AR')}` : '';
+  const priceLine = formattedPrice ? `\n💰 ${formattedPrice}` : '';
+  const message = `🔔 *Nuevo turno reservado*\n\n👤 ${data.customerName}\n💇 ${data.serviceName}\n📅 ${data.dateTime}${priceLine}\n\n_Reservado en Glow Studio_`;
 
   return sendWhatsAppMessage({ to: salonPhone, message });
 }
@@ -40,8 +43,18 @@ export async function sendBookingConfirmation(data: {
   customerName: string;
   serviceName: string;
   dateTime: string;
+  price?: number | string;
 }): Promise<boolean> {
-  const message = `✨ *¡Hola ${data.customerName}!*\n\nTu turno en *Glow Studio* está confirmado:\n\n💇 *Servicio:* ${data.serviceName}\n📅 *Fecha y Hora:* ${data.dateTime}\n\n¡Te esperamos con muchas ganas! 💕`;
+  const formattedPrice = data.price ? `$${Number(data.price).toLocaleString('es-AR')}` : '';
+  const priceLine = formattedPrice ? `\n💰 *Total a abonar:* ${formattedPrice}` : '';
+  const message = `✨ *¡Hola ${data.customerName}!*
+
+Tu turno en *Glow Studio* está confirmado:
+
+💇 *Servicio:* ${data.serviceName}
+📅 *Fecha y Hora:* ${data.dateTime}${priceLine}
+
+¡Te esperamos con muchas ganas! 💕✨`;
   
   return sendWhatsAppMessage({
     to: data.customerPhone,

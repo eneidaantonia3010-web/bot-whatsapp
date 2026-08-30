@@ -2,56 +2,211 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  validate-api:
-    name: Build & Type-Check API
+  # ============================================================
+  # 1. SHARED VALIDATION & PRISMA SCHEMA CHECK
+  # ============================================================
+  validate-shared:
+    name: 1. Validate Shared & Prisma Schema
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install Root & API
+          cache: 'npm'
+
+      - name: Cache Root NPM Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-shared-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-shared-
+            ${{ runner.os }}-npm-
+
+      - name: Install Root Dependencies
+        run: npm install
+
+      - name: Validate Prisma Schema
+        run: npx prisma validate --schema=prisma/schema.prisma
+
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=prisma/schema.prisma
+
+  # ============================================================
+  # 2. WEB FRONTEND (Next.js 14 / React 19)
+  # ============================================================
+  validate-web:
+    name: 2. Validate Web Frontend (Next.js)
+    needs: [validate-shared]
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_API_URL: https://glow-studio-api-2vzt.onrender.com
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/glowstudio?schema=public
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Cache Web NPM Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-web-${{ hashFiles('apps/web/package.json', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-web-
+            ${{ runner.os }}-npm-
+
+      - name: Cache Next.js Build Artifacts
+        uses: actions/cache@v4
+        with:
+          path: apps/web/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('apps/web/package.json') }}-${{ hashFiles('apps/web/src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('apps/web/package.json') }}-
+            ${{ runner.os }}-nextjs-
+
+      - name: Install Root & Web Dependencies
+        run: |
+          npm install
+          cd apps/web && npm install
+
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=prisma/schema.prisma
+
+      - name: TypeScript Type-Check Web
+        run: cd apps/web && npm run type-check
+
+      - name: Run Web Vitest Tests
+        run: cd apps/web && npm run test
+
+      - name: Lint Next.js & Components
+        run: cd apps/web && npm run lint
+
+      - name: Build Next.js Production Bundle
+        run: cd apps/web && npm run build
+
+  # ============================================================
+  # 3. API BACKEND (Express / TypeScript)
+  # ============================================================
+  validate-api:
+    name: 3. Validate API Backend (Express)
+    needs: [validate-shared]
+    runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: test-jwt-secret-key-glow-studio-ci-123456789
+      API_SECRET_KEY: test-api-secret-key-glow-studio-ci-123456789
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/glowstudio?schema=public
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Cache API NPM Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-api-${{ hashFiles('apps/api/package.json', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-api-
+            ${{ runner.os }}-npm-
+
+      - name: Install Root & API Dependencies
         run: |
           npm install
           cd apps/api && npm install
+
       - name: Generate Prisma Client
         run: npx prisma generate --schema=prisma/schema.prisma
-      - name: Build API TypeScript
+
+      - name: TypeScript Type-Check API
+        run: cd apps/api && npm run type-check
+
+      - name: Run API Vitest Unit & Integration Tests
+        run: cd apps/api && npm run test
+
+      - name: Build API TypeScript Distribution
         run: cd apps/api && npm run build
 
-  validate-web:
-    name: Build & Type-Check Web
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Install Web
-        run: cd apps/web && npm install
-      - name: Build Next.js
-        run: cd apps/web && npm run build
-        env:
-          NEXT_PUBLIC_API_URL: https://glow-studio-api-2vzt.onrender.com
-
+  # ============================================================
+  # 4. PYTHON BOT & AI AGENT (FastAPI / Groq)
+  # ============================================================
   validate-bot:
-    name: Validate Python Bot
+    name: 4. Validate Bot AI (Python/FastAPI)
+    needs: [validate-shared]
     runs-on: ubuntu-latest
+    env:
+      GROQ_API_KEY: gsk_mock_test_key_for_ci_pipeline_verification
+      API_URL: http://localhost:3001
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/glowstudio?schema=public
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install Bot Dependencies
+          cache: 'pip'
+          cache-dependency-path: apps/bot/requirements.txt
+
+      - name: Install Bot Dependencies & Test Suite Runners
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/bot/requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Verify Module Imports & Syntax
         run: |
           cd apps/bot
-          pip install -r requirements.txt
-      - name: Syntax & Import Check
+          python -c "import config, main, agent; print('✅ Bot modules successfully verified and loaded')"
+
+      - name: Run Bot Pytest Suite (Conversational & AI Tests)
         run: |
           cd apps/bot
-          python -c "import config, main, agent; print('Bot imports successfully verified!')"
+          pytest tests/ -v
+
+  # ============================================================
+  # 5. CI SUMMARY & PIPELINE GATE
+  # ============================================================
+  ci-gate:
+    name: 5. CI Pipeline Certification Gate
+    needs: [validate-web, validate-api, validate-bot]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check All Jobs Status
+        run: |
+          if [ "${{ needs.validate-web.result }}" != "success" ] || \
+             [ "${{ needs.validate-api.result }}" != "success" ] || \
+             [ "${{ needs.validate-bot.result }}" != "success" ]; then
+            echo "❌ CI Pipeline Failed: One or more jobs did not succeed."
+            echo "Web Status: ${{ needs.validate-web.result }}"
+            echo "API Status: ${{ needs.validate-api.result }}"
+            echo "Bot Status: ${{ needs.validate-bot.result }}"
+            exit 1
+          fi
+          echo "🎉 All CI validations (Shared, Web, API, Bot) passed successfully 100% in GREEN!"

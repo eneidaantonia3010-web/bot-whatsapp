@@ -35,6 +35,57 @@ async function main() {
   });
   console.log(`✅ Admin user created: ${admin2.email}`);
 
+  // ---- STAFF MEMBERS ----
+  const staffData = [
+    {
+      name: 'Sofía García',
+      email: 'sofia@glowstudio.com',
+      phone: '+5491178296781',
+      bio: 'Fundadora & Estilista Senior con más de 15 años transformando miradas y estilos.',
+      specialties: ['Cortes de Precisión', 'Balayage VIP', 'Asesoría de Imagen'],
+      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=face',
+      active: true,
+    },
+    {
+      name: 'Camila Torres',
+      email: 'camila@glowstudio.com',
+      phone: '+5491155550001',
+      bio: 'Especialista en colorimetría avanzada, rubios perfectos y tratamientos K18.',
+      specialties: ['Colorimetría', 'Balayage', 'Tratamiento Keratina'],
+      avatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=face',
+      active: true,
+    },
+    {
+      name: 'Valentina Ruiz',
+      email: 'valentina@glowstudio.com',
+      phone: '+5491155550002',
+      bio: 'Master Nail Artist certificada. Especialista en esculpidas y soft gel.',
+      specialties: ['Uñas Soft Gel', 'Nail Art Ruso', 'Esmaltado Semipermanente'],
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&h=400&fit=crop&crop=face',
+      active: true,
+    },
+    {
+      name: 'Lucía Méndez',
+      email: 'lucia@glowstudio.com',
+      phone: '+5491155550003',
+      bio: 'Cosmetóloga y especialista en estética facial y diseño de mirada.',
+      specialties: ['Facial Glow Profundo', 'Lifting de Pestañas', 'Perfilado de Cejas'],
+      avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&h=400&fit=crop&crop=face',
+      active: true,
+    },
+  ];
+
+  const staffMembers = [];
+  for (const s of staffData) {
+    const staff = await prisma.staff.upsert({
+      where: { email: s.email },
+      update: s,
+      create: s,
+    });
+    staffMembers.push(staff);
+    console.log(`✅ Staff: ${staff.name} (${staff.specialties.join(', ')})`);
+  }
+
   // ---- SERVICES ----
   const servicesData = [
     {
@@ -209,12 +260,23 @@ async function main() {
     const endDate = new Date(date);
     endDate.setMinutes(endDate.getMinutes() + service.duration);
 
+    // Assign appropriate staff member based on service specialization
+    let assignedStaff = staffMembers[0];
+    if (service.category === 'cabello' || service.category === 'tratamientos') {
+      assignedStaff = i % 2 === 0 ? staffMembers[0] : staffMembers[1];
+    } else if (service.category === 'unas') {
+      assignedStaff = staffMembers[2];
+    } else if (service.category === 'facial') {
+      assignedStaff = staffMembers[3];
+    }
+
     appointmentsData.push({
       date,
       endDate,
       status: statuses[i],
       customerId: customers[i].id,
       serviceId: service.id,
+      staffId: assignedStaff.id,
       source: i % 3 === 0 ? Platform.INSTAGRAM : i % 3 === 1 ? Platform.WHATSAPP : Platform.WEB,
       notes: i % 3 === 0 ? 'Reservado por Instagram' : undefined,
     });
@@ -257,7 +319,7 @@ async function main() {
   }
   console.log(`✅ ${messagesData.length} message logs created`);
 
-  console.log('\n🎉 Database seeded successfully!');
+  console.log('\n🎉 Database seeded successfully with staff, services, and initial data!');
 }
 
 main()

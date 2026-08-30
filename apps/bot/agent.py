@@ -43,11 +43,11 @@ from services.whatsapp import send_whatsapp_notification
 from services.phone_utils import normalize_phone
 from services.llm_pool import llm_pool
 from services.faq_handler import get_faq_response
-from services.intent_classifier import classify_intent
+from services.intent_classifier import classify_intent, classify_intent_with_confidence, CONFIDENCE_THRESHOLD
 from services.language_detector import detect_language, t
 from services.escalation import escalate_to_human, build_escalation_summary
 from services.tts import synthesize_voice_note
-from services.memory import format_memory_system_context, remember_preference
+from services.memory import format_memory_system_context, remember_preference, extract_and_remember_preferences
 from services.prompts import (
     SERVICE_HELP_PROMPT,
     DATE_CLARIFICATION_PROMPT,
@@ -390,12 +390,15 @@ async def _process_message_internal(
 
     # Inyectar memoria semántica de clienta
     clean_phone = normalize_phone(conv.get("customer_phone") or sender_id)
+    if clean_phone:
+        extract_and_remember_preferences(clean_phone, message)
     memory_context = format_memory_system_context(clean_phone)
     system_personality = SYSTEM_PERSONALITY_MAP.get(lang, SYSTEM_PERSONALITY_MAP["es"]) + memory_context
 
     try:
-        # STEP 1: Intent Classification
-        intent = classify_intent(message)
+        # STEP 1: Intent Classification with Confidence Scoring
+        intent, confidence = classify_intent_with_confidence(message)
+        logger.info(f"Intent classified for {sender_id}: {intent} (confidence={confidence:.2f})")
 
         # STEP 2: Handle thanks and small talk
         if intent == "THANKS":
@@ -838,14 +841,17 @@ async def _process_message_internal(
                 if result and not result.get("conflict"):
                     display_date = _format_date_display(date_str)
                     date_time_str = f"{display_date} a las {time_str}hs"
+                    price_val = total_pr if len(selected_services) >= 2 else (service.get('price') if service else None)
+                    price_line = f"\n💰 *Total a abonar:* {_format_price(price_val)}" if price_val else ""
 
-                    await send_whatsapp_notification(name, service_name_full, date_time_str)
+                    await send_whatsapp_notification(name, service_name_full, date_time_str, price_val)
                     remember_preference(phone, "last_service", service_name_full)
 
                     response = (
                         f"🎉 *¡Turno confirmado!*\n\n"
                         f"Te esperamos el *{display_date} a las {time_str}hs* "
-                        f"en *Av. Corrientes 1234, Buenos Aires*.\n\n"
+                        f"en *Av. Corrientes 1234, Buenos Aires*.\n"
+                        f"{price_line}\n\n"
                         f"Te vamos a enviar un recordatorio por WhatsApp 📱\n\n"
                         f"¡Nos vemos! 💕✨"
                     )

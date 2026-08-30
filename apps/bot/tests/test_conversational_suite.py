@@ -112,7 +112,7 @@ def test_output_guardrails_clean_response():
     assert guarded == raw_response
 
 
-# ── 6. Intent Classifier & Cache ───────────────────────────
+# ── 6. Intent Classifier & Confidence Scoring ─────────────────
 
 def test_intent_classifier_direct_patterns():
     assert classify_intent("donde estan ubicados?") == "FAQ_UBICACION"
@@ -121,6 +121,18 @@ def test_intent_classifier_direct_patterns():
     assert classify_intent("reprogramar mi turno") == "RESCHEDULE_APPOINTMENT"
     assert classify_intent("quiero hablar con sofia una persona") == "HUMAN_ESCALATION"
     assert classify_intent("muchas gracias chicas!") == "THANKS"
+
+
+def test_intent_classifier_confidence_scoring():
+    from services.intent_classifier import classify_intent_with_confidence, CONFIDENCE_THRESHOLD
+
+    intent_greet, conf_greet = classify_intent_with_confidence("hola")
+    assert intent_greet == "GREETING"
+    assert conf_greet >= CONFIDENCE_THRESHOLD
+
+    intent_faq, conf_faq = classify_intent_with_confidence("donde estan ubicados?")
+    assert intent_faq == "FAQ_UBICACION"
+    assert conf_faq >= CONFIDENCE_THRESHOLD
 
 
 # ── 7. LLM History Normalization ───────────────────────────
@@ -148,3 +160,4 @@ def test_format_appointment_datetime():
     formatted = format_appointment_datetime(iso)
     assert "septiembre" in formatted
     assert "11:30" in formatted
+

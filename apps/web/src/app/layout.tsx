@@ -6,6 +6,8 @@ import { Footer } from "@/components/layout/Footer";
 import { Toaster } from "sonner";
 import { I18nProvider } from "@/i18n/I18nContext";
 
+import { PwaRegister } from "@/components/PwaRegister";
+
 const bodoniModa = Bodoni_Moda({
   subsets: ["latin"],
   variable: "--font-bodoni-moda",
@@ -22,6 +24,7 @@ export const metadata: Metadata = {
   title: "Glow Studio by Sofia | Salón de Belleza Premium en Buenos Aires",
   description:
     "Descubrí una experiencia de belleza única en Buenos Aires. Cortes, coloración, uñas gel, faciales y tratamientos premium. Reservá tu turno online.",
+  manifest: "/manifest.json",
   keywords: [
     "salón de belleza",
     "peluquería premium",
@@ -48,6 +51,7 @@ export default function RootLayout({
     <html lang="es" className="dark scroll-smooth">
       <body className={`${bodoniModa.variable} ${hankenGrotesk.variable} antialiased overflow-x-hidden selection:bg-secondary-container selection:text-white`}>
         <I18nProvider>
+          <PwaRegister />
           <Navbar />
           <main>{children}</main>
           <Footer />

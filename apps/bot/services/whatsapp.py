@@ -17,18 +17,22 @@ except ImportError:
     SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491178296781")
 
 
+from typing import Optional
+
 async def send_whatsapp_notification(
     customer_name: str,
     service_name: str,
     date_time: str,
+    price: Optional[int | float | str] = None,
 ) -> bool:
     """Envía una notificación de reserva al salón vía WhatsApp."""
+    price_str = f"\n💰 ${int(price):,}".replace(",", ".") if price else ""
     message = (
         f"🔔 *Nuevo turno reservado*\n\n"
         f"👤 {customer_name}\n"
         f"💇 {service_name}\n"
-        f"📅 {date_time}\n\n"
-        f"_Reservado desde Instagram vía bot IA_"
+        f"📅 {date_time}{price_str}\n\n"
+        f"_Reservado vía bot IA_"
     )
     return await send_message(SALON_WHATSAPP, message)
 

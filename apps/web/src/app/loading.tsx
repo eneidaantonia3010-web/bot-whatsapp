@@ -1,16 +1,15 @@
-'use client';
-
-import { Sparkle } from '@phosphor-icons/react';
+import { ServiceListSkeleton } from "@/components/ui/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Loading() {
   return (
-    <div className="min-h-[100svh] bg-[var(--color-bg)] flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-16 h-16 rounded-full bg-[var(--color-bg-alt)] flex items-center justify-center mx-auto mb-4 animate-pulse">
-          <Sparkle weight="fill" className="w-8 h-8 text-[var(--color-accent)]" />
-        </div>
-        <p className="text-[var(--color-ink-muted)] text-sm font-medium">Cargando...</p>
+    <div className="container mx-auto px-4 py-24 min-h-[70vh]">
+      <div className="max-w-xl mx-auto text-center mb-16">
+        <Skeleton className="h-4 w-32 mx-auto mb-4 rounded-full" />
+        <Skeleton className="h-10 w-3/4 mx-auto mb-4 rounded-xl" />
+        <Skeleton className="h-5 w-full mx-auto rounded-lg" />
       </div>
+      <ServiceListSkeleton count={6} />
     </div>
   );
 }

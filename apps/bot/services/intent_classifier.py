@@ -214,36 +214,38 @@ def _classify_by_rules(text: str) -> str | None:
     return None
 
 
-# Cache for LLM classifications (text hash -> intent)
-_intent_cache: dict[str, str] = {}
+# Cache for LLM classifications (text hash -> (intent, confidence))
+_intent_cache: dict[str, tuple[str, float]] = {}
 _MAX_CACHE_ENTRIES = 500
+CONFIDENCE_THRESHOLD = 0.70
 
 
-def classify_intent(message: str) -> str:
+def classify_intent_with_confidence(message: str) -> tuple[str, float]:
     """
-    Clasifica el mensaje del cliente en una de las categorías soportadas.
-
-    Prioridad:
-      1. Reglas rápidas (keywords, sets) -> 0ms
-      2. Cache en memoria de mensajes clasificados -> 0ms
-      3. Si el mensaje es muy corto (<= 2 palabras), retornar OTHER sin llamar al LLM
-      4. LLM con prompt few-shot optimizado (max_tokens=15)
-      5. Default: OTHER
+    Clasifica el mensaje del cliente en una de las categorías soportadas y retorna
+    (intent, confidence), donde confidence es un valor entre 0.0 y 1.0.
     """
     text = message.lower().strip()
 
-    # Fast path 1: reglas deterministas
+    # Fast path 1: reglas deterministas de alta confianza
+    if text in _GREETING_SET:
+        return "GREETING", 1.0
+    if text in _THANKS_SET:
+        return "THANKS", 1.0
+    if text in _NUMBER_CHOICES:
+        return "BOOKING", 1.0
+
     rule_result = _classify_by_rules(text)
     if rule_result:
-        return rule_result
+        return rule_result, 0.92
 
     # Fast path 2: cache
     if text in _intent_cache:
         return _intent_cache[text]
 
-    # Fast path 3: mensajes cortos
-    if len(text.split()) <= 2:
-        return "OTHER"
+    # Fast path 3: mensajes muy cortos
+    if len(text.split()) <= 1:
+        return "OTHER", 0.50
 
     # LLM classification fallback (con timeout estricto y max_tokens=15)
     try:
@@ -259,12 +261,20 @@ def classify_intent(message: str) -> str:
             cleaned = raw_res.strip().upper()
             for v in VALID_INTENTS:
                 if v in cleaned:
-                    logger.info(f"Intent classified as {v}: {message[:50]}")
+                    logger.info(f"Intent classified as {v} (conf=0.85): {message[:50]}")
                     if len(_intent_cache) > _MAX_CACHE_ENTRIES:
                         _intent_cache.clear()
-                    _intent_cache[text] = v
-                    return v
+                    result = (v, 0.85)
+                    _intent_cache[text] = result
+                    return result
     except Exception as e:
         logger.warning(f"Intent classification LLM failed: {e}")
 
-    return "OTHER"
+    return "OTHER", 0.40
+
+
+def classify_intent(message: str) -> str:
+    """Función de compatibilidad que retorna el intent como string."""
+    intent, _ = classify_intent_with_confidence(message)
+    return intent
+

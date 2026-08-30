@@ -270,4 +270,24 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model MessageQueue {
+  id          String    @id @default(cuid())
+  jid         String
+  message     String    // JSON payload of message to send
+  platform    Platform  @default(WHATSAPP)
+  priority    Int       @default(1) // 1=Normal, 2=High, 3=Critical
+  status      String    @default("PENDING") // PENDING, PROCESSING, SENT, FAILED
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5) @map("max_attempts")
+  lastError   String?   @map("last_error")
+  nextRetryAt DateTime  @default(now()) @map("next_retry_at")
+  sentAt      DateTime? @map("sent_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, nextRetryAt])
+  @@index([jid])
+  @@map("message_queue")
+}
+
 

@@ -161,4 +161,6 @@ export const NAV_LINKS = [
   { href: '#reservar', label: 'Reservar' },
 ] as const;
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://glow-studio-api-2vzt.onrender.com';
+import { env } from './env';
+
+export const API_URL = env.NEXT_PUBLIC_API_URL;

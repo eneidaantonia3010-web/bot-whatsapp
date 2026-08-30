@@ -121,8 +121,18 @@ def get_db_connection():
                     pass
 
 
+_DEFAULT_FALLBACK_SERVICES = [
+    {"id": "s1", "name": "Corte Signature", "description": "Lavado, corte personalizado y brushing", "price": 25000, "duration": 45, "category": "cabello"},
+    {"id": "s2", "name": "Corte Hombre Premium", "description": "Corte masculino de precisión con toalla caliente", "price": 15000, "duration": 30, "category": "cabello"},
+    {"id": "s3", "name": "Uñas Gel Luxury", "description": "Esmaltado en gel con diseño artístico", "price": 28000, "duration": 75, "category": "unas"},
+    {"id": "s4", "name": "Esmaltado Semi Pro", "description": "Esmaltado semipermanente profesional", "price": 18000, "duration": 45, "category": "unas"},
+    {"id": "s5", "name": "Facial Glow", "description": "Limpieza profunda, exfoliación y ácido hialurónico", "price": 35000, "duration": 60, "category": "facial"},
+    {"id": "s6", "name": "Tratamiento Anti-frizz Keratina", "description": "Alisado con keratina brasileña premium", "price": 45000, "duration": 120, "category": "tratamientos"},
+]
+
+
 def get_services() -> list[dict]:
-    """Fetch all active services from the database with fast in-memory cache."""
+    """Fetch all active services from the database with fast in-memory cache and static fallback."""
     global _services_cache, _services_cache_time
     import time
     now = time.time()
@@ -132,7 +142,7 @@ def get_services() -> list[dict]:
     try:
         with get_db_connection() as conn:
             if not conn:
-                return _services_cache
+                return _services_cache or _DEFAULT_FALLBACK_SERVICES
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT id, name, description, price, duration, category "
@@ -142,10 +152,11 @@ def get_services() -> list[dict]:
                 if services:
                     _services_cache = services
                     _services_cache_time = now
-                return services
+                    return services
+                return _services_cache or _DEFAULT_FALLBACK_SERVICES
     except Exception as e:
         logger.error(f"Error fetching services: {e}")
-        return _services_cache
+        return _services_cache or _DEFAULT_FALLBACK_SERVICES
 
 
 def get_service_by_name(name: str) -> Optional[dict]:

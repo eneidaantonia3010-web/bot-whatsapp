@@ -42,6 +42,9 @@
   },
   "devDependencies": {
     "@types/node-cron": "^3.0.11",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
     "vitest": "^4.1.11"
   }
 }
+

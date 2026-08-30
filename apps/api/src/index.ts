@@ -26,6 +26,7 @@ import { blockedTimesRouter } from './routes/blocked-times';
 import { waitlistRouter } from './routes/waitlist';
 import { staffRouter } from './routes/staff';
 import { realtimeRouter } from './routes/realtime';
+import { metricsRouter } from './routes/metrics';
 import { instagramWebhookRouter } from './routes/webhooks/instagram';
 import { requireAuth, requireAdmin } from './middleware/auth';
 import { appointmentCreationLimiter, publicApiLimiter, webhookLimiter } from './middleware/rate-limit';
@@ -96,6 +97,7 @@ app.use('/api/waitlist', waitlistRouter);
 // WhatsApp Management Endpoints (GET /qr and /status are public/viewable; POST actions protected inside router)
 app.use('/api/whatsapp-admin', whatsappAdminRouter);
 app.use('/api/admin/whatsapp', whatsappAdminRouter);
+app.use('/api/metrics', metricsRouter);
 app.use('/api/customers', requireAuth, customersRouter);
 app.use('/api/messages', requireAuth, messagesRouter);
 app.use('/api/admin', requireAdmin, adminRouter);
@@ -141,31 +143,42 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Internal server error', message });
 });
 
-// Start server
-const server = app.listen(PORT, () => {
-  console.log(`\n✨ Glow Studio API running on port ${PORT}`);
-  
-  // Seed admin user if needed
-  ensureAdminUserExists();
+// Start server (only when not in test environment)
+let server: ReturnType<typeof app.listen> | null = null;
 
-  // Initialize scheduled tasks
-  initCronJobs();
+if (process.env.NODE_ENV !== 'test') {
+  server = app.listen(PORT, () => {
+    console.log(`\n✨ Glow Studio API running on port ${PORT}`);
+    
+    // Seed admin user if needed
+    ensureAdminUserExists();
 
-  // Initialize Native In-App Baileys WhatsApp Service
-  initNativeWhatsApp();
-});
+    // Initialize scheduled tasks
+    initCronJobs();
 
-// Graceful shutdown
-const handleShutdown = async (signal: string) => {
-  console.log(`\n🔌 Recibida señal ${signal}. Cerrando servidor API y desconectando Prisma...`);
-  server.close(async () => {
-    await prisma.$disconnect();
-    console.log('✅ Conexiones cerradas limpiamente.');
-    process.exit(0);
+    // Initialize Native In-App Baileys WhatsApp Service
+    initNativeWhatsApp();
   });
-};
 
-process.on('SIGTERM', () => handleShutdown('SIGTERM'));
-process.on('SIGINT', () => handleShutdown('SIGINT'));
+  // Graceful shutdown
+  const handleShutdown = async (signal: string) => {
+    console.log(`\n🔌 Recibida señal ${signal}. Cerrando servidor API y desconectando Prisma...`);
+    if (server) {
+      server.close(async () => {
+        await prisma.$disconnect();
+        console.log('✅ Conexiones cerradas limpiamente.');
+        process.exit(0);
+      });
+    } else {
+      await prisma.$disconnect();
+      process.exit(0);
+    }
+  };
 
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.on('SIGINT', () => handleShutdown('SIGINT'));
+}
+
+export { app };
 export default app;
+

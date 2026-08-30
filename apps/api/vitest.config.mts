@@ -11,6 +11,7 @@ export default defineConfig({
     environment: 'node',
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'supertest': path.resolve(__dirname, './tests/supertest.ts'),
     },
     include: ['tests/**/*.test.ts'],
   },

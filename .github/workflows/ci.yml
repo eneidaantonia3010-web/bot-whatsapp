@@ -26,7 +26,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Cache Root NPM Cache
         uses: actions/cache@v4
@@ -64,7 +63,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Cache Web NPM Cache
         uses: actions/cache@v4
@@ -123,7 +121,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Cache API NPM Cache
         uses: actions/cache@v4

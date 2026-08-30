@@ -1,9 +1,0 @@
-{
-  "projectId": "3a755e3f-c892-457a-ac75-a57c345b28c3",
-  "type": "frontend",
-  "name": "User can navigate to booking page",
-  "planSteps": [
-    { "type": "action", "description": "Navigate to the home page and click on 'Reservar Turno' or go directly to /turno" },
-    { "type": "assertion", "description": "The booking page loads and displays a calendar or service selection interface" }
-  ]
-}

@@ -1,9 +1,11 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import { useTranslation } from '@/i18n/I18nContext';
 
 export function Footer() {
   const pathname = usePathname();
+  const { t } = useTranslation();
 
   if (pathname?.startsWith('/admin')) {
     return null;
@@ -18,7 +20,7 @@ export function Footer() {
             GLOW STUDIO
           </div>
           <p className="text-on-surface-variant font-body-md text-body-md leading-relaxed">
-            Elevando los estándares de belleza en Buenos Aires desde 2018. Un santuario dedicado al arte del estilismo y el bienestar personal.
+            {t('footer.tagline')}
           </p>
         </div>
         
@@ -26,9 +28,9 @@ export function Footer() {
         <div className="flex flex-wrap gap-10 md:gap-16">
           <div className="flex flex-col gap-4 md:gap-6">
             <span className="text-secondary font-label-md tracking-[0.2em] text-[12px] uppercase">Explorar</span>
-            <a className="nav-link text-on-surface-variant hover:text-white transition-colors text-label-md uppercase" href="#servicios">Servicios</a>
-            <a className="nav-link text-on-surface-variant hover:text-white transition-colors text-label-md uppercase" href="#equipo">El Equipo</a>
-            <a className="nav-link text-on-surface-variant hover:text-white transition-colors text-label-md uppercase" href="#galeria">Portfolio</a>
+            <a className="nav-link text-on-surface-variant hover:text-white transition-colors text-label-md uppercase" href="#servicios">{t('nav.services')}</a>
+            <a className="nav-link text-on-surface-variant hover:text-white transition-colors text-label-md uppercase" href="#equipo">{t('nav.team')}</a>
+            <a className="nav-link text-on-surface-variant hover:text-white transition-colors text-label-md uppercase" href="#galeria">{t('nav.gallery')}</a>
           </div>
           <div className="flex flex-col gap-4 md:gap-6">
             <span className="text-secondary font-label-md tracking-[0.2em] text-[12px] uppercase">Legal</span>
@@ -44,7 +46,7 @@ export function Footer() {
             <a className="w-10 h-10 md:w-12 md:h-12 rounded-full glass-panel flex items-center justify-center hover:bg-secondary/20 transition-all" href="#"><span className="material-symbols-outlined text-on-surface" style={{ fontVariationSettings: "'FILL' 1" }}>photo_camera</span></a>
           </div>
           <div className="font-body-md text-label-md text-on-surface-variant text-left md:text-right">
-            © 2024 GLOW STUDIO LUXE.<br/>ALL RIGHTS RESERVED.
+            © {new Date().getFullYear()} GLOW STUDIO LUXE.<br/>{t('footer.rightsReserved')}
           </div>
         </div>
       </div>

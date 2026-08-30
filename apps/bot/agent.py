@@ -358,7 +358,7 @@ async def _process_message_internal(
         conv["language"] = lang
 
     # Image reference detection & tagging
-    if "[Imagen:" in message:
+    if "[Imagen:" in message or "[La clienta envió una imagen:" in message or "[Foto:" in message:
         conv["reference_notes"] = message
         logger.info(f"Tagged reference photo for {sender_id}")
 
@@ -444,10 +444,15 @@ async def _process_message_internal(
             return welcome_back_prefix + response
 
         if conv["stage"] == "human_escalated":
-            response = t("human_notified", lang)
-            chat_history.append({"role": "model", "parts": [response]})
-            save_conversation_state(sender_id, conv)
-            return response
+            clean_check = message.strip().lower()
+            if any(w in clean_check for w in ("hola", "inicio", "reset", "menu", "menú", "bot", "empezar", "reiniciar")):
+                conv["stage"] = "greeting"
+                conv["fallback_count"] = 0
+            else:
+                response = t("human_notified", lang) + "\n\n_💡 Si preferís volver al asistente virtual, escribí *menu* o *hola*._"
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return response
 
         if conv["stage"] in flow_stages:
             if intent == "CONFIRM_APPOINTMENT":
@@ -619,10 +624,13 @@ async def _process_message_internal(
         # ---- SERVICE_SELECTION ----
         elif stage == "service_selection":
             matched_service = None
-            try:
-                idx = int(message.strip())
-                matched_service = get_service_by_index(idx)
-            except ValueError:
+            clean_digits = "".join(c for c in message.strip() if c.isdigit())
+            if clean_digits:
+                try:
+                    matched_service = get_service_by_index(int(clean_digits))
+                except (ValueError, IndexError):
+                    matched_service = None
+            if not matched_service:
                 matched_service = get_service_by_name(message)
 
             if matched_service:
@@ -646,18 +654,30 @@ async def _process_message_internal(
                     return {"response": welcome_back_prefix + response, "image_url": gallery["url"]}
                 return welcome_back_prefix + response
 
-            # Service help via LLM
+            # Increment fallback count
+            conv["fallback_count"] = conv.get("fallback_count", 0) + 1
+            if conv["fallback_count"] >= 3:
+                conv["stage"] = "human_escalated"
+                sender_name = conv.get("customer_name") or f"Cliente ({sender_id[-4:] if len(sender_id)>=4 else sender_id})"
+                summary = build_escalation_summary(conv, message)
+                await escalate_to_human(sender_id, sender_name, summary, message)
+                response = "Noto que estás buscando algo específico. Ya le avisé a Sofía para que te asesore directamente por WhatsApp 💕"
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return welcome_back_prefix + response
+
+            # Service help via LLM async
             services = get_services()
             services_catalog = format_services_catalog(services)
             service_help_prompt = SERVICE_HELP_PROMPT.format(
                 services_catalog=services_catalog, message=message
             )
-            ai_response = llm_pool.get_completion(
+            ai_response = await llm_pool.get_completion_async(
                 messages=chat_history[-8:],
                 system_msg=system_personality + "\n" + service_help_prompt,
                 max_tokens=150,
             )
-            response = ai_response if ai_response else "No te entendí bien, ¿me repetís qué servicio buscás? 💕"
+            response = ai_response if ai_response else "No te entendí bien, ¿me repetís qué servicio buscás? Podés elegir el número de la lista 💕"
             response = _apply_output_guardrails(response)
             chat_history.append({"role": "model", "parts": [response]})
             save_conversation_state(sender_id, conv)
@@ -665,6 +685,16 @@ async def _process_message_internal(
 
         # ---- DATE_SELECTION ----
         elif stage == "date_selection":
+            # Si se perdió el servicio seleccionado, regresar a service_selection
+            if not conv.get("selected_service"):
+                conv["stage"] = "service_selection"
+                services = get_services()
+                catalog = format_services_catalog(services)
+                response = "Primero elijamos el servicio que te gustaría realizarte 💕\n\n" + catalog
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return welcome_back_prefix + response
+
             # Check if user requests waitlist
             if any(w in clean_msg for w in ("lista de espera", "anotame", "avísame", "avisame", "espera")):
                 service = conv.get("selected_service")
@@ -681,6 +711,13 @@ async def _process_message_internal(
                 conversations.pop(sender_id, None)
                 delete_conversation_state(sender_id)
                 chat_history.append({"role": "model", "parts": [response]})
+                return welcome_back_prefix + response
+
+            # Aviso explícito si menciona domingo
+            if "domingo" in clean_msg:
+                response = "Recordá que los domingos el salón permanece cerrado. Abrimos de *Lunes a Sábado de 9:00 a 19:00hs* ✨ ¿Qué otro día te queda cómodo?"
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
                 return welcome_back_prefix + response
 
             parsed = parse_date(message)
@@ -734,14 +771,26 @@ async def _process_message_internal(
                 save_conversation_state(sender_id, conv)
                 return welcome_back_prefix + response
 
-            # Date clarification
+            # Increment fallback count on failed date parse
+            conv["fallback_count"] = conv.get("fallback_count", 0) + 1
+            if conv["fallback_count"] >= 3:
+                conv["stage"] = "human_escalated"
+                sender_name = conv.get("customer_name") or f"Cliente ({sender_id[-4:] if len(sender_id)>=4 else sender_id})"
+                summary = build_escalation_summary(conv, message)
+                await escalate_to_human(sender_id, sender_name, summary, message)
+                response = "Se me está complicando interpretar la fecha u horario. Ya le avisé a Sofía para coordinar tu turno directamente por WhatsApp 💕"
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return welcome_back_prefix + response
+
+            # Date clarification async
             date_clarification_prompt = DATE_CLARIFICATION_PROMPT.format(message=message)
-            ai_response = llm_pool.get_completion(
+            ai_response = await llm_pool.get_completion_async(
                 messages=chat_history[-8:],
                 system_msg=system_personality + "\n" + date_clarification_prompt,
                 max_tokens=120,
             )
-            response = ai_response if ai_response else "No logré entender la fecha. ¿Me decís el día y la hora de nuevo? (Ej: _mañana 14hs_) 😊"
+            response = ai_response if ai_response else "No logré entender la fecha. ¿Me decís el día y la hora de nuevo? (Ej: _mañana 14hs_ o _jueves 16:30_) 😊"
             chat_history.append({"role": "model", "parts": [response]})
             save_conversation_state(sender_id, conv)
             return welcome_back_prefix + response

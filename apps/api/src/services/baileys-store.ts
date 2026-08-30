@@ -14,15 +14,29 @@ import { prisma } from './prisma';
 const KEY_PREFIX = 'baileys_key_';
 const CREDS_KEY = 'baileys_creds';
 
+async function dbRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === maxRetries) throw err;
+      await new Promise((r) => setTimeout(r, attempt * 350));
+    }
+  }
+  throw new Error('Database operation failed after retries');
+}
+
 export async function usePrismaAuthState(): Promise<{
   state: AuthenticationState;
   saveCreds: () => Promise<void>;
   clearState: () => Promise<void>;
 }> {
   // 1. Load or initialize credentials
-  const credsRecord = await prisma.baileysSession.findUnique({
-    where: { key: CREDS_KEY },
-  });
+  const credsRecord = await dbRetry(() =>
+    prisma.baileysSession.findUnique({
+      where: { key: CREDS_KEY },
+    })
+  );
 
   let creds: AuthenticationCreds;
   if (credsRecord && credsRecord.value) {
@@ -34,16 +48,18 @@ export async function usePrismaAuthState(): Promise<{
   // 2. Save credentials callback
   const saveCreds = async () => {
     const serializedCreds = JSON.parse(JSON.stringify(creds, BufferJSON.replacer));
-    await prisma.baileysSession.upsert({
-      where: { key: CREDS_KEY },
-      create: { key: CREDS_KEY, value: serializedCreds },
-      update: { value: serializedCreds },
-    });
+    await dbRetry(() =>
+      prisma.baileysSession.upsert({
+        where: { key: CREDS_KEY },
+        create: { key: CREDS_KEY, value: serializedCreds },
+        update: { value: serializedCreds },
+      })
+    );
   };
 
   // 3. Clear all authentication state on logout
   const clearState = async () => {
-    await prisma.baileysSession.deleteMany({});
+    await dbRetry(() => prisma.baileysSession.deleteMany({}));
   };
 
   return {
@@ -55,9 +71,11 @@ export async function usePrismaAuthState(): Promise<{
           await Promise.all(
             ids.map(async (id) => {
               const key = `${KEY_PREFIX}${type}_${id}`;
-              const record = await prisma.baileysSession.findUnique({
-                where: { key },
-              });
+              const record = await dbRetry(() =>
+                prisma.baileysSession.findUnique({
+                  where: { key },
+                })
+              );
 
               if (record && record.value) {
                 const value = JSON.parse(JSON.stringify(record.value), BufferJSON.reviver);
@@ -79,17 +97,21 @@ export async function usePrismaAuthState(): Promise<{
               if (value) {
                 const serializedValue = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
                 tasks.push(
-                  prisma.baileysSession.upsert({
-                    where: { key },
-                    create: { key, value: serializedValue },
-                    update: { value: serializedValue },
-                  })
+                  dbRetry(() =>
+                    prisma.baileysSession.upsert({
+                      where: { key },
+                      create: { key, value: serializedValue },
+                      update: { value: serializedValue },
+                    })
+                  )
                 );
               } else {
                 tasks.push(
-                  prisma.baileysSession.deleteMany({
-                    where: { key },
-                  })
+                  dbRetry(() =>
+                    prisma.baileysSession.deleteMany({
+                      where: { key },
+                    })
+                  )
                 );
               }
             }

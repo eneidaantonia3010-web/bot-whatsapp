@@ -130,8 +130,25 @@ async function transcribeAudioMessage(msg: any): Promise<string | null> {
   return null;
 }
 
+export async function destroyCurrentSocket(): Promise<void> {
+  if (sock) {
+    try {
+      sock.ev.removeAllListeners('creds.update');
+      sock.ev.removeAllListeners('connection.update');
+      sock.ev.removeAllListeners('messages.upsert');
+      sock.ws?.close();
+      sock.end(undefined);
+    } catch (e) {
+      console.warn('Warning cleaning up previous WhatsApp socket:', e);
+    } finally {
+      sock = null;
+    }
+  }
+}
+
 export async function initNativeWhatsApp(): Promise<void> {
   console.log('🚀 Initializing Native In-App WhatsApp Service (Baileys + PostgreSQL Store)...');
+  await destroyCurrentSocket();
 
   try {
     const { state, saveCreds, clearState } = await usePrismaAuthState();

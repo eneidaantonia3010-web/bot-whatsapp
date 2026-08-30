@@ -13,17 +13,36 @@ export type RealtimeCallback = (event: {
   timestamp?: string;
 }) => void;
 
-export function useRealtimeAppointments(onEvent: RealtimeCallback) {
+export function useRealtimeAppointments(
+  onEvent: RealtimeCallback,
+  onReconnect?: () => void
+) {
   const onEventRef = useRef(onEvent);
-  onEventRef.current = onEvent;
+  const onReconnectRef = useRef(onReconnect);
+
+  useEffect(() => {
+    onEventRef.current = onEvent;
+    onReconnectRef.current = onReconnect;
+  }, [onEvent, onReconnect]);
 
   useEffect(() => {
     let eventSource: EventSource | null = null;
     let reconnectTimer: NodeJS.Timeout | null = null;
+    let isReconnecting = false;
 
     function connect() {
       try {
-        eventSource = new EventSource(`${API_URL}/api/realtime/events`);
+        const token = typeof window !== 'undefined' ? localStorage.getItem('glow_studio_jwt_token') : null;
+        const url = `${API_URL}/api/realtime/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
+        eventSource = new EventSource(url);
+
+        eventSource.onopen = () => {
+          if (isReconnecting) {
+            onReconnectRef.current?.();
+            isReconnecting = false;
+          }
+        };
 
         eventSource.onmessage = (event) => {
           try {
@@ -41,11 +60,13 @@ export function useRealtimeAppointments(onEvent: RealtimeCallback) {
             eventSource.close();
             eventSource = null;
           }
+          isReconnecting = true;
           // Reconnect after 5 seconds if connection drops
           reconnectTimer = setTimeout(connect, 5000);
         };
       } catch (e) {
         console.warn('SSE connection initialization error:', e);
+        isReconnecting = true;
         reconnectTimer = setTimeout(connect, 5000);
       }
     }

@@ -67,11 +67,11 @@ export function Gallery() {
   const [activeCategory, setActiveCategory] = useState('todos');
 
   const categories = [
-    { id: 'todos', label: 'Todos los Trabajos' },
-    { id: 'cabello', label: 'Balayage & Color' },
-    { id: 'unas', label: 'Diseño de Uñas' },
-    { id: 'pestanas', label: 'Lifting & Cejas' },
-    { id: 'facial', label: 'Limpieza Facial' },
+    { id: 'todos', label: t('gallery.filters.all') },
+    { id: 'cabello', label: t('gallery.filters.balayage') },
+    { id: 'unas', label: t('gallery.filters.nails') },
+    { id: 'pestanas', label: t('gallery.filters.lashes') },
+    { id: 'facial', label: t('gallery.filters.facial') },
   ];
 
   return (
@@ -83,9 +83,9 @@ export function Gallery() {
         transition={{ duration: 0.6 }}
         className="flex flex-col items-center text-center max-w-3xl mx-auto mb-16"
       >
-        <span className="inline-block border border-secondary text-secondary font-label-md text-label-md uppercase tracking-wider px-4 py-1.5 rounded-full mb-6">NUESTRO TRABAJO</span>
-        <h2 className="font-headline-lg-mobile md:font-display-lg text-headline-lg-mobile md:text-display-lg text-on-surface mb-6">Galería de Inspiración</h2>
-        <p className="text-on-surface-variant text-body-lg">Cada servicio es una obra de arte. Mirá lo que hacemos y dejate inspirar.</p>
+        <span className="inline-block border border-secondary text-secondary font-label-md text-label-md uppercase tracking-wider px-4 py-1.5 rounded-full mb-6">{t('gallery.badge')}</span>
+        <h2 className="font-headline-lg-mobile md:font-display-lg text-headline-lg-mobile md:text-display-lg text-on-surface mb-6">{t('gallery.title')}</h2>
+        <p className="text-on-surface-variant text-body-lg">{t('gallery.subtitle')}</p>
       </motion.div>
 
       <motion.div 

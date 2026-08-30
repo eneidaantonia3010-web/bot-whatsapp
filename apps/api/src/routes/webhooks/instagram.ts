@@ -24,10 +24,12 @@ instagramWebhookRouter.get('/', (req: Request, res: Response) => {
 // POST — Receive Instagram DMs
 instagramWebhookRouter.post('/', async (req: Request, res: Response) => {
   try {
-    // Validate signature if header is present
-    if (req.headers['x-hub-signature-256'] && !verifyMetaSignature(req)) {
-      console.warn('❌ Invalid signature on Instagram webhook');
-      return res.status(403).send('Invalid signature');
+    // Validate Meta webhook signature in production or if app secret is configured
+    if (config.isProd || config.META_APP_SECRET) {
+      if (!verifyMetaSignature(req)) {
+        console.warn('❌ Invalid or missing signature on Instagram webhook');
+        return res.status(403).send('Invalid or missing signature');
+      }
     }
 
     const body = req.body;

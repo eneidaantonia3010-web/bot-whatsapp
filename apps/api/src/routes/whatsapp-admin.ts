@@ -16,7 +16,7 @@ export const whatsappAdminRouter = Router();
 const SALON_WHATSAPP = config.SALON_WHATSAPP;
 
 // GET /api/admin/whatsapp/status — Check native connection state
-whatsappAdminRouter.get('/status', (_req: Request, res: Response) => {
+whatsappAdminRouter.get('/status', requireAdmin, (_req: Request, res: Response) => {
   const status = getNativeStatus();
   return res.json(status);
 });
@@ -53,7 +53,7 @@ whatsappAdminRouter.post('/init', requireAdmin, async (_req: Request, res: Respo
 });
 
 // GET /api/admin/whatsapp/qr — Fetch live native QR code
-whatsappAdminRouter.get('/qr', (_req: Request, res: Response) => {
+whatsappAdminRouter.get('/qr', requireAdmin, (_req: Request, res: Response) => {
   const qrBase64 = getNativeQRBase64();
   const status = getNativeStatus();
 

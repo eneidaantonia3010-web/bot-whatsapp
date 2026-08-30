@@ -83,3 +83,14 @@ export async function sendCustomerReminder(data: {
 
   return sendWhatsAppMessage({ to: data.customerPhone, message });
 }
+
+export async function sendCustomer24hReminder(data: {
+  customerPhone: string;
+  customerName: string;
+  serviceName: string;
+  timeStr: string;
+}): Promise<boolean> {
+  const message = `✨ *¡Hola ${data.customerName}!* 💕\n\nTe recordamos tu turno para *mañana* en *Glow Studio*:\n\n💇 *Servicio:* ${data.serviceName}\n⏰ *Hora:* ${data.timeStr}\n\n👉 *Por favor, respondé este mensaje con un "Sí" para confirmar tu asistencia*, o avisanos si necesitás reprogramar.\n\n¡Te esperamos con muchas ganas! ✨`;
+
+  return sendWhatsAppMessage({ to: data.customerPhone, message });
+}

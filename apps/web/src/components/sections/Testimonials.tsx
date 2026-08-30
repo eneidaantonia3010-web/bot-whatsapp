@@ -2,8 +2,10 @@
 
 import { motion } from 'motion/react';
 import { Star, CheckCircle, Clock, ArrowRight, ArrowLeft } from '@phosphor-icons/react';
+import { useTranslation } from '@/i18n/I18nContext';
 
 export function Testimonials() {
+  const { t } = useTranslation();
   const testimonials = [
     {
       quote: '"¡Increíble experiencia. El Facial Glow me dejó la piel como nueva, luminosa y fresca. La atención fue impecable desde el momento en que entré."',
@@ -40,10 +42,10 @@ export function Testimonials() {
       <section className="max-w-container-max mx-auto px-margin-mobile md:px-gutter mb-section-gap" id="testimonios">
         <div className="text-center mb-16 flex flex-col items-center">
           <div className="inline-block border border-secondary-container/40 bg-secondary-container/10 rounded-full px-4 py-1 mb-6">
-            <span className="font-label-md text-secondary uppercase tracking-widest text-xs">Opiniones de Clientas</span>
+            <span className="font-label-md text-secondary uppercase tracking-widest text-xs">{t('testimonials.badge')}</span>
           </div>
-          <h2 className="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-6 max-w-2xl">Lo que Dicen Nuestras Clientas</h2>
-          <p className="font-body-lg text-body-lg text-on-surface-variant max-w-xl mx-auto">La satisfacción de nuestras clientas es nuestra mayor recomendación.</p>
+          <h2 className="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-6 max-w-2xl">{t('testimonials.title')}</h2>
+          <p className="font-body-lg text-body-lg text-on-surface-variant max-w-xl mx-auto">{t('testimonials.subtitle')}</p>
         </div>
         <div className="relative">
           <div className="flex md:grid md:grid-cols-3 gap-6 overflow-x-auto md:overflow-visible pb-8 md:pb-0 snap-x snap-mandatory hide-scrollbar items-stretch">

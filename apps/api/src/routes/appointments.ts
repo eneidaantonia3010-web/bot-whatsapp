@@ -526,12 +526,16 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Service not found' });
     }
 
+    // Normalize customer phone & email
+    const cleanPhone = customerPhone ? customerPhone.replace(/\D/g, '') : '';
+    const cleanEmail = customerEmail ? customerEmail.trim().toLowerCase() : null;
+
     // Create or find customer
     let customer = await prisma.customer.findFirst({
       where: {
         OR: [
-          { phone: customerPhone },
-          { email: customerEmail || undefined },
+          ...(cleanPhone ? [{ phone: cleanPhone }, { phone: `+${cleanPhone}` }, { phone: customerPhone }] : []),
+          ...(cleanEmail ? [{ email: cleanEmail }] : []),
         ],
       },
     });
@@ -539,9 +543,9 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
     if (!customer) {
       customer = await prisma.customer.create({
         data: {
-          name: customerName,
-          phone: customerPhone,
-          email: customerEmail || null,
+          name: customerName.trim(),
+          phone: cleanPhone || customerPhone,
+          email: cleanEmail,
         },
       });
     }
@@ -550,19 +554,6 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
     const startDate = new Date(date);
     const endDate = new Date(startDate);
     endDate.setMinutes(endDate.getMinutes() + service.duration);
-
-    // Create Google Calendar event
-    let calendarEventId: string | null = null;
-    try {
-      calendarEventId = await createCalendarEvent({
-        summary: `${service.name} — ${customerName}`,
-        description: `Cliente: ${customerName}\nTeléfono: ${customerPhone}\n${notes ? `Notas: ${notes}` : ''}`,
-        startTime: startDate,
-        endTime: endDate,
-      });
-    } catch (calErr) {
-      console.warn('⚠️ Google Calendar sync error (continuing booking):', calErr);
-    }
 
     // ── Atomic transaction: check overlap & insert appointment (Prevents TOCTOU Race Condition) ──
     let appointment;
@@ -602,7 +593,6 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
             customerId: customer.id,
             serviceId: service.id,
             staffId: staffId || null,
-            calendarEventId,
             source: source as any,
           },
           include: {
@@ -621,6 +611,25 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
         return res.status(409).json({ error: `El horario está bloqueado (${reason}).` });
       }
       throw txErr;
+    }
+
+    // Create Google Calendar event AFTER successful DB reservation
+    try {
+      const calendarEventId = await createCalendarEvent({
+        summary: `${service.name} — ${customerName}`,
+        description: `Cliente: ${customerName}\nTeléfono: ${customerPhone}\n${notes ? `Notas: ${notes}` : ''}`,
+        startTime: startDate,
+        endTime: endDate,
+      });
+      if (calendarEventId) {
+        appointment = await prisma.appointment.update({
+          where: { id: appointment.id },
+          data: { calendarEventId },
+          include: { customer: true, service: true, staff: true },
+        });
+      }
+    } catch (calErr) {
+      console.warn('⚠️ Google Calendar sync error (booking confirmed in DB):', calErr);
     }
 
     // Broadcast to connected admin dashboards in real time
@@ -721,7 +730,7 @@ appointmentsRouter.patch('/:id', requireAdmin, async (req: Request, res: Respons
 // GET /api/appointments/availability — Get available time slots for a date
 appointmentsRouter.get('/availability', async (req: Request, res: Response) => {
   try {
-    const { date, serviceId } = req.query;
+    const { date, serviceId, staffId } = req.query;
     if (!date || !serviceId) {
       return res.status(400).json({ error: 'date and serviceId are required' });
     }
@@ -731,17 +740,22 @@ appointmentsRouter.get('/availability', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Service not found' });
     }
 
-    const queryDate = new Date(date as string);
-    const dayStart = new Date(queryDate);
-    dayStart.setHours(9, 0, 0, 0);
-    const dayEnd = new Date(queryDate);
-    dayEnd.setHours(19, 0, 0, 0);
+    const dateStr = (date as string).split('T')[0];
+    const [year, month, day] = dateStr.split('-').map(Number);
+    if (!year || !month || !day) {
+      return res.status(400).json({ error: 'Invalid date format, expected YYYY-MM-DD' });
+    }
+
+    // Argentina is UTC-3 fixed (ART). 09:00 ART = 12:00 UTC, 19:00 ART = 22:00 UTC.
+    const dayStart = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+    const dayEnd = new Date(Date.UTC(year, month - 1, day, 22, 0, 0, 0));
 
     // Get existing appointments for the day
     const existing = await prisma.appointment.findMany({
       where: {
         date: { gte: dayStart, lt: dayEnd },
         status: { in: ['PENDING', 'CONFIRMED'] },
+        ...(staffId ? { staffId: staffId as string } : {}),
       },
     });
 
@@ -754,22 +768,30 @@ appointmentsRouter.get('/availability', async (req: Request, res: Response) => {
     });
 
     // Get Google Calendar busy times
-    const busyTimes = await getFreeBusy(dayStart, dayEnd);
+    let busyTimes: Array<{ start: string; end: string }> = [];
+    try {
+      busyTimes = await getFreeBusy(dayStart, dayEnd);
+    } catch (gErr) {
+      console.warn('⚠️ Could not fetch Google Calendar freebusy:', gErr);
+    }
 
-    // Generate all possible slots (every 30 min from 9:00 to 19:00)
+    const now = Date.now();
+    // Generate all possible slots (every 30 min from 9:00 to 19:00 ART)
     const slots: Array<{ time: string; available: boolean }> = [];
     for (let h = 9; h < 19; h++) {
       for (const m of [0, 30]) {
-        const slotStart = new Date(queryDate);
-        slotStart.setHours(h, m, 0, 0);
-        const slotEnd = new Date(slotStart);
-        slotEnd.setMinutes(slotEnd.getMinutes() + service.duration);
+        // h in ART + 3 = UTC hour
+        const slotStart = new Date(Date.UTC(year, month - 1, day, h + 3, m, 0, 0));
+        const slotEnd = new Date(slotStart.getTime() + service.duration * 60000);
 
-        // Check if slot end is past closing time
-        if (slotEnd.getHours() >= 19 && slotEnd.getMinutes() > 0) {
+        // Check if slot end is past closing time (19:00 ART = 22:00 UTC)
+        if (slotEnd.getTime() > dayEnd.getTime()) {
           slots.push({ time: `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`, available: false });
           continue;
         }
+
+        // Check if slot has already passed today
+        const isPast = slotStart.getTime() <= now;
 
         // Check against existing appointments
         const hasConflict = existing.some((apt: any) => {
@@ -794,7 +816,7 @@ appointmentsRouter.get('/availability', async (req: Request, res: Response) => {
 
         slots.push({
           time: `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`,
-          available: !hasConflict && !hasBlockedConflict && !calBusy,
+          available: !isPast && !hasConflict && !hasBlockedConflict && !calBusy,
         });
       }
     }

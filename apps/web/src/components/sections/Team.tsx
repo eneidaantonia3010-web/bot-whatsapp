@@ -42,9 +42,9 @@ export function Team() {
         transition={{ duration: 0.6 }}
         className="flex flex-col items-center text-center max-w-3xl mx-auto mb-16"
       >
-        <span className="inline-block border border-secondary text-secondary font-label-md text-label-md uppercase tracking-wider px-4 py-1.5 rounded-full mb-6">PROFESIONALES APASIONADOS</span>
-        <h2 className="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-6">Nuestro Equipo de Especialistas</h2>
-        <p className="text-on-surface-variant text-body-lg">Talento, capacitación continua y dedicación en cada detalle.</p>
+        <span className="inline-block border border-secondary text-secondary font-label-md text-label-md uppercase tracking-wider px-4 py-1.5 rounded-full mb-6">{t('team.badge')}</span>
+        <h2 className="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-6">{t('team.title')}</h2>
+        <p className="text-on-surface-variant text-body-lg">{t('team.subtitle')}</p>
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 w-full">

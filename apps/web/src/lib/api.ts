@@ -24,6 +24,7 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     });
 
     if (res.status === 401 && typeof window !== 'undefined' && !endpoint.includes('/api/auth/login')) {
+      localStorage.removeItem('glow_studio_jwt_token');
       localStorage.removeItem('glow_auth_token');
       localStorage.removeItem('glow_user');
       if (window.location.pathname.startsWith('/admin') && window.location.pathname !== '/admin/login') {

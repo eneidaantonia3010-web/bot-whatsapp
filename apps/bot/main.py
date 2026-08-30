@@ -45,7 +45,7 @@ async def verify_bot_api_key(
     x_bot_key: str = Security(bot_key_header),
 ):
     """Verify mutual internal API key between Express API and Python Bot."""
-    effective_bot_key = (BOT_API_KEY or "Disjd12-9").strip()
+    effective_bot_key = (BOT_API_KEY or "").strip()
     provided_key = (x_api_key or x_bot_key or "").strip()
     if not provided_key:
         raise HTTPException(
@@ -53,7 +53,10 @@ async def verify_bot_api_key(
             detail="Missing required x-api-key authentication header",
         )
 
-    if not hmac.compare_digest(provided_key, effective_bot_key) and not hmac.compare_digest(provided_key, "Disjd12-9"):
+    if not effective_bot_key and not IS_PROD:
+        return True
+
+    if not effective_bot_key or not hmac.compare_digest(provided_key, effective_bot_key):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid bot API key",

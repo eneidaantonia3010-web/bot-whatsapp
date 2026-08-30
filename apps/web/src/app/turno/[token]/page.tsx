@@ -23,6 +23,7 @@ import {
   ArrowCounterClockwise,
   CalendarPlus,
   CircleNotch,
+  UserCircle,
   ShieldCheck,
   Info,
   Phone,
@@ -111,17 +112,26 @@ export default function AppointmentPortalPage() {
     }
   };
 
-  // Generate Google Calendar Link
+  // Generate Google Calendar Link safely
   const getGoogleCalendarUrl = () => {
-    if (!appointment) return '#';
-    const start = new Date(appointment.date).toISOString().replace(/-|:|\.\d\d\d/g, '');
-    const end = new Date(appointment.endDate).toISOString().replace(/-|:|\.\d\d\d/g, '');
-    const title = encodeURIComponent(`${appointment.service.name} — Glow Studio by Sofia`);
-    const details = encodeURIComponent(
-      `Turno confirmado para ${appointment.customer.name}.\nServicio: ${appointment.service.name}\nDirección: Av. Corrientes 1234, CABA`
-    );
-    const location = encodeURIComponent('Av. Corrientes 1234, CABA, Buenos Aires');
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${location}`;
+    if (!appointment?.date) return '#';
+    try {
+      const startDate = new Date(appointment.date);
+      const endDate = appointment.endDate
+        ? new Date(appointment.endDate)
+        : new Date(startDate.getTime() + (appointment.service?.duration || 60) * 60000);
+
+      const start = startDate.toISOString().replace(/-|:|\.\d\d\d/g, '');
+      const end = endDate.toISOString().replace(/-|:|\.\d\d\d/g, '');
+      const title = encodeURIComponent(`${appointment.service.name} — Glow Studio by Sofia`);
+      const details = encodeURIComponent(
+        `Turno para ${appointment.customer.name}.\nServicio: ${appointment.service.name}\nDirección: Av. Corrientes 1234, CABA`
+      );
+      const location = encodeURIComponent('Av. Corrientes 1234, CABA, Buenos Aires');
+      return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${location}`;
+    } catch {
+      return '#';
+    }
   };
 
   if (loading) {
@@ -167,6 +177,9 @@ export default function AppointmentPortalPage() {
 
   const isCancelled = appointment.status === 'CANCELLED';
   const isCompleted = appointment.status === 'COMPLETED';
+  const isNoShow = appointment.status === 'NO_SHOW';
+  const isPast = new Date(appointment.date).getTime() < Date.now();
+  const canModify = !isCancelled && !isCompleted && !isNoShow && !isPast;
 
   return (
     <div className="min-h-screen bg-[#09090d] text-white py-12 px-4 sm:px-6">
@@ -192,6 +205,10 @@ export default function AppointmentPortalPage() {
                 <div className="p-3 rounded-2xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
                   <CheckCircle className="w-6 h-6" />
                 </div>
+              ) : isNoShow ? (
+                <div className="p-3 rounded-2xl bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                  <XCircle className="w-6 h-6" />
+                </div>
               ) : (
                 <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   <CheckCircle className="w-6 h-6" />
@@ -200,7 +217,13 @@ export default function AppointmentPortalPage() {
               <div>
                 <span className="text-xs text-neutral-400">Estado de la reserva</span>
                 <h3 className="text-base font-bold text-white">
-                  {isCancelled ? 'Turno Cancelado' : isCompleted ? 'Turno Completado' : 'Turno Confirmado'}
+                  {isCancelled
+                    ? 'Turno Cancelado'
+                    : isCompleted
+                    ? 'Turno Completado'
+                    : isNoShow
+                    ? 'No Asistió (Ausente)'
+                    : 'Turno Confirmado'}
                 </h3>
               </div>
             </div>
@@ -211,32 +234,49 @@ export default function AppointmentPortalPage() {
             </div>
           </div>
 
-          {/* Appointment Details Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-1">
-              <span className="text-xs text-neutral-400 flex items-center gap-1">
-                <CalendarCheck className="w-3.5 h-3.5 text-primary" /> Fecha y Hora
-              </span>
-              <p className="text-sm font-bold text-white capitalize">{formattedDate}</p>
-              <p className="text-xs text-primary font-semibold">{formattedTime} hs (Duración: {appointment.service.duration} min)</p>
+          {/* Details Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+              <Sparkle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+              <div>
+                <span className="text-xs text-neutral-400 block">Servicio</span>
+                <span className="text-sm font-semibold text-white">{appointment.service.name}</span>
+                <span className="text-xs text-neutral-400 block mt-0.5">
+                  {appointment.service.duration} min • ${appointment.service.price.toLocaleString('es-AR')}
+                </span>
+              </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-1">
-              <span className="text-xs text-neutral-400 flex items-center gap-1">
-                <Sparkle className="w-3.5 h-3.5 text-primary" /> Servicio & Total
-              </span>
-              <p className="text-sm font-bold text-white">{appointment.service.name}</p>
-              <p className="text-xs text-neutral-300 font-semibold">${appointment.service.price.toLocaleString('es-AR')}</p>
+            <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+              <Clock className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+              <div>
+                <span className="text-xs text-neutral-400 block">Fecha y Hora</span>
+                <span className="text-sm font-semibold text-white capitalize">{formattedDate}</span>
+                <span className="text-xs text-primary font-medium block mt-0.5">{formattedTime} hs</span>
+              </div>
             </div>
+
+            {appointment.staff && (
+              <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/[0.02] border border-white/5 sm:col-span-2">
+                <UserCircle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-xs text-neutral-400 block">Profesional Asignada</span>
+                  <span className="text-sm font-semibold text-white">{appointment.staff.name}</span>
+                  <span className="text-xs text-neutral-400 block mt-0.5">
+                    {(appointment.staff as any).role || (appointment.staff as any).specialties?.join(', ') || 'Especialista'}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Location & Contact Card */}
-          <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
-            <div className="flex items-start gap-2.5">
-              <MapPin className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+          {/* Location details */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/5 gap-3 text-xs">
+            <div className="flex items-center gap-2 text-neutral-300">
+              <MapPin className="w-4 h-4 text-primary shrink-0" />
               <div>
-                <p className="font-semibold text-white">Av. Corrientes 1234, CABA</p>
-                <p className="text-neutral-400 mt-0.5">Buenos Aires, Argentina</p>
+                <span className="font-medium text-white block">Glow Studio by Sofia</span>
+                <span>Av. Corrientes 1234, CABA, Buenos Aires</span>
               </div>
             </div>
             <a
@@ -250,7 +290,7 @@ export default function AppointmentPortalPage() {
           </div>
 
           {/* Add to Calendar Button */}
-          {!isCancelled && !isCompleted && (
+          {canModify && (
             <div className="pt-2">
               <a
                 href={getGoogleCalendarUrl()}
@@ -264,7 +304,7 @@ export default function AppointmentPortalPage() {
           )}
 
           {/* Action Buttons: Cancel / Reschedule */}
-          {!isCancelled && !isCompleted && (
+          {canModify && (
             <div className="flex items-center justify-between pt-4 border-t border-white/10 gap-3">
               <button
                 onClick={() => setShowCancelModal(true)}

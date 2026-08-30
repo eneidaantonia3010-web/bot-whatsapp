@@ -60,13 +60,25 @@ export function broadcastRealtimeEvent(event: RealtimeEvent) {
     timestamp: event.timestamp || new Date().toISOString(),
   });
 
+  const deadClientIds = new Set<string>();
+
   clients.forEach((client) => {
     try {
+      if (client.res.writableEnded || client.res.destroyed) {
+        deadClientIds.add(client.id);
+        return;
+      }
       client.res.write(`data: ${data}\n\n`);
     } catch (err) {
+      deadClientIds.add(client.id);
       logger.warn({ clientId: client.id, err }, 'Failed to write SSE event to client');
     }
   });
+
+  if (deadClientIds.size > 0) {
+    clients = clients.filter((c) => !deadClientIds.has(c.id));
+    logger.info({ removedCount: deadClientIds.size, remainingClients: clients.length }, 'Cleaned up dead SSE clients');
+  }
 
   logger.debug({ eventType: event.type, recipientCount: clients.length }, '📢 Broadcasted realtime event');
 }

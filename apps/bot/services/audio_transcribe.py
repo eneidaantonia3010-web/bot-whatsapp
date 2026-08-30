@@ -15,10 +15,41 @@ except ImportError:
 logger = logging.getLogger("glow_bot.audio")
 
 
-def transcribe_audio_bytes(audio_bytes: bytes, filename: str = "audio.ogg") -> Optional[str]:
-    """Transcribe in-memory audio bytes using Groq Whisper API."""
-    if not audio_bytes:
+WHISPER_HALLUCINATIONS = frozenset({
+    "subtítulos por la comunidad de amara.org",
+    "subtitulos por la comunidad de amara.org",
+    "muchas gracias por ver el video",
+    "suscríbete al canal",
+    "suscribete al canal",
+    "gracias por ver",
+    "mbc",
+    "you",
+    "...",
+})
+
+
+def _detect_audio_extension(audio_bytes: bytes) -> str:
+    """Detect audio container format from magic bytes."""
+    if len(audio_bytes) < 12:
+        return "audio.ogg"
+    header = audio_bytes[:12]
+    if header.startswith(b"OggS"):
+        return "audio.ogg"
+    if header.startswith(b"RIFF") and header[8:12] == b"WAVE":
+        return "audio.wav"
+    if header.startswith(b"ID3") or header[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+        return "audio.mp3"
+    if header[4:8] in (b"ftyp", b"moov"):
+        return "audio.m4a"
+    return "audio.ogg"
+
+
+def transcribe_audio_bytes(audio_bytes: bytes, filename: Optional[str] = None) -> Optional[str]:
+    """Transcribe in-memory audio bytes using Groq Whisper API with dynamic format detection."""
+    if not audio_bytes or len(audio_bytes) < 150:
         return None
+
+    actual_filename = filename or _detect_audio_extension(audio_bytes)
 
     raw_keys = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
     groq_keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
@@ -29,12 +60,16 @@ def transcribe_audio_bytes(audio_bytes: bytes, filename: str = "audio.ogg") -> O
         try:
             client = Groq(api_key=key)
             transcription = client.audio.transcriptions.create(
-                file=(filename, audio_bytes),
+                file=(actual_filename, audio_bytes),
                 model="whisper-large-v3-turbo",
                 language="es",
                 response_format="text",
+                temperature=0.0,
             )
-            return str(transcription).strip()
+            text = str(transcription).strip()
+            if text.lower() in WHISPER_HALLUCINATIONS or len(text) < 2:
+                return None
+            return text
         except Exception as e:
             print(f"⚠️ Audio transcription warning with key: {e}")
             continue

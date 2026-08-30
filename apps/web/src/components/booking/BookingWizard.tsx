@@ -30,6 +30,13 @@ interface StaffMember {
   specialties: string[];
 }
 
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function BookingWizard() {
   const router = useRouter();
 
@@ -76,7 +83,7 @@ export function BookingWizard() {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         if (tomorrow.getDay() === 0) tomorrow.setDate(tomorrow.getDate() + 1); // Skip Sunday
-        setSelectedDate(tomorrow.toISOString().split('T')[0]);
+        setSelectedDate(formatLocalDate(tomorrow));
       } catch (err) {
         console.error('Error loading booking data:', err);
       } finally {
@@ -125,11 +132,10 @@ export function BookingWizard() {
   const bookingDays: Array<{ dateStr: string; dayName: string; dayNumber: number; isSunday: boolean }> = [];
   const now = new Date();
   for (let i = 1; i <= 14; i++) {
-    const d = new Date(now);
-    d.setDate(now.getDate() + i);
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
     const dayOfWeek = d.getDay();
     bookingDays.push({
-      dateStr: d.toISOString().split('T')[0],
+      dateStr: formatLocalDate(d),
       dayName: d.toLocaleDateString('es-AR', { weekday: 'short' }),
       dayNumber: d.getDate(),
       isSunday: dayOfWeek === 0,
@@ -156,10 +162,10 @@ export function BookingWizard() {
       const created = await createAppointment({
         date: appointmentDate,
         serviceId: selectedService.id,
-        customerName: formData.name,
-        customerPhone: formData.phone,
-        customerEmail: formData.email || undefined,
-        notes: formData.notes || undefined,
+        customerName: formData.name.trim(),
+        customerPhone: formData.phone.trim(),
+        customerEmail: formData.email?.trim() || undefined,
+        notes: formData.notes?.trim() || undefined,
         staffId: selectedStaff?.id || undefined,
       } as any);
 
@@ -170,7 +176,21 @@ export function BookingWizard() {
         router.push('/#confirmado');
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Hubo un error al reservar. Por favor intenta otro horario.');
+      const isConflict =
+        err.message?.includes('409') ||
+        err.message?.toLowerCase().includes('disponible') ||
+        err.message?.toLowerCase().includes('bloqueado');
+
+      if (isConflict) {
+        setErrorMessage('El horario seleccionado ya no está disponible. Por favor elegí otro horario.');
+        if (selectedDate && selectedService) {
+          getAvailability(selectedDate, selectedService.id).then(setAvailableSlots).catch(() => {});
+        }
+        setSelectedTime('');
+        setCurrentStep(2);
+      } else {
+        setErrorMessage(err.message || 'Hubo un error al reservar. Por favor intenta otro horario.');
+      }
     } finally {
       setSubmitting(false);
     }

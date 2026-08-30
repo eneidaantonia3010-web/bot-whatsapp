@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { prisma } from './prisma';
-import { sendSalonUpcomingAlert, sendCustomerReminder } from './whatsapp';
+import { sendSalonUpcomingAlert, sendCustomerReminder, sendCustomer24hReminder } from './whatsapp';
 import { config } from '../config';
 
 export function initCronJobs() {
@@ -126,17 +126,17 @@ export function initCronJobs() {
               timeZone: 'America/Argentina/Buenos_Aires',
             }) + 'hs';
 
-            await sendCustomerReminder({
+            await prisma.appointment.update({
+              where: { id: apt.id },
+              data: { reminderSent24h: true },
+            }).catch(() => {});
+
+            await sendCustomer24hReminder({
               customerPhone: apt.customer.phone,
               customerName: apt.customer.name,
               serviceName: apt.service.name,
               timeStr,
             });
-
-            await prisma.appointment.update({
-              where: { id: apt.id },
-              data: { reminderSent24h: true },
-            }).catch(() => {});
           }
         }
       } catch (error) {

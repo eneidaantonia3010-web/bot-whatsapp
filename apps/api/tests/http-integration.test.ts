@@ -5,8 +5,10 @@
 
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import { app } from '../src/index';
 import { prisma } from '../src/services/prisma';
+import { config } from '../src/config';
 
 describe('HTTP Integration Suite (Express API)', () => {
   beforeAll(async () => {
@@ -154,8 +156,21 @@ describe('HTTP Integration Suite (Express API)', () => {
   });
 
   describe('GET /api/admin/whatsapp/status (WhatsApp Native Status)', () => {
-    it('should return 200 and WhatsApp socket connection status', async () => {
+    it('should require admin authorization and return 401 without token', async () => {
       const res = await request(app).get('/api/admin/whatsapp/status');
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 200 and WhatsApp socket connection status with valid admin token', async () => {
+      const adminToken = jwt.sign(
+        { id: 'admin_test_1', email: 'sofia@glowstudio.com', role: 'ADMIN' },
+        config.JWT_SECRET,
+        { expiresIn: '1h' }
+      );
+
+      const res = await request(app)
+        .get('/api/admin/whatsapp/status')
+        .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('configured', true);

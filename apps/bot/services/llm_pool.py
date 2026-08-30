@@ -45,6 +45,8 @@ class LLMPool:
     def __init__(self):
         self._async_clients: list[AsyncGroq] = []
         self._sync_clients: list[Groq] = []
+        self._key_cooldowns: dict[int, float] = {}
+        self._current_index: int = 0
         self._reload_keys()
 
     def _reload_keys(self):
@@ -53,6 +55,20 @@ class LLMPool:
         self._async_clients = [AsyncGroq(api_key=k) for k in keys]
         self._sync_clients = [Groq(api_key=k) for k in keys]
         logger.info(f"LLM pool initialized with {len(self._async_clients)} Groq client(s)")
+
+    def _get_next_client_idx(self) -> int:
+        total = len(self._async_clients)
+        if total == 0:
+            return 0
+        now = time.time()
+        for i in range(total):
+            idx = (self._current_index + i) % total
+            if now >= self._key_cooldowns.get(idx, 0):
+                self._current_index = (idx + 1) % total
+                return idx
+        idx = self._current_index % total
+        self._current_index = (self._current_index + 1) % total
+        return idx
 
     async def get_completion_async(
         self,
@@ -83,14 +99,13 @@ class LLMPool:
         if messages:
             formatted_messages.extend(normalize_history_for_groq(messages))
 
-        total_clients = len(self._async_clients)
         models_to_try = [target_model]
         if fallback_model and fallback_model != target_model:
             models_to_try.append(fallback_model)
 
         for current_model in models_to_try:
             for attempt in range(1 + max_retries):
-                client_idx = attempt % total_clients
+                client_idx = self._get_next_client_idx()
                 client = self._async_clients[client_idx]
 
                 try:
@@ -108,7 +123,12 @@ class LLMPool:
                     if content and content.strip():
                         return content.strip()
                 except Exception as e:
-                    logger.warning(f"AsyncGroq call failed (client {client_idx}, model {current_model}): {e}")
+                    err_msg = str(e)
+                    if "429" in err_msg or "rate limit" in err_msg.lower():
+                        logger.warning(f"Groq Rate Limit (429) en cliente {client_idx}. Cooldown 60s.")
+                        self._key_cooldowns[client_idx] = time.time() + 60.0
+                    else:
+                        logger.warning(f"AsyncGroq call failed (client {client_idx}, model {current_model}): {e}")
                     if attempt < max_retries:
                         await asyncio.sleep(0.1)
 

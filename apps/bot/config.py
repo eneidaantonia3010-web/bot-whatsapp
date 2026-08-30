@@ -23,7 +23,7 @@ FRONTEND_URL = os.getenv(
 )
 
 # Authentication & Mutual Secrets
-API_SECRET_KEY = os.getenv("API_SECRET_KEY", os.getenv("WEBHOOK_VERIFY_TOKEN", "Disjd12-9"))
+API_SECRET_KEY = os.getenv("API_SECRET_KEY", os.getenv("WEBHOOK_VERIFY_TOKEN", ""))
 BOT_API_KEY = os.getenv("BOT_API_KEY", API_SECRET_KEY)
 
 # Database

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -91,7 +91,7 @@ interface MockAppointment {
   category: string;
   date: string;
   time: string;
-  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
   source: string;
   price: number;
 }
@@ -170,7 +170,7 @@ export default function AdminPage() {
 
   // Filter & Search State
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW'>('ALL');
   const [selectedAppointment, setSelectedAppointment] = useState<MockAppointment | null>(null);
 
   // WhatsApp & System Status
@@ -312,6 +312,53 @@ export default function AdminPage() {
     return () => clearInterval(timer);
   }, []);
 
+  const fetchAdminData = useCallback(async () => {
+    try {
+      const [apts, metrics, financial, srvs, custs, wa, blk, wl] = await Promise.all([
+        getAppointments().catch(() => null),
+        getDashboardMetrics().catch(() => null),
+        getFinancialAnalytics().catch(() => null),
+        getServices().catch(() => null),
+        getCustomers().catch(() => null),
+        getWhatsAppStatus().catch(() => null),
+        getBlockedTimes().catch(() => null),
+        getWaitlist().catch(() => null),
+      ]);
+
+      if (wa) setWaStatus(wa);
+      if (blk && Array.isArray(blk)) setBlockedTimes(blk);
+      if (wl && Array.isArray(wl)) setWaitlist(wl);
+
+      if (apts && apts.length > 0) {
+        setAppointments(
+          apts.map((a: any) => ({
+            id: a.id,
+            customerName: a.customer?.name || 'Cliente',
+            customerPhone: a.customer?.phone || '',
+            service: a.service?.name || 'Servicio',
+            category: a.service?.category || 'cabello',
+            date: a.date ? a.date.split('T')[0] : '',
+            time: a.date ? new Date(a.date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+            status: a.status,
+            source: a.source || 'WEB',
+            price: a.service?.price || 0,
+          }))
+        );
+      }
+
+      if (metrics) setMetricsData(metrics);
+      if (financial) setFinancialData(financial);
+      if (srvs && srvs.length > 0) setServicesList(srvs);
+
+      if (custs) {
+        const custArray = Array.isArray(custs) ? custs : (custs as any).data || [];
+        setCustomersList(custArray);
+      }
+    } catch (err) {
+      console.warn('⚠️ Admin live API offline, fallback to local dataset:', err);
+    }
+  }, []);
+
   // Check auth and load live data
   useEffect(() => {
     async function initAdmin() {
@@ -330,99 +377,59 @@ export default function AdminPage() {
         return;
       }
 
-      try {
-        const [apts, metrics, financial, srvs, custs, wa, blk, wl] = await Promise.all([
-          getAppointments().catch(() => null),
-          getDashboardMetrics().catch(() => null),
-          getFinancialAnalytics().catch(() => null),
-          getServices().catch(() => null),
-          getCustomers().catch(() => null),
-          getWhatsAppStatus().catch(() => null),
-          getBlockedTimes().catch(() => null),
-          getWaitlist().catch(() => null),
-        ]);
-
-        if (wa) setWaStatus(wa);
-        if (blk && Array.isArray(blk)) setBlockedTimes(blk);
-        if (wl && Array.isArray(wl)) setWaitlist(wl);
-
-        if (apts && apts.length > 0) {
-          setAppointments(
-            apts.map((a: any) => ({
-              id: a.id,
-              customerName: a.customer?.name || 'Cliente',
-              customerPhone: a.customer?.phone || '',
-              service: a.service?.name || 'Servicio',
-              category: a.service?.category || 'cabello',
-              date: a.date ? a.date.split('T')[0] : '',
-              time: a.date ? new Date(a.date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
-              status: a.status,
-              source: a.source || 'WEB',
-              price: a.service?.price || 0,
-            }))
-          );
-        }
-
-        if (metrics) setMetricsData(metrics);
-        if (financial) setFinancialData(financial);
-        if (srvs && srvs.length > 0) setServicesList(srvs);
-
-        if (custs) {
-          const custArray = Array.isArray(custs) ? custs : (custs as any).data || [];
-          setCustomersList(custArray);
-        }
-      } catch (err) {
-        console.warn('⚠️ Admin live API offline, fallback to local dataset:', err);
-      }
+      await fetchAdminData();
     }
 
     initAdmin();
-  }, [router]);
+  }, [router, fetchAdminData]);
 
-  // Realtime Live Event Listener (Server-Sent Events)
-  useRealtimeAppointments((event) => {
-    if (event.type === 'APPOINTMENT_CREATED') {
-      const apt = event.payload;
-      if (apt) {
-        const newApt: MockAppointment = {
-          id: apt.id,
-          customerName: apt.customer?.name || 'Cliente',
-          customerPhone: apt.customer?.phone || '',
-          service: apt.service?.name || 'Servicio',
-          category: apt.service?.category || 'cabello',
-          date: apt.date ? apt.date.split('T')[0] : '',
-          time: apt.date
-            ? new Date(apt.date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
-            : '',
-          status: apt.status || 'PENDING',
-          source: apt.source || 'WEB',
-          price: apt.service?.price || 0,
-        };
-        setAppointments((prev) => [newApt, ...prev.filter((p) => p.id !== apt.id)]);
-        addToast(
-          'success',
-          '✨ Nueva Reserva en Vivo',
-          `${newApt.customerName} reservó ${newApt.service} para las ${newApt.time}hs.`
-        );
+  // Realtime Live Event Listener (Server-Sent Events) with auto re-fetch on reconnect
+  useRealtimeAppointments(
+    (event) => {
+      if (event.type === 'APPOINTMENT_CREATED') {
+        const apt = event.payload;
+        if (apt) {
+          const newApt: MockAppointment = {
+            id: apt.id,
+            customerName: apt.customer?.name || 'Cliente',
+            customerPhone: apt.customer?.phone || '',
+            service: apt.service?.name || 'Servicio',
+            category: apt.service?.category || 'cabello',
+            date: apt.date ? apt.date.split('T')[0] : '',
+            time: apt.date
+              ? new Date(apt.date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+              : '',
+            status: apt.status || 'PENDING',
+            source: apt.source || 'WEB',
+            price: apt.service?.price || 0,
+          };
+          setAppointments((prev) => [newApt, ...prev.filter((p) => p.id !== apt.id)]);
+          addToast(
+            'success',
+            '✨ Nueva Reserva en Vivo',
+            `${newApt.customerName} reservó ${newApt.service} para las ${newApt.time}hs.`
+          );
+        }
+      } else if (event.type === 'APPOINTMENT_CANCELLED') {
+        const apt = event.payload;
+        if (apt) {
+          setAppointments((prev) =>
+            prev.map((p) => (p.id === apt.id ? { ...p, status: 'CANCELLED' } : p))
+          );
+          addToast('info', 'Turno Cancelado', 'Un turno ha sido cancelado y su horario liberado.');
+        }
+      } else if (event.type === 'APPOINTMENT_RESCHEDULED' || event.type === 'APPOINTMENT_CONFIRMED') {
+        const apt = event.payload;
+        if (apt) {
+          setAppointments((prev) =>
+            prev.map((p) => (p.id === apt.id ? { ...p, status: apt.status, date: apt.date?.split('T')[0] || p.date } : p))
+          );
+          addToast('success', 'Turno Actualizado', 'La agenda se actualizó en tiempo real.');
+        }
       }
-    } else if (event.type === 'APPOINTMENT_CANCELLED') {
-      const apt = event.payload;
-      if (apt) {
-        setAppointments((prev) =>
-          prev.map((p) => (p.id === apt.id ? { ...p, status: 'CANCELLED' } : p))
-        );
-        addToast('info', 'Turno Cancelado', 'Un turno ha sido cancelado y su horario liberado.');
-      }
-    } else if (event.type === 'APPOINTMENT_RESCHEDULED' || event.type === 'APPOINTMENT_CONFIRMED') {
-      const apt = event.payload;
-      if (apt) {
-        setAppointments((prev) =>
-          prev.map((p) => (p.id === apt.id ? { ...p, status: apt.status, date: apt.date?.split('T')[0] || p.date } : p))
-        );
-        addToast('success', 'Turno Actualizado', 'La agenda se actualizó en tiempo real.');
-      }
-    }
-  });
+    },
+    fetchAdminData
+  );
 
   // Appointment Status Change Handler
   const handleStatusChange = async (id: string, newStatus: MockAppointment['status']) => {
@@ -434,7 +441,13 @@ export default function AdminPage() {
       if (selectedAppointment?.id === id) {
         setSelectedAppointment((prev) => (prev ? { ...prev, status: newStatus } : null));
       }
-      const labelMap = { CONFIRMED: 'Confirmado', COMPLETED: 'Completado', CANCELLED: 'Cancelado', PENDING: 'Pendiente' };
+      const labelMap: Record<MockAppointment['status'], string> = {
+        CONFIRMED: 'Confirmado',
+        COMPLETED: 'Completado',
+        CANCELLED: 'Cancelado',
+        PENDING: 'Pendiente',
+        NO_SHOW: 'No Asistió (Ausente)',
+      };
       addToast('success', 'Turno Actualizado', `El estado del turno cambió a ${labelMap[newStatus]}.`);
     } catch (error) {
       addToast('error', 'Error', 'No se pudo actualizar el estado del turno.');
@@ -979,6 +992,11 @@ export default function AdminPage() {
                                 {apt.status === 'CANCELLED' && (
                                   <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center gap-1 w-max">
                                     <XCircle className="w-3 h-3" /> Cancelado
+                                  </span>
+                                )}
+                                {apt.status === 'NO_SHOW' && (
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 flex items-center gap-1 w-max">
+                                    <UserCircle className="w-3 h-3" /> Ausente
                                   </span>
                                 )}
                               </td>
@@ -1589,9 +1607,15 @@ export default function AdminPage() {
                     </button>
                     <button
                       onClick={() => handleStatusChange(selectedAppointment.id, 'CANCELLED')}
-                      className="col-span-2 py-2.5 px-3 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 text-xs font-semibold flex items-center justify-center gap-1.5"
+                      className="py-2.5 px-3 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 text-xs font-semibold flex items-center justify-center gap-1.5"
                     >
                       <X className="w-4 h-4" /> Cancelar Cita
+                    </button>
+                    <button
+                      onClick={() => handleStatusChange(selectedAppointment.id, 'NO_SHOW')}
+                      className="py-2.5 px-3 rounded-xl bg-zinc-500/10 text-zinc-400 border border-zinc-500/30 hover:bg-zinc-500/20 text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      <UserCircle className="w-4 h-4" /> Marcar Ausente
                     </button>
                   </div>
                 </div>

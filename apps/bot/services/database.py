@@ -63,7 +63,7 @@ def get_pool():
 
 @contextmanager
 def get_db_connection():
-    """High-performance database connection manager with pooling & automatic failover."""
+    """High-performance database connection manager with pooling, liveness check & automatic failover."""
     if not HAS_PSYCOPG2:
         yield None
         return
@@ -71,16 +71,29 @@ def get_db_connection():
     pool = get_pool()
     conn = None
     from_pool = False
+    is_broken = False
 
     try:
         if pool:
             try:
                 conn = pool.getconn()
                 from_pool = True
+                
+                # Test de conexión viva contra Neon serverless
+                if conn.closed:
+                    raise psycopg2.OperationalError("Connection in pool is closed")
+                with conn.cursor() as test_cur:
+                    test_cur.execute("SELECT 1")
                 conn.autocommit = True
             except Exception as e:
-                logger.warning(f"Pool getconn failed, creating fallback connection: {e}")
+                logger.warning(f"Pool connection dead or Neon waking up ({e}), purging and reconnecting...")
+                if conn and pool and from_pool:
+                    try:
+                        pool.putconn(conn, close=True)
+                    except Exception:
+                        pass
                 conn = None
+                from_pool = False
 
         if conn is None:
             db_url = DATABASE_URL or os.getenv("DATABASE_URL", "")
@@ -90,12 +103,17 @@ def get_db_connection():
             conn = psycopg2.connect(
                 db_url,
                 cursor_factory=RealDictCursor,
-                connect_timeout=8,
+                connect_timeout=10,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5,
             )
             conn.autocommit = True
 
         yield conn
     except Exception as e:
+        is_broken = True
         logger.error(f"Database query error: {e}")
         if conn:
             try:
@@ -107,7 +125,7 @@ def get_db_connection():
         if conn:
             if from_pool and pool:
                 try:
-                    pool.putconn(conn)
+                    pool.putconn(conn, close=is_broken)
                 except Exception:
                     try:
                         conn.close()

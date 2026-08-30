@@ -1,7 +1,3 @@
-// ============================================
-// Native In-App WhatsApp Management Routes
-// ============================================
-
 import { Router, Request, Response } from 'express';
 import {
   getNativeStatus,
@@ -12,6 +8,7 @@ import {
   sendNativeWhatsAppMessage,
 } from '../services/whatsapp-native';
 
+import { requireAdmin } from '../middleware/auth';
 import { config } from '../config';
 
 export const whatsappAdminRouter = Router();
@@ -25,7 +22,7 @@ whatsappAdminRouter.get('/status', (_req: Request, res: Response) => {
 });
 
 // POST /api/admin/whatsapp/pairing-code — Generate 8-digit Pairing Code for phone number
-whatsappAdminRouter.post('/pairing-code', async (req: Request, res: Response) => {
+whatsappAdminRouter.post('/pairing-code', requireAdmin, async (req: Request, res: Response) => {
   const phone = req.body.phone || SALON_WHATSAPP;
   if (!phone) {
     return res.status(400).json({ error: 'Número de teléfono es requerido' });
@@ -47,7 +44,7 @@ whatsappAdminRouter.post('/pairing-code', async (req: Request, res: Response) =>
 });
 
 // POST /api/admin/whatsapp/init — Restart or logout native instance
-whatsappAdminRouter.post('/init', async (_req: Request, res: Response) => {
+whatsappAdminRouter.post('/init', requireAdmin, async (_req: Request, res: Response) => {
   await logoutNativeWhatsApp();
   return res.json({
     message: 'Instancia nativa reinicializada en PostgreSQL',
@@ -126,7 +123,7 @@ whatsappAdminRouter.get('/qr', (_req: Request, res: Response) => {
 });
 
 // POST /api/admin/whatsapp/send — Send an outbound message (used for escalation and alerts)
-whatsappAdminRouter.post('/send', async (req: Request, res: Response) => {
+whatsappAdminRouter.post('/send', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { to, message } = req.body;
     if (!to || !message) {

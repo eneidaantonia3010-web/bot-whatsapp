@@ -93,9 +93,9 @@ app.use('/api/appointments', appointmentCreationLimiter, appointmentsRouter);
 app.use('/api/blocked-times', blockedTimesRouter);
 app.use('/api/waitlist', waitlistRouter);
 
-// Protected Administrative Endpoints (require JWT token or x-api-key)
-app.use('/api/whatsapp-admin', requireAdmin, whatsappAdminRouter);
-app.use('/api/admin/whatsapp', requireAdmin, whatsappAdminRouter);
+// WhatsApp Management Endpoints (GET /qr and /status are public/viewable; POST actions protected inside router)
+app.use('/api/whatsapp-admin', whatsappAdminRouter);
+app.use('/api/admin/whatsapp', whatsappAdminRouter);
 app.use('/api/customers', requireAuth, customersRouter);
 app.use('/api/messages', requireAuth, messagesRouter);
 app.use('/api/admin', requireAdmin, adminRouter);

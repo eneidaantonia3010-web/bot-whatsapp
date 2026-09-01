@@ -40,7 +40,7 @@ jobs:
             ${{ runner.os }}-npm-
 
       - name: Install Root Dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Validate Prisma Schema
         run: npx prisma validate --schema=prisma/schema.prisma
@@ -87,8 +87,8 @@ jobs:
 
       - name: Install Root & Web Dependencies
         run: |
-          npm install
-          cd apps/web && npm install
+          npm install --legacy-peer-deps
+          cd apps/web && npm install --legacy-peer-deps
 
       - name: Generate Prisma Client
         run: npx prisma generate --schema=prisma/schema.prisma
@@ -136,8 +136,8 @@ jobs:
 
       - name: Install Root & API Dependencies
         run: |
-          npm install
-          cd apps/api && npm install
+          npm install --legacy-peer-deps
+          cd apps/api && npm install --legacy-peer-deps
 
       - name: Generate Prisma Client
         run: npx prisma generate --schema=prisma/schema.prisma

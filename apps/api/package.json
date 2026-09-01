@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "npx prisma generate --schema=../../prisma/schema.prisma && tsc",
+    "postinstall": "npx prisma generate --schema=../../prisma/schema.prisma || true",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "seed:staff": "tsx seed_staff.ts",

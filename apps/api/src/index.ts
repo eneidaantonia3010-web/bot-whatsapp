@@ -59,7 +59,7 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (origin === config.FRONTEND_URL) return callback(null, true);
-    if (/^https:\/\/glow-studio[a-zA-Z0-9-]*\.vercel\.app$/.test(origin)) return callback(null, true);
+    if (/^https:\/\/glow-studio[a-zA-Z0-9-]*\.(onrender\.com|vercel\.app)$/.test(origin)) return callback(null, true);
     if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) return callback(null, true);
     return callback(new Error('No permitido por CORS'));
   },
@@ -147,7 +147,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 let server: ReturnType<typeof app.listen> | null = null;
 
 if (process.env.NODE_ENV !== 'test') {
-  server = app.listen(PORT, () => {
+  server = app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`\n✨ Glow Studio API running on port ${PORT}`);
     
     // Seed admin user if needed

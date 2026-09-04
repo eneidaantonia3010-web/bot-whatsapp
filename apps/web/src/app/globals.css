@@ -1,5 +1,13 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0');
 @config "../../tailwind.config.ts";
+
+:root {
+  --color-bg: #0F0F16;
+  --color-ink: #f8fafc;
+  --color-surface: #171723;
+  --color-surface-hover: #1f1f2e;
+}
 
 @theme {
   /* Let the config file handle the theme, but here we can define base colors if needed */

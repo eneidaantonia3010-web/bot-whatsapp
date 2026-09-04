@@ -62,16 +62,19 @@ export function Hero() {
         <motion.div 
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
           className="lg:col-span-6 relative mt-8 lg:mt-0 order-1 lg:order-2" 
           id="hero-image-container"
         >
           <div className="hero-parallax relative w-full aspect-[4/5] arched-frame overflow-hidden glass-panel p-2 md:p-3">
             <div className="absolute inset-0 arched-frame border-2 border-secondary/20 m-4 md:m-6 z-10 pointer-events-none"></div>
-            <img 
+            <Image 
               alt="Luxury Salon Interior" 
-              className="w-full h-full object-cover arched-frame grayscale-[10%] hover:grayscale-0 transition-all duration-1000 scale-105 hover:scale-100" 
               src="/images/hero-bg.jpg"
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              className="object-cover arched-frame grayscale-[10%] hover:grayscale-0 transition-all duration-1000 scale-105 hover:scale-100" 
             />
           </div>
 

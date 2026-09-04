@@ -19,6 +19,9 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Contraseña requerida').max(100, 'Contraseña demasiado larga'),
 });
 
+// Constant-time dummy hash to normalize bcrypt comparison time and prevent user enumeration
+const DUMMY_HASH = '$2a$10$e8wF40dO2zN/JbXj2N8Fuu7K9C.4qF1E2mD4tB3sA5wG6yH7zI8k.';
+
 authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const parseResult = loginSchema.safeParse(req.body);
@@ -32,12 +35,10 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
       where: { email: email.toLowerCase().trim() },
     });
 
-    if (!user) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
-    }
+    const hashToCompare = user ? user.password : DUMMY_HASH;
+    const isPasswordValid = await bcrypt.compare(password, hashToCompare);
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
+    if (!user || !isPasswordValid) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 

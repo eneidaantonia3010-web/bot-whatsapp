@@ -7,6 +7,16 @@ import { prisma } from '../services/prisma';
 
 export const exportsRouter = Router();
 
+// Neutralize CSV formula injection by prepending single quote to formula triggers (=, +, -, @)
+function sanitizeCsvField(val: string | number | null | undefined): string {
+  if (val === null || val === undefined) return '""';
+  let str = String(val).replace(/"/g, '""');
+  if (/^[=+@\t\r\n-]/.test(str)) {
+    str = `'${str}`;
+  }
+  return `"${str}"`;
+}
+
 // GET /api/exports/appointments.csv — Export appointments to CSV
 exportsRouter.get('/appointments.csv', async (_req: Request, res: Response) => {
   try {
@@ -18,14 +28,14 @@ exportsRouter.get('/appointments.csv', async (_req: Request, res: Response) => {
 
     const headers = ['ID', 'Fecha', 'Estado', 'Cliente', 'Telefono', 'Servicio', 'Precio', 'Origen'];
     const rows = appointments.map((apt: any) => [
-      apt.id,
-      apt.date.toISOString(),
-      apt.status,
-      `"${apt.customer.name.replace(/"/g, '""')}"`,
-      apt.customer.phone || '',
-      `"${apt.service.name.replace(/"/g, '""')}"`,
-      apt.service.price,
-      apt.source,
+      sanitizeCsvField(apt.id),
+      sanitizeCsvField(apt.date.toISOString()),
+      sanitizeCsvField(apt.status),
+      sanitizeCsvField(apt.customer?.name),
+      sanitizeCsvField(apt.customer?.phone || ''),
+      sanitizeCsvField(apt.service?.name),
+      sanitizeCsvField(apt.service?.price),
+      sanitizeCsvField(apt.source),
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
@@ -49,12 +59,12 @@ exportsRouter.get('/customers.csv', async (_req: Request, res: Response) => {
 
     const headers = ['ID', 'Nombre', 'Telefono', 'Email', 'Instagram', 'FechaRegistro'];
     const rows = customers.map((c: any) => [
-      c.id,
-      `"${c.name.replace(/"/g, '""')}"`,
-      c.phone || '',
-      c.email || '',
-      c.instagram || '',
-      c.createdAt.toISOString(),
+      sanitizeCsvField(c.id),
+      sanitizeCsvField(c.name),
+      sanitizeCsvField(c.phone || ''),
+      sanitizeCsvField(c.email || ''),
+      sanitizeCsvField(c.instagram || ''),
+      sanitizeCsvField(c.createdAt.toISOString()),
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');

@@ -66,6 +66,11 @@ _sender_locks: dict[str, asyncio.Lock] = {}
 
 
 def _get_sender_lock(sender_id: str) -> asyncio.Lock:
+    # Periodically prune unused locks to prevent memory leaks
+    if len(_sender_locks) > 1000:
+        idle = [s for s, lock in _sender_locks.items() if not lock.locked()]
+        for s in idle[:500]:
+            _sender_locks.pop(s, None)
     if sender_id not in _sender_locks:
         _sender_locks[sender_id] = asyncio.Lock()
     return _sender_locks[sender_id]
@@ -191,9 +196,15 @@ def _apply_output_guardrails(response_text: str) -> str:
 
 def _parse_message_with_llm(message: str, history: list[dict]) -> dict:
     """Use LLM with recent history to extract service name + date from a booking message."""
-    prompt = BOOKING_EXTRACTION_PROMPT.format(message=message)
+    prompt = BOOKING_EXTRACTION_PROMPT.replace("{message}", message)
     try:
-        raw = llm_pool.get_completion(messages=history[-4:], system_msg=prompt, max_tokens=100, timeout_sec=5)
+        raw = llm_pool.get_completion(
+            messages=history[-4:],
+            system_msg=prompt,
+            model="llama-3.1-8b-instant",
+            max_tokens=100,
+            timeout_sec=5,
+        )
         if raw:
             raw = raw.strip()
             json_start = raw.find("{")
@@ -209,12 +220,15 @@ def _parse_message_with_llm(message: str, history: list[dict]) -> dict:
 def _parse_multi_service(message: str, services: list[dict], history: list[dict]) -> dict:
     """Use LLM to extract MULTIPLE service names + date from a message."""
     services_list = "\n".join([f"  - {s['name']}" for s in services])
-    prompt = MULTI_SERVICE_EXTRACTION_PROMPT.format(
-        services_list=services_list,
-        message=message,
-    )
+    prompt = MULTI_SERVICE_EXTRACTION_PROMPT.replace("{services_list}", services_list).replace("{message}", message)
     try:
-        raw = llm_pool.get_completion(messages=history[-4:], system_msg=prompt, max_tokens=150, timeout_sec=6)
+        raw = llm_pool.get_completion(
+            messages=history[-4:],
+            system_msg=prompt,
+            model="llama-3.1-8b-instant",
+            max_tokens=150,
+            timeout_sec=6,
+        )
         if raw:
             raw = raw.strip()
             json_start = raw.find("{")
@@ -669,9 +683,7 @@ async def _process_message_internal(
             # Service help via LLM async
             services = get_services()
             services_catalog = format_services_catalog(services)
-            service_help_prompt = SERVICE_HELP_PROMPT.format(
-                services_catalog=services_catalog, message=message
-            )
+            service_help_prompt = SERVICE_HELP_PROMPT.replace("{services_catalog}", services_catalog).replace("{message}", message)
             ai_response = await llm_pool.get_completion_async(
                 messages=chat_history[-8:],
                 system_msg=system_personality + "\n" + service_help_prompt,
@@ -784,7 +796,7 @@ async def _process_message_internal(
                 return welcome_back_prefix + response
 
             # Date clarification async
-            date_clarification_prompt = DATE_CLARIFICATION_PROMPT.format(message=message)
+            date_clarification_prompt = DATE_CLARIFICATION_PROMPT.replace("{message}", message)
             ai_response = await llm_pool.get_completion_async(
                 messages=chat_history[-8:],
                 system_msg=system_personality + "\n" + date_clarification_prompt,
@@ -1011,7 +1023,7 @@ async def _process_message_internal(
                 chat_history.append({"role": "model", "parts": [response]})
                 return welcome_back_prefix + response
 
-            date_clarification_prompt = DATE_CLARIFICATION_PROMPT.format(message=message)
+            date_clarification_prompt = DATE_CLARIFICATION_PROMPT.replace("{message}", message)
             ai_response = llm_pool.get_completion(
                 messages=chat_history[-8:],
                 system_msg=system_personality + "\n" + date_clarification_prompt,
@@ -1035,7 +1047,7 @@ async def _process_message_internal(
                 save_conversation_state(sender_id, conv)
                 return welcome_back_prefix + response
 
-            general_prompt = GENERAL_FALLBACK_PROMPT.format(message=message)
+            general_prompt = GENERAL_FALLBACK_PROMPT.replace("{message}", message)
             ai_response = llm_pool.get_completion(
                 messages=chat_history[-8:],
                 system_msg=system_personality + "\n" + general_prompt,

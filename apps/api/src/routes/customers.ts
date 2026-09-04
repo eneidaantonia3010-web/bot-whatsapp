@@ -3,9 +3,18 @@
 // ============================================
 
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../services/prisma';
 
 export const customersRouter = Router();
+
+const createCustomerSchema = z.object({
+  name: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  phone: z.string().trim().min(6, 'El teléfono debe tener al menos 6 dígitos'),
+  email: z.string().trim().email('Email inválido').optional().nullable().or(z.literal('')),
+  instagram: z.string().trim().optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+});
 
 // GET /api/customers — List customers with pagination
 customersRouter.get('/', async (req: Request, res: Response) => {
@@ -74,9 +83,20 @@ customersRouter.get('/:id', async (req: Request, res: Response) => {
 // POST /api/customers — Create customer
 customersRouter.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, phone, email, instagram, notes } = req.body;
+    const parseResult = createCustomerSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: 'Datos de cliente inválidos', details: parseResult.error.flatten() });
+    }
+
+    const { name, phone, email, instagram, notes } = parseResult.data;
     const customer = await prisma.customer.create({
-      data: { name, phone, email, instagram, notes },
+      data: {
+        name,
+        phone,
+        email: email || null,
+        instagram: instagram || null,
+        notes: notes || null,
+      },
     });
     res.status(201).json(customer);
   } catch (error) {

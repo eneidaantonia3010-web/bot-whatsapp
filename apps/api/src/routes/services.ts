@@ -1,8 +1,23 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../services/prisma';
 import { requireAdmin } from '../middleware/auth';
 
 export const servicesRouter = Router();
+
+const createServiceSchema = z.object({
+  name: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  description: z.string().trim().optional().nullable(),
+  price: z.coerce.number().positive('El precio debe ser mayor a 0'),
+  duration: z.coerce.number().int().positive('La duración debe ser mayor a 0 minutos'),
+  category: z.string().trim().default('PELUQUERIA'),
+  imageUrl: z.string().trim().optional().nullable(),
+});
+
+const updateServiceSchema = createServiceSchema.partial().extend({
+  active: z.boolean().optional(),
+  order: z.coerce.number().int().optional(),
+});
 
 // GET /api/services — List all active services
 servicesRouter.get('/', async (_req: Request, res: Response) => {
@@ -37,12 +52,21 @@ servicesRouter.get('/:id', async (req: Request, res: Response) => {
 // POST /api/services — Create service (admin only)
 servicesRouter.post('/', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { name, description, price, duration, category, imageUrl } = req.body;
-    if (!name || !price || !duration) {
-      return res.status(400).json({ error: 'Nombre, precio y duración son requeridos' });
+    const parseResult = createServiceSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: 'Datos de servicio inválidos', details: parseResult.error.flatten() });
     }
+
+    const { name, description, price, duration, category, imageUrl } = parseResult.data;
     const service = await prisma.service.create({
-      data: { name, description, price, duration, category: category || 'PELUQUERIA', imageUrl },
+      data: {
+        name,
+        description: description || null,
+        price,
+        duration,
+        category: category || 'PELUQUERIA',
+        imageUrl: imageUrl || null,
+      },
     });
     res.status(201).json(service);
   } catch (error) {
@@ -54,20 +78,14 @@ servicesRouter.post('/', requireAdmin, async (req: Request, res: Response) => {
 // PATCH /api/services/:id — Update service (admin only)
 servicesRouter.patch('/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { name, description, price, duration, category, imageUrl, active, order } = req.body;
-    const updateData: any = {};
-    if (name !== undefined) updateData.name = name;
-    if (description !== undefined) updateData.description = description;
-    if (price !== undefined) updateData.price = price;
-    if (duration !== undefined) updateData.duration = duration;
-    if (category !== undefined) updateData.category = category;
-    if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
-    if (active !== undefined) updateData.active = active;
-    if (order !== undefined) updateData.order = order;
+    const parseResult = updateServiceSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: 'Datos de servicio inválidos', details: parseResult.error.flatten() });
+    }
 
     const service = await prisma.service.update({
       where: { id: req.params.id as string },
-      data: updateData,
+      data: parseResult.data as any,
     });
     res.json(service);
   } catch (error) {

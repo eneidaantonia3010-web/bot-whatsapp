@@ -67,9 +67,9 @@ export function Services() {
               <span className="material-symbols-outlined text-lg md:text-xl">schedule</span>
               <span className="font-label-md text-[12px] md:text-label-md tracking-widest">3-4 HS</span>
             </div>
-            <button className="text-secondary hover:text-white transition-colors font-label-md text-[12px] md:text-label-md flex items-center gap-2 group/btn tracking-widest uppercase">
+            <a href="#reservar" className="text-secondary hover:text-white transition-colors font-label-md text-[12px] md:text-label-md flex items-center gap-2 group/btn tracking-widest uppercase">
               Reservar <span className="material-symbols-outlined text-lg group-hover/btn:translate-x-2 transition-transform">arrow_forward</span>
-            </button>
+            </a>
           </div>
         </motion.div>
 
@@ -94,9 +94,9 @@ export function Services() {
               <span className="material-symbols-outlined text-lg md:text-xl">schedule</span>
               <span className="font-label-md text-[12px] md:text-label-md tracking-widest">1.5 HS</span>
             </div>
-            <button className="text-secondary hover:text-white transition-colors font-label-md text-[12px] md:text-label-md flex items-center gap-2 group/btn tracking-widest uppercase">
+            <a href="#reservar" className="text-secondary hover:text-white transition-colors font-label-md text-[12px] md:text-label-md flex items-center gap-2 group/btn tracking-widest uppercase">
               Reservar <span className="material-symbols-outlined text-lg group-hover/btn:translate-x-2 transition-transform">arrow_forward</span>
-            </button>
+            </a>
           </div>
         </motion.div>
 
@@ -121,9 +121,9 @@ export function Services() {
               <span className="material-symbols-outlined text-lg md:text-xl">schedule</span>
               <span className="font-label-md text-[12px] md:text-label-md tracking-widest">1.5 HS</span>
             </div>
-            <button className="text-secondary hover:text-white transition-colors font-label-md text-[12px] md:text-label-md flex items-center gap-2 group/btn tracking-widest uppercase">
+            <a href="#reservar" className="text-secondary hover:text-white transition-colors font-label-md text-[12px] md:text-label-md flex items-center gap-2 group/btn tracking-widest uppercase">
               Reservar <span className="material-symbols-outlined text-lg group-hover/btn:translate-x-2 transition-transform">arrow_forward</span>
-            </button>
+            </a>
           </div>
         </motion.div>
       </div>

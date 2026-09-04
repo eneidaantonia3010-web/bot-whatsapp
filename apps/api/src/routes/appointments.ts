@@ -4,6 +4,7 @@ import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent, getFreeB
 import { sendWhatsAppNotification, sendBookingConfirmation } from '../services/whatsapp';
 import { createAppointmentSchema, updateAppointmentSchema } from '../schemas/appointment';
 import { requireAdmin, requireAuth } from '../middleware/auth';
+import { appointmentCreationLimiter } from '../middleware/rate-limit';
 import { broadcastRealtimeEvent } from './realtime';
 
 export const appointmentsRouter = Router();
@@ -511,7 +512,7 @@ appointmentsRouter.get('/', requireAdmin, async (req: Request, res: Response) =>
 });
 
 // POST /api/appointments — Create new appointment
-appointmentsRouter.post('/', async (req: Request, res: Response) => {
+appointmentsRouter.post('/', appointmentCreationLimiter, async (req: Request, res: Response) => {
   try {
     const parseResult = createAppointmentSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -558,7 +559,13 @@ appointmentsRouter.post('/', async (req: Request, res: Response) => {
     // ── Atomic transaction: check overlap & insert appointment (Prevents TOCTOU Race Condition) ──
     let appointment;
     try {
+      const resourceId = staffId || 'GLOBAL_SALON_RESOURCE';
+      const slotKey = `${resourceId}:${startDate.toISOString()}`;
+
       appointment = await prisma.$transaction(async (tx) => {
+        // Deterministic transaction-level advisory lock per staff/slot (Prevents Phantom Reads & Double-Booking)
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${slotKey}))`;
+
         const overlapping = await tx.appointment.findFirst({
           where: {
             status: { in: ['PENDING', 'CONFIRMED'] },

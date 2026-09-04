@@ -90,7 +90,7 @@ app.use('/api/staff', staffRouter);
 app.use('/api/realtime', requireAuth, realtimeRouter);
 app.use('/api/services', publicApiLimiter, servicesRouter);
 app.use('/api/gallery', publicApiLimiter, galleryRouter);
-app.use('/api/appointments', appointmentCreationLimiter, appointmentsRouter);
+app.use('/api/appointments', publicApiLimiter, appointmentsRouter);
 app.use('/api/blocked-times', blockedTimesRouter);
 app.use('/api/waitlist', waitlistRouter);
 

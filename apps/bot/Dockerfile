@@ -6,7 +6,6 @@ COPY apps/bot/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY apps/bot/ .
-COPY .env .env
 
 EXPOSE 8000
 

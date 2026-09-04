@@ -94,60 +94,6 @@ export function Testimonials() {
           </div>
         </div>
       </section>
-
-      {/* BOOKING WIZARD */}
-      <section className="max-w-container-max mx-auto px-margin-mobile md:px-gutter" id="reservar">
-        <div className="glass-card rounded-2xl p-6 md:p-12 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-on-tertiary-container/5 to-transparent pointer-events-none"></div>
-          <div className="text-center mb-12 flex flex-col items-center relative z-10">
-            <div className="inline-block border border-secondary-container/40 bg-secondary-container/10 rounded-full px-4 py-1 mb-6">
-              <span className="font-label-md text-secondary uppercase tracking-widest text-xs">Reservar Turno</span>
-            </div>
-            <h2 className="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-4">Elegí tu momento</h2>
-            <p className="font-body-lg text-body-lg text-on-surface-variant max-w-xl mx-auto">Reservá tu turno en minutos. Elegí el servicio, fecha y horario que más te convenga.</p>
-          </div>
-          {/* Progress */}
-          <div className="flex flex-wrap justify-between items-center mb-12 relative z-10 max-w-3xl mx-auto">
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-px bg-white/10 -z-10 hidden md:block"></div>
-            {['Servicio', 'Fecha', 'Horario', 'Datos'].map((step, i) => (
-              <div key={i} className={`flex flex-col items-center gap-2 bg-primary-container/80 px-4 py-2 rounded-lg ${i > 0 ? 'opacity-50' : ''}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-label-md text-label-md ${i === 0 ? 'bg-secondary-container text-white shadow-[0_0_15px_rgba(223,0,110,0.5)]' : 'border border-white/20 bg-surface text-on-surface'}`}>{i + 1}</div>
-                <span className={`font-label-md text-sm uppercase ${i === 0 ? 'text-secondary' : 'text-on-surface-variant'}`}>{step}</span>
-              </div>
-            ))}
-          </div>
-          {/* Services Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12 relative z-10">
-            {services.map((s, i) => (
-              <div key={i} className={`glass-card rounded-xl p-6 cursor-pointer group hover:bg-white/5 transition-all ${s.active ? 'border-secondary-container shadow-[0_0_15px_rgba(223,0,110,0.2)]' : 'hover:border-white/30'}`}>
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className={`font-headline-md text-headline-md text-on-surface ${s.active ? '' : `group-hover:text-${i % 2 === 0 ? 'secondary' : 'tertiary'}`} transition-colors`}>{s.name}</h3>
-                  {s.active ? (
-                    <CheckCircle weight="fill" className="w-6 h-6 text-secondary" />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full border border-white/20 group-hover:border-secondary transition-colors"></div>
-                  )}
-                </div>
-                <p className="font-body-md text-body-md text-on-surface-variant mb-6 text-sm">{s.desc}</p>
-                <div className="flex justify-between items-end border-t border-white/10 pt-4">
-                  <div className="flex items-center gap-2 text-on-surface-variant">
-                    <Clock className="w-4 h-4" />
-                    <span className="font-label-md text-xs">{s.time}</span>
-                  </div>
-                  <span className="font-label-md text-label-md text-on-surface uppercase tracking-wider">{s.price}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          {/* Action */}
-          <div className="flex justify-end border-t border-white/10 pt-8 mt-8 relative z-10">
-            <button className="bg-gradient-to-r from-secondary-container to-on-tertiary-container text-white px-8 py-3 rounded-full font-label-md text-label-md hover:shadow-[0_0_20px_rgba(157,78,221,0.5)] transition-all flex items-center gap-2">
-              Continuar a Fecha
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </section>
     </>
   );
 }

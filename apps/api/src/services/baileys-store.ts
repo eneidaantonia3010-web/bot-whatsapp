@@ -67,26 +67,27 @@ export async function usePrismaAuthState(): Promise<{
       creds,
       keys: {
         get: async (type, ids) => {
-          const data: { [id: string]: any } = {};
-          await Promise.all(
-            ids.map(async (id) => {
-              const key = `${KEY_PREFIX}${type}_${id}`;
-              const record = await dbRetry(() =>
-                prisma.baileysSession.findUnique({
-                  where: { key },
-                })
-              );
+          if (!ids || ids.length === 0) return {};
+          const keyMap = new Map<string, string>();
+          ids.forEach((id) => keyMap.set(`${KEY_PREFIX}${type}_${id}`, id));
 
-              if (record && record.value) {
-                const value = JSON.parse(JSON.stringify(record.value), BufferJSON.reviver);
-                data[id] = value;
-              }
+          const records = await dbRetry(() =>
+            prisma.baileysSession.findMany({
+              where: { key: { in: Array.from(keyMap.keys()) } },
             })
           );
+
+          const data: { [id: string]: any } = {};
+          for (const record of records) {
+            const originalId = keyMap.get(record.key);
+            if (originalId && record.value) {
+              data[originalId] = JSON.parse(JSON.stringify(record.value), BufferJSON.reviver);
+            }
+          }
           return data;
         },
         set: async (data: any) => {
-          const tasks: Promise<any>[] = [];
+          const tasks: (() => Promise<any>)[] = [];
           for (const category in data) {
             const categoryData = data[category];
             if (!categoryData) continue;
@@ -96,7 +97,7 @@ export async function usePrismaAuthState(): Promise<{
               const key = `${KEY_PREFIX}${category}_${id}`;
               if (value) {
                 const serializedValue = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
-                tasks.push(
+                tasks.push(() =>
                   dbRetry(() =>
                     prisma.baileysSession.upsert({
                       where: { key },
@@ -106,7 +107,7 @@ export async function usePrismaAuthState(): Promise<{
                   )
                 );
               } else {
-                tasks.push(
+                tasks.push(() =>
                   dbRetry(() =>
                     prisma.baileysSession.deleteMany({
                       where: { key },
@@ -116,7 +117,12 @@ export async function usePrismaAuthState(): Promise<{
               }
             }
           }
-          await Promise.all(tasks);
+
+          // Execute in controlled chunks of 10 to protect Neon connection pool
+          const CHUNK_SIZE = 10;
+          for (let i = 0; i < tasks.length; i += CHUNK_SIZE) {
+            await Promise.all(tasks.slice(i, i + CHUNK_SIZE).map((fn) => fn()));
+          }
         },
       },
     },

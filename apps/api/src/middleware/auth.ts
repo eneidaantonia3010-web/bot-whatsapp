@@ -19,12 +19,9 @@ function isValidApiKey(providedKey: string | string[] | undefined): boolean {
   if (!providedKey || typeof providedKey !== 'string' || !config.API_SECRET_KEY) {
     return false;
   }
-  const providedBuffer = Buffer.from(providedKey);
-  const secretBuffer = Buffer.from(config.API_SECRET_KEY);
-  if (providedBuffer.length !== secretBuffer.length) {
-    return false;
-  }
-  return crypto.timingSafeEqual(providedBuffer, secretBuffer);
+  const hashProvided = crypto.createHash('sha256').update(providedKey).digest();
+  const hashSecret = crypto.createHash('sha256').update(config.API_SECRET_KEY).digest();
+  return crypto.timingSafeEqual(hashProvided, hashSecret);
 }
 
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {

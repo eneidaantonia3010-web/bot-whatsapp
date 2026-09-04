@@ -13,6 +13,7 @@ from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Security,
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 import hmac
+import asyncio
 
 try:
     from config import FRONTEND_URL, DEBUG_MODE, PORT, GROQ_API_KEY, BOT_API_KEY, IS_PROD, GROQ_MODEL
@@ -181,7 +182,7 @@ async def transcribe_audio_endpoint(request: Request):
             except Exception:
                 pass
 
-        text = transcribe_audio_bytes(audio_bytes, filename="voice_message.ogg")
+        text = await asyncio.to_thread(transcribe_audio_bytes, audio_bytes, filename="voice_message.ogg")
 
         if text:
             return {"text": text, "status": "ok"}
@@ -208,7 +209,7 @@ async def transcribe_audio_file_endpoint(file: UploadFile = File(...)):
             return {"text": None, "status": "error", "error": "Uploaded file is empty"}
 
         filename = file.filename or "voice_message.ogg"
-        text = transcribe_audio_bytes(content, filename=filename)
+        text = await asyncio.to_thread(transcribe_audio_bytes, content, filename=filename)
 
         if text:
             return {"text": text, "status": "ok"}
@@ -236,7 +237,7 @@ async def analyze_image_endpoint(request: Request):
         if not image_base64:
             return {"interpreted_text": None, "status": "error", "error": "No image data"}
 
-        interpreted = analyze_image(image_base64, caption=caption)
+        interpreted = await asyncio.to_thread(analyze_image, image_base64, caption=caption)
 
         if interpreted:
             # Combine caption with vision interpretation for the bot

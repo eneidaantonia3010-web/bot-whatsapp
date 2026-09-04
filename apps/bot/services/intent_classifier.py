@@ -253,6 +253,7 @@ def classify_intent_with_confidence(message: str) -> tuple[str, float]:
         raw_res = llm_pool.get_completion(
             messages=[],
             system_msg=prompt,
+            model="llama-3.1-8b-instant",
             max_tokens=15,
             timeout_sec=5,
             max_retries=1,

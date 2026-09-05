@@ -51,7 +51,6 @@ from services.intent_classifier import (
 )
 from services.language_detector import detect_language, t
 from services.escalation import escalate_to_human, build_escalation_summary
-from services.tts import synthesize_voice_note
 from services.memory import format_memory_system_context, remember_preference, extract_and_remember_preferences
 from services.prompts import (
     SERVICE_HELP_PROMPT,

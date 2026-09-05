@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import { prisma } from '../services/prisma';
 import { AppointmentService } from '../services/appointment-service';
 import { createAppointmentSchema, updateAppointmentSchema } from '../schemas/appointment';
 import { requireAdmin, requireAuth } from '../middleware/auth';
@@ -237,13 +236,9 @@ appointmentsRouter.patch('/:id', requireAdmin, async (req: Request, res: Respons
 
     const { status, notes } = parseResult.data;
 
-    const appointment = await prisma.appointment.update({
-      where: { id: req.params.id as string },
-      data: { status, notes },
-      include: {
-        customer: true,
-        service: true,
-      },
+    const appointment = await AppointmentService.updateAppointment(req.params.id as string, {
+      status,
+      notes,
     });
 
     res.json(appointment);

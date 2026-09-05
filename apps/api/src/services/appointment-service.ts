@@ -427,6 +427,24 @@ export class AppointmentService {
   }
 
   /**
+   * Update status and notes for an appointment.
+   */
+  static async updateAppointment(id: string, data: { status?: any; notes?: string | null }) {
+    return await prisma.appointment.update({
+      where: { id },
+      data: {
+        ...(data.status ? { status: data.status } : {}),
+        ...(data.notes !== undefined ? { notes: data.notes } : {}),
+      },
+      include: {
+        customer: true,
+        service: true,
+        staff: true,
+      },
+    });
+  }
+
+  /**
    * List appointments with filters.
    */
   static async listAppointments(filters: {

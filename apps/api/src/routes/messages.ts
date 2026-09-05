@@ -5,11 +5,12 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../services/prisma';
 import { config } from '../config';
+import { requireAuth } from '../middleware/auth';
 
 export const messagesRouter = Router();
 
-// GET /api/messages — List message logs
-messagesRouter.get('/', async (req: Request, res: Response) => {
+// GET /api/messages — List message logs (requires admin auth)
+messagesRouter.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const { platform, senderId, limit = '50' } = req.query;
 

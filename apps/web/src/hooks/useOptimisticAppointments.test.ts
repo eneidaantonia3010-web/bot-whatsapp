@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useOptimisticAppointments } from './use-optimistic-appointments';
+import { useOptimisticAppointments } from './useOptimisticAppointments';
 import * as api from '@/lib/api';
 import type { Appointment } from '@/types';
 

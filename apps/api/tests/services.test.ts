@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import crypto from 'crypto';
 import { withRetry } from '../src/utils/retry';
 import { verifyMetaSignature } from '../src/services/webhook-security';
-import { staffSeedData } from '../seed_staff';
+import { staffSeedData } from '../src/services/seed-staff';
 import { config } from '../src/config';
 
 describe('Utility: withRetry', () => {

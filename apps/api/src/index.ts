@@ -99,7 +99,7 @@ app.use('/api/whatsapp-admin', whatsappAdminRouter);
 app.use('/api/admin/whatsapp', whatsappAdminRouter);
 app.use('/api/metrics', metricsRouter);
 app.use('/api/customers', requireAuth, customersRouter);
-app.use('/api/messages', requireAuth, messagesRouter);
+app.use('/api/messages', publicApiLimiter, messagesRouter);
 app.use('/api/admin', requireAdmin, adminRouter);
 app.use('/api/analytics', requireAdmin, analyticsRouter);
 app.use('/api/exports', requireAdmin, exportsRouter);

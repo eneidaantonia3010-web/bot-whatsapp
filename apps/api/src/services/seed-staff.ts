@@ -62,7 +62,7 @@ export async function seedStaff(prismaInstance?: PrismaClient) {
   return seededStaff;
 }
 
-if (require.main === module || process.argv[1]?.includes('seed_staff')) {
+if (require.main === module || process.argv[1]?.includes('seed-staff') || process.argv[1]?.includes('seed_staff')) {
   const prisma = new PrismaClient();
   seedStaff(prisma)
     .catch((e) => {

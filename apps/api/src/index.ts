@@ -29,7 +29,7 @@ import { realtimeRouter } from './routes/realtime';
 import { metricsRouter } from './routes/metrics';
 import { instagramWebhookRouter } from './routes/webhooks/instagram';
 import { googleCalendarWebhookRouter } from './routes/webhooks/google-calendar';
-import { evolutionWebhookRouter } from './routes/webhooks/evolution';
+import { processEvolutionMessage } from './services/whatsapp';
 import { requireAuth, requireAdmin } from './middleware/auth';
 import { appointmentCreationLimiter, publicApiLimiter, webhookLimiter } from './middleware/rate-limit';
 import { initCronJobs } from './services/cron';
@@ -84,7 +84,10 @@ app.use((req, _res, next) => {
 // ---- Webhooks (with high rate limit) ----
 app.use('/api/webhooks/instagram', webhookLimiter, instagramWebhookRouter);
 app.use('/api/webhooks/google-calendar', webhookLimiter, googleCalendarWebhookRouter);
-app.use('/api/webhooks/evolution', webhookLimiter, evolutionWebhookRouter);
+app.post('/api/webhooks/evolution', webhookLimiter, async (req, res) => {
+  const result = await processEvolutionMessage(req.body);
+  return res.json({ success: true, result });
+});
 
 // ---- Authentication & Public Routes ----
 app.use('/api/auth', authRouter);

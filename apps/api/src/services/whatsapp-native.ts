@@ -24,6 +24,7 @@ import {
   triggerQueueDrain,
 } from './message-queue';
 import { config } from '../config';
+import { processEvolutionMessage } from './whatsapp';
 
 function getBotUrl(): string {
   let url = (config.BOT_URL || '').trim().replace(/\/$/, '');
@@ -397,6 +398,23 @@ export async function initNativeWhatsApp(): Promise<void> {
             });
           } catch (dbErr: any) {
             console.warn(`⚠️ DB log warning: ${dbErr.message}`);
+          }
+
+          // Check for automated appointment confirmation/cancellation response (SÍ / NO)
+          try {
+            const conf = await processEvolutionMessage({
+              data: {
+                key: { remoteJid, fromMe: false },
+                message: { conversation: textMessage },
+              },
+            });
+            if (conf.status === 'confirmed' || conf.status === 'cancelled') {
+              console.log(`✅ Appointment automated confirmation/cancellation processed: ${conf.status} (${conf.detail})`);
+              await clearPresence();
+              return;
+            }
+          } catch (confErr: any) {
+            console.warn(`⚠️ Confirmation processing warning: ${confErr.message}`);
           }
 
           let botSucceeded = false;

@@ -7,7 +7,7 @@ import request from 'supertest';
 import { app } from '../src/index';
 import { prisma } from '../src/services/prisma';
 import { runDailyConfirmationJob } from '../src/services/cron';
-import { processEvolutionMessage } from '../src/routes/webhooks/evolution';
+import { processEvolutionMessage } from '../src/services/whatsapp';
 import * as whatsappService from '../src/services/whatsapp';
 
 describe('Cron Reminders & Evolution API Webhook Suite', () => {

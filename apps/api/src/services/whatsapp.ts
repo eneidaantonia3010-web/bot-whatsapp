@@ -1,8 +1,9 @@
 // ============================================
-// WhatsApp Service (Native Baileys únicamente)
+// WhatsApp Service (Native Baileys Exclusivo)
 // ============================================
 
 import { sendNativeWhatsAppMessage, getNativeStatus } from './whatsapp-native';
+import { enqueuePersistentMessage } from './message-queue';
 import { config } from '../config';
 
 interface SendMessageOptions {
@@ -10,43 +11,22 @@ interface SendMessageOptions {
   message: string;
 }
 
-export async function sendEvolutionWhatsAppMessage(to: string, message: string): Promise<boolean> {
-  if (!config.EVOLUTION_API_URL || !config.EVOLUTION_API_KEY) {
-    return false;
-  }
-  try {
-    const cleanPhone = to.replace(/\D/g, '');
-    const instanceName = config.INSTANCE_NAME || `glow-studio-${config.SALON_WHATSAPP}`;
-    const url = `${config.EVOLUTION_API_URL.replace(/\/$/, '')}/message/sendText/${instanceName}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': config.EVOLUTION_API_KEY,
-      },
-      body: JSON.stringify({
-        number: cleanPhone,
-        text: message,
-      }),
-    });
-    return res.ok;
-  } catch (err: any) {
-    console.error('❌ Error sending message via Evolution API:', err.message);
-    return false;
-  }
-}
-
 export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): Promise<boolean> {
-  if (config.EVOLUTION_API_URL && config.EVOLUTION_API_KEY) {
-    const sentEvo = await sendEvolutionWhatsAppMessage(to, message);
-    if (sentEvo) return true;
-    console.warn('⚠️ Evolution API falló o no disponible. Intentando envío nativo con Baileys...');
-  }
-
   const nativeStatus = getNativeStatus();
   if (nativeStatus.state !== 'open') {
-    console.warn('⚠️ Native WhatsApp no conectado. Mensaje no enviado (reintentar cuando la sesión esté abierta).');
-    return false;
+    console.warn(`⚠️ Native WhatsApp no conectado (estado: ${nativeStatus.state}). Encolando mensaje para ${to} en PostgreSQL.`);
+    const formattedJid = to.includes('@') ? to : `${to.replace(/\D/g, '')}@s.whatsapp.net`;
+    try {
+      await enqueuePersistentMessage({
+        jid: formattedJid,
+        message: { text: message },
+        priority: 2,
+      });
+      return true;
+    } catch (qErr: any) {
+      console.error(`❌ Error encolando mensaje persistente para ${to}:`, qErr?.message);
+      return false;
+    }
   }
 
   const sentNative = await sendNativeWhatsAppMessage(to, message);

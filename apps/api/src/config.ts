@@ -29,6 +29,7 @@ export const envSchema = z.object({
   API_SECRET_KEY: z.string().default('glow-studio-internal-secret-2026'),
   WEBHOOK_VERIFY_TOKEN: z.string().default(''),
   META_APP_SECRET: z.string().default(''),
+  META_PAGE_ACCESS_TOKEN: z.string().default(''),
 
   // Service URLs
   BOT_URL: z
@@ -45,28 +46,21 @@ export const envSchema = z.object({
     .string()
     .default(isProd ? 'https://glow-studio-web.onrender.com' : 'http://localhost:3000'),
 
-  // WhatsApp
+  // WhatsApp (Native Baileys)
   SALON_WHATSAPP: z
     .string()
     .default('5491178296781')
     .transform((val) => val.replace(/\D/g, '') || '5491178296781'),
-  WHATSAPP_PHONE_ID: z.string().default(''),
-  WHATSAPP_TOKEN: z.string().default(''),
-  META_PAGE_ACCESS_TOKEN: z.string().default(''),
-  EVOLUTION_API_URL: z.string().default(''),
-  EVOLUTION_API_KEY: z.string().default(''),
 
   // Google Calendar
   GOOGLE_CALENDAR_ID: z.string().default('primary'),
   GOOGLE_CREDENTIALS: z.string().default(''),
-  INSTANCE_NAME: z.string().optional(),
 });
 
 export type RawConfig = z.infer<typeof envSchema>;
 
 export interface AppConfig extends RawConfig {
   isProd: boolean;
-  INSTANCE_NAME: string;
 }
 
 function loadAndValidateConfig(): AppConfig {
@@ -81,12 +75,8 @@ function loadAndValidateConfig(): AppConfig {
     BOT_URL: process.env.BOT_URL,
     FRONTEND_URL: process.env.FRONTEND_URL,
     SALON_WHATSAPP: process.env.SALON_WHATSAPP,
-    WHATSAPP_PHONE_ID: process.env.WHATSAPP_PHONE_ID,
-    WHATSAPP_TOKEN: process.env.WHATSAPP_TOKEN,
-    META_PAGE_ACCESS_TOKEN: process.env.META_PAGE_ACCESS_TOKEN,
     GOOGLE_CALENDAR_ID: process.env.GOOGLE_CALENDAR_ID,
     GOOGLE_CREDENTIALS: process.env.GOOGLE_CREDENTIALS,
-    INSTANCE_NAME: process.env.INSTANCE_NAME,
   };
 
   // Filter out undefined and empty string values to allow Zod defaults
@@ -128,13 +118,9 @@ function loadAndValidateConfig(): AppConfig {
     }
   }
 
-  const instanceName =
-    validData.INSTANCE_NAME || `glow-studio-${validData.SALON_WHATSAPP}`;
-
   return {
     ...validData,
     isProd,
-    INSTANCE_NAME: instanceName,
   };
 }
 

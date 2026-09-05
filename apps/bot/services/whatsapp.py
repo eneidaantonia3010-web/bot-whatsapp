@@ -1,7 +1,6 @@
 # ============================================
 # Glow Studio by Sofia — WhatsApp Service
-# Integración con la API oficial de Meta
-# (WhatsApp Cloud API via Graph API)
+# Integración con el Socket Nativo de Baileys
 # ============================================
 
 import os

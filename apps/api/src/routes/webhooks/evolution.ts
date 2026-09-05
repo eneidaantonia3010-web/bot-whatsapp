@@ -40,6 +40,37 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
     // Handle voice note / audio message
     const hasAudio = messageContent.audioMessage || data.messageType === 'audioMessage';
     if (hasAudio && !text) {
+      const audioBase64 =
+        data.base64 ||
+        messageContent.audioMessage?.base64 ||
+        data.message?.base64;
+
+      if (audioBase64) {
+        try {
+          const audioBotRes = await fetch(`${config.BOT_URL}/process-audio-message`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(config.API_SECRET_KEY ? { 'x-api-key': config.API_SECRET_KEY } : {}),
+            },
+            body: JSON.stringify({
+              audio_base64: audioBase64,
+              sender_id: remoteJid,
+              platform: 'WHATSAPP',
+            }),
+          });
+
+          if (audioBotRes.ok) {
+            const botData = (await audioBotRes.json()) as { response?: string };
+            if (botData.response) {
+              await sendWhatsAppMessage({ to: remoteJid, message: botData.response });
+              return { status: 'audio_transcribed_and_replied', detail: remoteJid };
+            }
+          }
+        } catch (audioErr: any) {
+          console.warn('⚠️ Audio processing error:', audioErr.message);
+        }
+      }
       return { status: 'audio_detected', detail: remoteJid };
     }
 

@@ -20,6 +20,13 @@ class MessageRequest(BaseModel):
     sender_name: Optional[str] = None
 
 
+class AudioMessageRequest(BaseModel):
+    audio_base64: str
+    sender_id: str
+    platform: Platform = Platform.WHATSAPP
+    sender_name: Optional[str] = None
+
+
 class MessageResponse(BaseModel):
     response: str
     image_url: Optional[str] = None  # URL of portfolio image to send

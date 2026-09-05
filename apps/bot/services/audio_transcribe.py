@@ -3,6 +3,7 @@
 # ============================================
 
 import os
+import asyncio
 import logging
 from typing import Optional, Union
 from groq import Groq
@@ -101,4 +102,10 @@ def transcribe_audio_file(file_path_or_bytes: Union[str, bytes]) -> Optional[str
     except Exception as e:
         print(f"⚠️ Error reading audio file {file_path_or_bytes}: {e}")
         return None
+
+
+async def transcribe_audio_bytes_async(audio_bytes: bytes, filename: Optional[str] = None) -> Optional[str]:
+    """Asynchronously transcribe audio bytes using Groq Whisper without blocking the event loop."""
+    return await asyncio.to_thread(transcribe_audio_bytes, audio_bytes, filename=filename)
+
 

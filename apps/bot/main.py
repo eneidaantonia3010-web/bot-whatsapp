@@ -26,7 +26,7 @@ except ImportError:
     IS_PROD = os.getenv("NODE_ENV") == "production" or os.getenv("RENDER") == "true"
     GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
-from models import MessageRequest, MessageResponse
+from models import MessageRequest, MessageResponse, AudioMessageRequest
 from agent import process_message
 from services.database import get_pool
 
@@ -142,6 +142,44 @@ async def handle_message(request: MessageRequest):
             image_url=result.get("image_url"),
         )
     return MessageResponse(response=result)
+
+
+@app.post("/process-audio-message", response_model=MessageResponse, dependencies=[Depends(verify_bot_api_key)])
+async def handle_audio_message(request: AudioMessageRequest):
+    """
+    Receive a voice note (base64) from WhatsApp / Evolution API,
+    transcribe with Groq Whisper asynchronously, and inject directly into
+    the conversational bot flow as if it were a written message.
+    """
+    import base64
+    from services.audio_transcribe import transcribe_audio_bytes
+
+    try:
+        audio_bytes = base64.b64decode(request.audio_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 audio data")
+
+    transcribed_text = await asyncio.to_thread(transcribe_audio_bytes, audio_bytes, filename="voice_message.ogg")
+
+    if not transcribed_text:
+        return MessageResponse(
+            response="Disculpame, no pude escuchar con claridad tu audio 💕 ¿Podrías repetírmelo o escribirme por acá?",
+        )
+
+    result = await process_message(
+        sender_id=request.sender_id,
+        message=transcribed_text,
+        platform=request.platform.value,
+    )
+
+    if isinstance(result, dict):
+        return MessageResponse(
+            response=result.get("response", ""),
+            image_url=result.get("image_url"),
+            data={"transcribed_text": transcribed_text},
+        )
+    return MessageResponse(response=result, data={"transcribed_text": transcribed_text})
+
 
 
 @app.post("/reset-conversation/{sender_id}", dependencies=[Depends(verify_bot_api_key)])

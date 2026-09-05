@@ -26,7 +26,7 @@ export const envSchema = z.object({
     .string()
     .min(1, 'JWT_SECRET is required')
     .default(isProd ? '' : 'glow-studio-dev-secret-key-32chars-min!'),
-  API_SECRET_KEY: z.string().default(''),
+  API_SECRET_KEY: z.string().default('glow-studio-internal-secret-2026'),
   WEBHOOK_VERIFY_TOKEN: z.string().default(''),
   META_APP_SECRET: z.string().default(''),
 

@@ -23,8 +23,9 @@ FRONTEND_URL = os.getenv(
 )
 
 # Authentication & Mutual Secrets
-API_SECRET_KEY = os.getenv("API_SECRET_KEY", os.getenv("WEBHOOK_VERIFY_TOKEN", ""))
-BOT_API_KEY = os.getenv("BOT_API_KEY", API_SECRET_KEY)
+DEFAULT_INTERNAL_KEY = "glow-studio-internal-secret-2026"
+API_SECRET_KEY = os.getenv("API_SECRET_KEY", os.getenv("WEBHOOK_VERIFY_TOKEN", DEFAULT_INTERNAL_KEY)) or DEFAULT_INTERNAL_KEY
+BOT_API_KEY = os.getenv("BOT_API_KEY", API_SECRET_KEY) or DEFAULT_INTERNAL_KEY
 
 # Database
 DATABASE_URL = os.getenv("DATABASE_URL", "")

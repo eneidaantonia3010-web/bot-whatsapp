@@ -165,18 +165,24 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
 
     // 3. Fallback: Forward message to Python Bot
     try {
+      const botController = new AbortController();
+      const botTimeout = setTimeout(() => botController.abort(), 30000);
+
       const botRes = await fetch(`${config.BOT_URL}/process-message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(config.API_SECRET_KEY ? { 'x-api-key': config.API_SECRET_KEY } : {}),
+          'x-api-key': config.API_SECRET_KEY,
         },
         body: JSON.stringify({
           message: text,
           sender_id: remoteJid,
           platform: 'WHATSAPP',
         }),
+        signal: botController.signal,
       });
+
+      clearTimeout(botTimeout);
 
       if (botRes.ok) {
         const botData = (await botRes.json()) as { response?: string };
@@ -184,10 +190,21 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
           await sendWhatsAppMessage({ to: remoteJid, message: botData.response });
           return { status: 'bot_replied' };
         }
+      } else {
+        const errDetail = await botRes.text().catch(() => '');
+        console.error(`❌ Evolution webhook bot forward failed with HTTP ${botRes.status}: ${errDetail}`);
       }
     } catch (botErr: any) {
       console.warn('⚠️ Forwarding to bot warning:', botErr.message);
     }
+
+    // If bot didn't reply, send friendly fallback
+    const fallbackReply =
+      "¡Hola! Bienvenida a *Glow Studio by Sofia* ✨\n\n" +
+      "Disculpá la demora momentánea 💕 Podés consultar todos nuestros servicios y turnos disponibles en nuestra web:\n" +
+      `${config.FRONTEND_URL || 'https://glow-studio-web.onrender.com'}\n\n` +
+      "O dejanos tu consulta que a la brevedad te responderemos personalmente 💕";
+    await sendWhatsAppMessage({ to: remoteJid, message: fallbackReply });
 
     return { status: 'processed' };
   } catch (error: any) {

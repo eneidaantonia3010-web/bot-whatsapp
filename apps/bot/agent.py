@@ -291,74 +291,74 @@ async def _process_message_internal(
     platform: str = "INSTAGRAM",
 ) -> str | dict:
     """Internal message processing logic."""
-    # STEP 0: Admin Commands Check (Only for authorized salon administrator phone)
-    if message.strip().startswith("/"):
-        admin_reply = await handle_admin_command(sender_id, message.strip())
-        if admin_reply:
-            return admin_reply
-
-    conv = get_conversation(sender_id)
-    chat_history = conv["chat_history"]
-
-    # Continuous Language Detection
-    lang = conv.get("language", "es")
-    detected_lang = detect_language(message)
-    if detected_lang != lang and detected_lang in ("pt", "en"):
-        lang = detected_lang
-        conv["language"] = lang
-
-    # Image reference detection & tagging
-    if "[Imagen:" in message or "[La clienta envió una imagen:" in message or "[Foto:" in message:
-        conv["reference_notes"] = message
-        logger.info(f"Tagged reference photo for {sender_id}")
-
-    # Session Freshness & Welcome Back (without swallowing user message)
-    welcome_back_prefix = ""
-    last_msg_str = conv.get("last_message_at")
-    if last_msg_str and conv["stage"] != "greeting":
-        try:
-            last_msg_dt = datetime.fromisoformat(last_msg_str)
-            if last_msg_dt.tzinfo is None:
-                last_msg_dt = TZ_AR.localize(last_msg_dt)
-            elapsed = (datetime.now(TZ_AR) - last_msg_dt).total_seconds()
-
-            if elapsed > 86400:  # > 24 hours — session expired
-                conversations.pop(sender_id, None)
-                delete_conversation_state(sender_id)
-                conv = get_conversation(sender_id)
-                conv["language"] = lang
-                chat_history = conv["chat_history"]
-            elif elapsed > 300:  # > 5 minutes — welcome back with context
-                service = conv.get("selected_service")
-                if service and conv["stage"] not in ("greeting", "human_escalated"):
-                    welcome_back_prefix = t("welcome_back", lang, service=service.get("name", "tu servicio")) + "\n\n"
-        except Exception as e:
-            logger.warning(f"Error checking session freshness: {e}")
-
-    conv["last_message_at"] = datetime.now(TZ_AR).isoformat()
-    chat_history.append({"role": "user", "parts": [message]})
-
-    # Check if conversation is PAUSED for human intervention
-    if conv.get("stage") in ("PAUSED", "human_escalated"):
-        clean_check = message.strip().lower()
-        if any(w in clean_check for w in ("hola", "inicio", "reset", "menu", "menú", "bot", "empezar", "reiniciar")):
-            conv["stage"] = "greeting"
-            conv["fallback_count"] = 0
-            conv["low_confidence_count"] = 0
-        else:
-            response = t("human_notified", lang) + "\n\n_💡 Si preferís volver al asistente virtual, escribí *menu* o *hola*._"
-            chat_history.append({"role": "model", "parts": [response]})
-            save_conversation_state(sender_id, conv)
-            return response
-
-    # Inyectar memoria semántica de clienta
-    clean_phone = normalize_phone(conv.get("customer_phone") or sender_id)
-    if clean_phone:
-        extract_and_remember_preferences(clean_phone, message)
-    memory_context = format_memory_system_context(clean_phone)
-    system_personality = SYSTEM_PERSONALITY_MAP.get(lang, SYSTEM_PERSONALITY_MAP["es"]) + memory_context
-
     try:
+        # STEP 0: Admin Commands Check (Only for authorized salon administrator phone)
+        if message.strip().startswith("/"):
+            admin_reply = await handle_admin_command(sender_id, message.strip())
+            if admin_reply:
+                return admin_reply
+
+        conv = get_conversation(sender_id)
+        chat_history = conv["chat_history"]
+
+        # Continuous Language Detection
+        lang = conv.get("language", "es")
+        detected_lang = detect_language(message)
+        if detected_lang != lang and detected_lang in ("pt", "en"):
+            lang = detected_lang
+            conv["language"] = lang
+
+        # Image reference detection & tagging
+        if "[Imagen:" in message or "[La clienta envió una imagen:" in message or "[Foto:" in message:
+            conv["reference_notes"] = message
+            logger.info(f"Tagged reference photo for {sender_id}")
+
+        # Session Freshness & Welcome Back (without swallowing user message)
+        welcome_back_prefix = ""
+        last_msg_str = conv.get("last_message_at")
+        if last_msg_str and conv["stage"] != "greeting":
+            try:
+                last_msg_dt = datetime.fromisoformat(last_msg_str)
+                if last_msg_dt.tzinfo is None:
+                    last_msg_dt = TZ_AR.localize(last_msg_dt)
+                elapsed = (datetime.now(TZ_AR) - last_msg_dt).total_seconds()
+
+                if elapsed > 86400:  # > 24 hours — session expired
+                    conversations.pop(sender_id, None)
+                    delete_conversation_state(sender_id)
+                    conv = get_conversation(sender_id)
+                    conv["language"] = lang
+                    chat_history = conv["chat_history"]
+                elif elapsed > 300:  # > 5 minutes — welcome back with context
+                    service = conv.get("selected_service")
+                    if service and conv["stage"] not in ("greeting", "human_escalated"):
+                        welcome_back_prefix = t("welcome_back", lang, service=service.get("name", "tu servicio")) + "\n\n"
+            except Exception as e:
+                logger.warning(f"Error checking session freshness: {e}")
+
+        conv["last_message_at"] = datetime.now(TZ_AR).isoformat()
+        chat_history.append({"role": "user", "parts": [message]})
+
+        # Check if conversation is PAUSED for human intervention
+        if conv.get("stage") in ("PAUSED", "human_escalated"):
+            clean_check = message.strip().lower()
+            if any(w in clean_check for w in ("hola", "inicio", "reset", "menu", "menú", "bot", "empezar", "reiniciar")):
+                conv["stage"] = "greeting"
+                conv["fallback_count"] = 0
+                conv["low_confidence_count"] = 0
+            else:
+                response = t("human_notified", lang) + "\n\n_💡 Si preferís volver al asistente virtual, escribí *menu* o *hola*._"
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return response
+
+        # Inyectar memoria semántica de clienta
+        clean_phone = normalize_phone(conv.get("customer_phone") or sender_id)
+        if clean_phone:
+            extract_and_remember_preferences(clean_phone, message)
+        memory_context = format_memory_system_context(clean_phone)
+        system_personality = SYSTEM_PERSONALITY_MAP.get(lang, SYSTEM_PERSONALITY_MAP["es"]) + memory_context
+
         # STEP 1: Intent Classification with Confidence Scoring (Non-blocking async)
         intent, confidence = await classify_intent_with_confidence_async(message)
         logger.info(f"Intent classified for {sender_id}: {intent} (confidence={confidence:.2f})")
@@ -1011,10 +1011,16 @@ async def _process_message_internal(
     except Exception as e:
         logger.exception(f"Agent error processing message: {e}")
         response = (
-            "Disculpá, tuve un problema procesando tu mensaje. 😔\n"
-            f"Podés intentar de nuevo o escribirnos por WhatsApp al "
-            f"*+{SALON_WHATSAPP}*. ¡Te ayudamos encantadas! 💕"
+            "Disculpá, tuvimos una breve demora al procesar tu mensaje. 😔\n"
+            f"Podés consultar nuestros servicios o escribirnos directamente a "
+            f"*+{SALON_WHATSAPP}*. ¡Te atenderemos encantadas! 💕"
         )
-        chat_history.append({"role": "model", "parts": [response]})
-        save_conversation_state(sender_id, conv)
+        try:
+            if "conv" in locals() and isinstance(conv, dict):
+                history = conv.get("chat_history")
+                if isinstance(history, list):
+                    history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+        except Exception as save_err:
+            logger.warning(f"Failed to record fallback response: {save_err}")
         return response

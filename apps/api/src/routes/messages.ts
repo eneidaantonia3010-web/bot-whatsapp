@@ -51,22 +51,32 @@ messagesRouter.post('/', async (req: Request, res: Response) => {
     let botResponse = '';
 
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 25000);
+
       const aiResponse = await fetch(`${config.BOT_URL}/process-message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(config.API_SECRET_KEY ? { 'x-api-key': config.API_SECRET_KEY } : {}),
+          'x-api-key': config.API_SECRET_KEY,
         },
         body: JSON.stringify({ message, sender_id: senderId, platform }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeout);
 
       if (aiResponse.ok) {
         const data = await aiResponse.json() as { response: string };
         botResponse = data.response;
       }
-    } catch {
-      // Bot service not available, use fallback
-      botResponse = `¡Gracias por tu mensaje! ✨ Nuestro equipo te responderá pronto. También podés escribirnos al +${config.SALON_WHATSAPP}.`;
+    } catch (fetchErr: any) {
+      console.warn('⚠️ Web message bot error:', fetchErr?.message);
+    }
+
+    if (!botResponse || !botResponse.trim()) {
+      // Bot service not available or returned non-200, use graceful fallback
+      botResponse = `¡Hola! Gracias por tu mensaje 💕 En este momento estamos procesando tu solicitud. Podés consultar nuestros servicios o escribirnos directamente a nuestro WhatsApp al +${config.SALON_WHATSAPP} ✨`;
     }
 
     // Save outbound response

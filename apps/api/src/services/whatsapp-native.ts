@@ -331,6 +331,22 @@ export async function initNativeWhatsApp(): Promise<void> {
         if (!textMessage) continue;
 
         const senderName = msg.pushName || remoteJid.split('@')[0];
+        const targetJid = remoteJid.endsWith('@lid') && ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
+          ? ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
+          : remoteJid;
+
+        const clearPresence = async () => {
+          if (sock && connectionState === 'open') {
+            try {
+              await sock.sendPresenceUpdate('paused', remoteJid);
+              if (targetJid !== remoteJid) {
+                await sock.sendPresenceUpdate('paused', targetJid);
+              }
+            } catch (err: any) {
+              console.warn('⚠️ Could not pause presence:', err?.message);
+            }
+          }
+        };
 
         // Send instant read receipt and start typing indicator
         if (sock && connectionState === 'open') {
@@ -358,6 +374,7 @@ export async function initNativeWhatsApp(): Promise<void> {
 
             if (customer?.blocked) {
               console.warn(`🚫 Ignoring message from blocked customer: ${remoteJid}`);
+              await clearPresence();
               return;
             }
 
@@ -375,18 +392,20 @@ export async function initNativeWhatsApp(): Promise<void> {
             console.warn(`⚠️ DB log warning: ${dbErr.message}`);
           }
 
+          let botSucceeded = false;
+
           // Call Python AI Bot
           try {
             console.log(`🤖 Calling Python Bot at: ${BOT_URL}/process-message`);
             
             const botController = new AbortController();
-            const botTimeout = setTimeout(() => botController.abort(), 45000); // 45s safety timeout
+            const botTimeout = setTimeout(() => botController.abort(), 30000); // 30s safety timeout
             
             const agentResponse = await fetch(`${BOT_URL}/process-message`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...(config.API_SECRET_KEY ? { 'x-api-key': config.API_SECRET_KEY } : {}),
+                'x-api-key': config.API_SECRET_KEY,
               },
               body: JSON.stringify({
                 message: textMessage,
@@ -402,90 +421,114 @@ export async function initNativeWhatsApp(): Promise<void> {
               const data = (await agentResponse.json()) as { response: string; image_url?: string };
               let reply = data.response;
               const imageUrl = data.image_url;
-              reply = addHumanDynamicVariation(reply);
 
-              console.log(`🤖 Native WA Bot reply for ${remoteJid}: ${reply.substring(0, 100)}...`);
+              if (reply && reply.trim()) {
+                botSucceeded = true;
+                reply = addHumanDynamicVariation(reply);
 
-              // Save OUTBOUND log
-              try {
-                await prisma.messageLog.create({
-                  data: {
-                    platform: 'WHATSAPP',
-                    senderId: remoteJid,
-                    message: reply,
-                    direction: 'OUTBOUND',
-                  },
-                });
-              } catch (logErr: any) {
-                console.warn(`⚠️ DB outbound log warning: ${logErr.message}`);
-              }
+                console.log(`🤖 Native WA Bot reply for ${remoteJid}: ${reply.substring(0, 100)}...`);
 
-              // Send reply via Global Outbound Queue (Visible, natural presence simulation)
-              if (sock && connectionState === 'open') {
-                const targetJid = remoteJid.endsWith('@lid') && ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
-                  ? ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
-                  : remoteJid;
+                // Save OUTBOUND log
+                try {
+                  await prisma.messageLog.create({
+                    data: {
+                      platform: 'WHATSAPP',
+                      senderId: remoteJid,
+                      message: reply,
+                      direction: 'OUTBOUND',
+                    },
+                  });
+                } catch (logErr: any) {
+                  console.warn(`⚠️ DB outbound log warning: ${logErr.message}`);
+                }
 
-                await enqueueGlobalOutbound(async () => {
-                  if (!sock || connectionState !== 'open') return;
+                // Send reply via Global Outbound Queue (Visible, natural presence simulation)
+                if (sock && connectionState === 'open') {
+                  await enqueueGlobalOutbound(async () => {
+                    if (!sock || connectionState !== 'open') return;
 
-                  // 1. Simular presencia "composing" (escribiendo) visible y natural (1.5s - 2.3s)
-                  const typingDelay = Math.floor(Math.random() * 800) + 1500;
-                  console.log(`✍️ Presence 'composing' (escribiendo...) for ${typingDelay}ms to ${targetJid}`);
-                  
-                  try {
-                    await sock.sendPresenceUpdate('composing', targetJid);
-                    if (targetJid !== remoteJid) {
-                      await sock.sendPresenceUpdate('composing', remoteJid);
-                    }
-                  } catch (ePresence) {
-                    console.warn('Presence update error:', ePresence);
-                  }
-
-                  await new Promise((res) => setTimeout(res, typingDelay));
-
-                  // 2. Enviar el mensaje (con imagen del portfolio si está disponible)
-                  try {
-                    if (imageUrl) {
-                      console.log(`🖼️ Fetching portfolio image for ${targetJid}: ${imageUrl}`);
-                      const imgController = new AbortController();
-                      const imgTimeout = setTimeout(() => imgController.abort(), 6000); // 6s timeout
-
-                      try {
-                        const imgRes = await fetch(imageUrl, { signal: imgController.signal });
-                        clearTimeout(imgTimeout);
-
-                        if (imgRes.ok) {
-                          const arrayBuf = await imgRes.arrayBuffer();
-                          const buffer = Buffer.from(arrayBuf);
-                          await sock.sendMessage(targetJid, {
-                            image: buffer,
-                            mimetype: 'image/jpeg',
-                            caption: reply,
-                          }, { quoted: msg });
-                          console.log(`✅ Native WA reply sent to ${targetJid} (with image)`);
-                        } else {
-                          throw new Error(`HTTP ${imgRes.status}`);
-                        }
-                      } catch (fetchErr: any) {
-                        console.error(`⚠️ Image fetch failed for ${targetJid}: ${fetchErr.message}. Sending text only.`);
-                        await sock.sendMessage(targetJid, { text: reply }, { quoted: msg });
+                    // 1. Simular presencia "composing" (escribiendo) visible y natural (1.5s - 2.3s)
+                    const typingDelay = Math.floor(Math.random() * 800) + 1500;
+                    console.log(`✍️ Presence 'composing' (escribiendo...) for ${typingDelay}ms to ${targetJid}`);
+                    
+                    try {
+                      await sock.sendPresenceUpdate('composing', targetJid);
+                      if (targetJid !== remoteJid) {
+                        await sock.sendPresenceUpdate('composing', remoteJid);
                       }
-                    } else {
-                      await sock.sendMessage(targetJid, { text: reply }, { quoted: msg });
-                      console.log(`✅ Native WA reply sent to ${targetJid} (text only)`);
+                    } catch (ePresence) {
+                      console.warn('Presence update error:', ePresence);
                     }
-                  } catch (e1) {
-                    console.error(`⚠️ Error sending to ${targetJid}, trying direct text fallback:`, e1);
-                    await sock.sendMessage(targetJid, { text: reply });
-                  }
-                });
+
+                    await new Promise((res) => setTimeout(res, typingDelay));
+
+                    // 2. Enviar el mensaje (con imagen del portfolio si está disponible)
+                    try {
+                      if (imageUrl) {
+                        console.log(`🖼️ Fetching portfolio image for ${targetJid}: ${imageUrl}`);
+                        const imgController = new AbortController();
+                        const imgTimeout = setTimeout(() => imgController.abort(), 6000); // 6s timeout
+
+                        try {
+                          const imgRes = await fetch(imageUrl, { signal: imgController.signal });
+                          clearTimeout(imgTimeout);
+
+                          if (imgRes.ok) {
+                            const arrayBuf = await imgRes.arrayBuffer();
+                            const buffer = Buffer.from(arrayBuf);
+                            await sock.sendMessage(targetJid, {
+                              image: buffer,
+                              mimetype: 'image/jpeg',
+                              caption: reply,
+                            }, { quoted: msg });
+                            console.log(`✅ Native WA reply sent to ${targetJid} (with image)`);
+                          } else {
+                            throw new Error(`HTTP ${imgRes.status}`);
+                          }
+                        } catch (fetchErr: any) {
+                          console.error(`⚠️ Image fetch failed for ${targetJid}: ${fetchErr.message}. Sending text only.`);
+                          await sock.sendMessage(targetJid, { text: reply }, { quoted: msg });
+                        }
+                      } else {
+                        await sock.sendMessage(targetJid, { text: reply }, { quoted: msg });
+                        console.log(`✅ Native WA reply sent to ${targetJid} (text only)`);
+                      }
+                    } catch (e1) {
+                      console.error(`⚠️ Error sending to ${targetJid}, trying direct text fallback:`, e1);
+                      await sock.sendMessage(targetJid, { text: reply });
+                    } finally {
+                      await clearPresence();
+                    }
+                  });
+                }
               }
             } else {
-              console.error(`❌ Bot API returned status ${agentResponse.status}`);
+              const errBody = await agentResponse.text().catch(() => '');
+              console.error(`❌ Bot API returned HTTP ${agentResponse.status} for ${remoteJid}: ${errBody}`);
             }
-          } catch (error) {
-            console.error(`❌ Error processing Native WA message:`, error);
+          } catch (error: any) {
+            console.error(`❌ Error processing Native WA message for ${remoteJid}:`, error?.message || error);
+          } finally {
+            // Guarantee presence is cancelled if bot didn't succeed or reply was not queued
+            if (!botSucceeded) {
+              await clearPresence();
+
+              // Send graceful fallback so customer is never left in silence
+              try {
+                if (sock && connectionState === 'open') {
+                  const fallbackMsg =
+                    "¡Hola! Bienvenida a *Glow Studio by Sofia* ✨\n\n" +
+                    "Disculpá la demora momentánea 💕 Podés consultar todos nuestros servicios y turnos disponibles directamente desde nuestra web oficial:\n" +
+                    `${config.FRONTEND_URL || 'https://glow-studio-web.onrender.com'}\n\n` +
+                    "O dejanos tu consulta que en instantes te responderemos personalmente 💕";
+                  
+                  await sock.sendMessage(targetJid, { text: fallbackMsg }, { quoted: msg });
+                  console.log(`✅ Sent graceful fallback reply to ${targetJid}`);
+                }
+              } catch (fallbackErr: any) {
+                console.error(`❌ Could not send fallback message to ${targetJid}:`, fallbackErr?.message);
+              }
+            }
           }
         });
       }

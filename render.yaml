@@ -58,6 +58,10 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: API_SECRET_KEY
+        sync: false
+      - key: BOT_API_KEY
+        sync: false
       - key: SALON_WHATSAPP
         sync: false
       - key: INSTANCE_NAME

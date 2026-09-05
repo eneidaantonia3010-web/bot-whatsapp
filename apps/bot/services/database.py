@@ -236,18 +236,26 @@ def get_service_by_index(index: int) -> Optional[dict]:
 
 def find_customer_by_instagram(ig_id: str) -> Optional[dict]:
     """Find a customer by their Instagram sender ID."""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, name, phone, email, instagram FROM customers WHERE instagram = %s",
-                (ig_id,),
-            )
-            return cur.fetchone()
+    try:
+        with get_db_connection() as conn:
+            if not conn:
+                return None
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, name, phone, email, instagram FROM customers WHERE instagram = %s",
+                    (ig_id,),
+                )
+                return cur.fetchone()
+    except Exception as e:
+        logger.warning(f"Error finding customer by Instagram: {e}")
+        return None
 
 
 def create_customer(name: str, phone: str, instagram: Optional[str] = None) -> dict:
     """Create a new customer record."""
     with get_db_connection() as conn:
+        if not conn:
+            return {}
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO customers (id, name, phone, instagram, created_at, updated_at) "
@@ -255,29 +263,37 @@ def create_customer(name: str, phone: str, instagram: Optional[str] = None) -> d
                 (name, phone, instagram),
             )
             conn.commit()
-            return cur.fetchone()
+            return cur.fetchone() or {}
 
 
 def get_appointments_for_date(date_str: str) -> list[dict]:
     """Get all non-cancelled appointments for a given date."""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT a.id, a.date, a.end_date, a.status, "
-                "s.name as service_name, s.duration "
-                "FROM appointments a "
-                "JOIN services s ON a.service_id = s.id "
-                "WHERE DATE(a.date) = %s AND a.status != 'CANCELLED' "
-                "ORDER BY a.date ASC",
-                (date_str,),
-            )
-            return cur.fetchall()
+    try:
+        with get_db_connection() as conn:
+            if not conn:
+                return []
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT a.id, a.date, a.end_date, a.status, "
+                    "s.name as service_name, s.duration "
+                    "FROM appointments a "
+                    "JOIN services s ON a.service_id = s.id "
+                    "WHERE DATE(a.date) = %s AND a.status != 'CANCELLED' "
+                    "ORDER BY a.date ASC",
+                    (date_str,),
+                )
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Error getting appointments for date: {e}")
+        return []
 
 
 def get_conversation_state(sender_id: str) -> Optional[dict]:
     """Fetch stored conversation state for sender_id from PostgreSQL."""
     try:
         with get_db_connection() as conn:
+            if not conn:
+                return None
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT state FROM conversation_states WHERE sender_id = %s",
@@ -297,6 +313,8 @@ def save_conversation_state(sender_id: str, state: dict) -> bool:
     """Save or update conversation state in PostgreSQL."""
     try:
         with get_db_connection() as conn:
+            if not conn:
+                return False
             with conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO conversation_states (sender_id, state, updated_at) "
@@ -315,6 +333,8 @@ def delete_conversation_state(sender_id: str) -> bool:
     """Delete conversation state from PostgreSQL."""
     try:
         with get_db_connection() as conn:
+            if not conn:
+                return False
             with conn.cursor() as cur:
                 cur.execute(
                     "DELETE FROM conversation_states WHERE sender_id = %s",

@@ -66,18 +66,24 @@ instagramWebhookRouter.post('/', async (req: Request, res: Response) => {
           // Forward to AI agent for processing via Sender Queue
           enqueueForSender(senderId, async () => {
             try {
+              const botController = new AbortController();
+              const botTimeout = setTimeout(() => botController.abort(), 30000);
+
               const agentResponse = await fetch(`${config.BOT_URL}/process-message`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  ...(config.API_SECRET_KEY ? { 'x-api-key': config.API_SECRET_KEY } : {}),
+                  'x-api-key': config.API_SECRET_KEY,
                 },
                 body: JSON.stringify({
                   message,
                   sender_id: senderId,
                   platform: 'INSTAGRAM',
                 }),
+                signal: botController.signal,
               });
+
+              clearTimeout(botTimeout);
 
               if (agentResponse.ok) {
                 const data = await agentResponse.json() as { response: string };

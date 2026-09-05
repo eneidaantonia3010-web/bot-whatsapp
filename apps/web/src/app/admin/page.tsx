@@ -78,6 +78,13 @@ import {
 import { getToken, removeToken } from '@/lib/auth';
 import { useTranslation } from '@/i18n/I18nContext';
 import { useRealtimeAppointments } from '@/hooks/useRealtimeAppointments';
+import {
+  DashboardTab,
+  CalendarTab,
+  CustomersTab,
+  ServicesTab,
+  AnalyticsTab,
+} from '@/components/admin/tabs';
 
 
 // ----------------------------------------------------
@@ -550,17 +557,6 @@ export default function AdminPage() {
     return matchesSearch && matchesStatus;
   });
 
-  // Category Icon Resolver
-  const getCategoryBadge = (category: string) => {
-    switch (category.toLowerCase()) {
-      case 'cabello': return { label: 'Cabello', bg: 'bg-pink-500/10 text-pink-400 border-pink-500/20' };
-      case 'unas': return { label: 'Uñas', bg: 'bg-purple-500/10 text-purple-400 border-purple-500/20' };
-      case 'pestanas': return { label: 'Pestañas & Cejas', bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' };
-      case 'facial': return { label: 'Facial', bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20' };
-      default: return { label: 'Belleza', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#08080C] text-slate-100 font-sans selection:bg-pink-500 selection:text-white relative overflow-x-hidden">
       {/* Background Ambient Glowing Orbs */}
@@ -803,713 +799,58 @@ export default function AdminPage() {
           </header>
 
           {/* ==================================================== */}
-          {/* TAB 1: DASHBOARD DE CONTROL */}
+          {/* MODULAR ADMIN TABS */}
           {/* ==================================================== */}
           {activeTab === 'dashboard' && (
-            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="space-y-8">
-              
-              {/* 4 Sparkline Stat Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                {[
-                  {
-                    title: 'Turnos del Mes',
-                    value: metricsData.appointmentsThisMonth,
-                    change: '+15%',
-                    isPositive: true,
-                    icon: CalendarCheck,
-                    color: 'from-pink-500 to-rose-600',
-                    bgGlow: 'shadow-pink-500/10',
-                  },
-                  {
-                    title: 'Clientas Nuevas',
-                    value: metricsData.newClientsThisMonth,
-                    change: '+8%',
-                    isPositive: true,
-                    icon: UserPlus,
-                    color: 'from-purple-500 to-indigo-600',
-                    bgGlow: 'shadow-purple-500/10',
-                  },
-                  {
-                    title: 'Ingresos Estimados',
-                    value: formatPrice(metricsData.revenueThisMonth),
-                    change: '+18.4%',
-                    isPositive: true,
-                    icon: CurrencyDollar,
-                    color: 'from-emerald-500 to-teal-600',
-                    bgGlow: 'shadow-emerald-500/10',
-                  },
-                  {
-                    title: 'Turnos Pendientes',
-                    value: metricsData.pendingAppointments,
-                    change: 'Atención requerida',
-                    isPositive: false,
-                    icon: Clock,
-                    color: 'from-amber-500 to-orange-600',
-                    bgGlow: 'shadow-amber-500/10',
-                  },
-                ].map((card, idx) => {
-                  const Icon = card.icon;
-                  return (
-                    <div key={idx} className="dark-glass-card rounded-3xl p-5 border border-white/10 relative overflow-hidden group">
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs text-slate-400 font-medium">{card.title}</span>
-                        <div className={`w-10 h-10 rounded-2xl bg-gradient-to-tr ${card.color} p-[1px] shadow-lg ${card.bgGlow}`}>
-                          <div className="w-full h-full bg-[#12121B] rounded-2xl flex items-center justify-center">
-                            <Icon className="w-5 h-5 text-white" />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-baseline justify-between">
-                        <h3 className="text-2xl font-bold text-white font-display">{card.value}</h3>
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${card.isPositive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
-                          {card.change}
-                        </span>
-                      </div>
-                      {/* Decorative Sparkline graph line */}
-                      <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-500">
-                        <span>Actualizado en vivo</span>
-                        <span className="text-pink-400 flex items-center gap-1 font-medium">
-                          <TrendUp className="w-3 h-3" /> Tendencia positiva
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Appointments Table Section */}
-              <div className="dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-5">
-                {/* Table Top Controls */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
-                  <div>
-                    <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
-                      <CalendarBlank className="w-5 h-5 text-pink-400" /> Próximos Turnos Programados
-                    </h2>
-                    <p className="text-xs text-slate-400">Haz clic en cualquier turno para abrir su ficha completa.</p>
-                  </div>
-
-                  {/* Status Filter Buttons */}
-                  <div className="flex flex-wrap items-center gap-1.5 bg-white/[0.03] p-1 rounded-2xl border border-white/10">
-                    {[
-                      { key: 'ALL', label: 'Todos' },
-                      { key: 'PENDING', label: 'Pendientes' },
-                      { key: 'CONFIRMED', label: 'Confirmados' },
-                      { key: 'COMPLETED', label: 'Completados' },
-                      { key: 'CANCELLED', label: 'Cancelados' },
-                    ].map((f) => (
-                      <button
-                        key={f.key}
-                        onClick={() => setStatusFilter(f.key as any)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                          statusFilter === f.key
-                            ? 'bg-pink-500 text-white font-semibold shadow-md shadow-pink-500/30'
-                            : 'text-slate-400 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Table Component */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-white/[0.02] text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-white/10">
-                      <tr>
-                        <th className="py-3.5 px-4">Clienta</th>
-                        <th className="py-3.5 px-4">Servicio</th>
-                        <th className="py-3.5 px-4">Fecha & Hora</th>
-                        <th className="py-3.5 px-4">Precio</th>
-                        <th className="py-3.5 px-4">Origen</th>
-                        <th className="py-3.5 px-4">Estado</th>
-                        <th className="py-3.5 px-4 text-right">Acciones Rápidas</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {filteredAppointments.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="py-8 text-center text-slate-500">
-                            No se encontraron turnos con los filtros aplicados.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredAppointments.map((apt) => {
-                          const badge = getCategoryBadge(apt.category);
-                          return (
-                            <tr
-                              key={apt.id}
-                              onClick={() => setSelectedAppointment(apt)}
-                              className="hover:bg-white/[0.04] transition-colors cursor-pointer group"
-                            >
-                              <td className="py-4 px-4 font-medium text-white flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500/20 to-purple-500/20 border border-pink-500/30 flex items-center justify-center text-pink-300 font-bold text-xs">
-                                  {apt.customerName.charAt(0)}
-                                </div>
-                                <div>
-                                  <p className="font-semibold text-white group-hover:text-pink-300 transition-colors">{apt.customerName}</p>
-                                  <p className="text-[10px] text-slate-400">{apt.customerPhone}</p>
-                                </div>
-                              </td>
-
-                              <td className="py-4 px-4">
-                                <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-semibold border ${badge.bg}`}>
-                                  {apt.service}
-                                </span>
-                              </td>
-
-                              <td className="py-4 px-4 font-mono text-slate-200">
-                                <span className="block text-white font-semibold">{apt.date}</span>
-                                <span className="text-[11px] text-pink-400">{apt.time}hs</span>
-                              </td>
-
-                              <td className="py-4 px-4 font-bold text-white font-mono">
-                                {formatPrice(apt.price)}
-                              </td>
-
-                              <td className="py-4 px-4">
-                                <span className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-white/5 text-slate-400 border border-white/10">
-                                  {apt.source}
-                                </span>
-                              </td>
-
-                              <td className="py-4 px-4">
-                                {apt.status === 'CONFIRMED' && (
-                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1 w-max">
-                                    <CheckCircle className="w-3 h-3" /> Confirmado
-                                  </span>
-                                )}
-                                {apt.status === 'PENDING' && (
-                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1 w-max">
-                                    <Clock className="w-3 h-3" /> Pendiente
-                                  </span>
-                                )}
-                                {apt.status === 'COMPLETED' && (
-                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center gap-1 w-max">
-                                    <Sparkle className="w-3 h-3" /> Completado
-                                  </span>
-                                )}
-                                {apt.status === 'CANCELLED' && (
-                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center gap-1 w-max">
-                                    <XCircle className="w-3 h-3" /> Cancelado
-                                  </span>
-                                )}
-                                {apt.status === 'NO_SHOW' && (
-                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 flex items-center gap-1 w-max">
-                                    <UserCircle className="w-3 h-3" /> Ausente
-                                  </span>
-                                )}
-                              </td>
-
-                              <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center justify-end gap-1.5">
-                                  {apt.status === 'PENDING' && (
-                                    <button
-                                      onClick={() => handleStatusChange(apt.id, 'CONFIRMED')}
-                                      className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all"
-                                      title="Confirmar Turno"
-                                    >
-                                      <Check className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                  {apt.status !== 'COMPLETED' && apt.status !== 'CANCELLED' && (
-                                    <button
-                                      onClick={() => handleStatusChange(apt.id, 'COMPLETED')}
-                                      className="p-1.5 rounded-xl bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition-all"
-                                      title="Marcar Completado"
-                                    >
-                                      <Sparkle className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                  {apt.status !== 'CANCELLED' && (
-                                    <button
-                                      onClick={() => handleStatusChange(apt.id, 'CANCELLED')}
-                                      className="p-1.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 transition-all"
-                                      title="Cancelar Turno"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </motion.div>
+            <DashboardTab
+              metricsData={metricsData}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              filteredAppointments={filteredAppointments}
+              setSelectedAppointment={setSelectedAppointment}
+              handleStatusChange={handleStatusChange}
+            />
           )}
 
-          {/* ==================================================== */}
-          {/* TAB 2: CALENDARIO DE TURNOS */}
-          {/* ==================================================== */}
           {activeTab === 'calendar' && (
-            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-6">
-              {/* Header & Controls */}
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/10">
-                <div>
-                  <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
-                    <CalendarBlank className="w-5 h-5 text-pink-400" /> Agenda Interactiva de Turnos
-                  </h2>
-                  <p className="text-xs text-slate-400">Visualizá los turnos reales agendados, bloqueos de horarios y lista de espera.</p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  {/* Week Navigation */}
-                  <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-2xl border border-white/10">
-                    <button
-                      onClick={() => setWeekOffset((prev) => prev - 1)}
-                      className="p-1.5 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-all text-xs flex items-center gap-1"
-                      title="Semana Anterior"
-                    >
-                      <CaretLeft className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setWeekOffset(0)}
-                      className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${
-                        weekOffset === 0 ? 'bg-pink-500/20 text-pink-300 font-semibold border border-pink-500/30' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Hoy
-                    </button>
-                    <button
-                      onClick={() => setWeekOffset((prev) => prev + 1)}
-                      className="p-1.5 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-all text-xs flex items-center gap-1"
-                      title="Semana Siguiente"
-                    >
-                      <CaretRight className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Block Time Button (Func 5) */}
-                  <button
-                    onClick={() => setShowBlockModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-semibold bg-white/[0.05] hover:bg-white/[0.1] text-amber-300 border border-amber-400/30 hover:border-amber-400/50 transition-all shadow-sm"
-                  >
-                    <Lock className="w-3.5 h-3.5" /> Bloquear Horario / Feriado
-                  </button>
-
-                  {/* Waitlist Modal Toggle (Func 2) */}
-                  <button
-                    onClick={() => setShowWaitlistModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-semibold bg-white/[0.05] hover:bg-white/[0.1] text-purple-300 border border-purple-400/30 hover:border-purple-400/50 transition-all shadow-sm"
-                  >
-                    <Hourglass className="w-3.5 h-3.5" /> Lista de Espera ({waitlist.filter((w) => w.status === 'WAITING').length})
-                  </button>
-
-                  {/* View Toggle */}
-                  <div className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-2xl border border-white/10">
-                    <button
-                      onClick={() => setCalendarView('week')}
-                      className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${
-                        calendarView === 'week' ? 'bg-pink-500 text-white font-semibold shadow-md shadow-pink-500/30' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Semana
-                    </button>
-                    <button
-                      onClick={() => setCalendarView('month')}
-                      className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${
-                        calendarView === 'month' ? 'bg-pink-500 text-white font-semibold shadow-md shadow-pink-500/30' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Mes
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dynamic Weekly Matrix (Func 6) */}
-              {calendarView === 'week' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                  {getWeekDays(weekOffset).map((day, idx) => {
-                    const dayAppointments = appointments.filter((apt) => apt.date === day.dateStr);
-                    const dayBlocks = blockedTimes.filter((b) => {
-                      const bStart = b.startDate ? b.startDate.split('T')[0] : '';
-                      const bEnd = b.endDate ? b.endDate.split('T')[0] : '';
-                      return day.dateStr >= bStart && day.dateStr <= bEnd;
-                    });
-
-                    return (
-                      <div
-                        key={idx}
-                        className={`dark-glass-card rounded-2xl p-4 border transition-all ${
-                          day.isToday ? 'border-pink-500/50 bg-pink-500/[0.03] shadow-lg shadow-pink-500/10' : 'border-white/10'
-                        } space-y-3 flex flex-col min-h-[380px]`}
-                      >
-                        <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-xs font-bold font-display ${day.isToday ? 'text-pink-400 font-extrabold' : 'text-slate-200'}`}>
-                              {day.label}
-                            </span>
-                            {day.isToday && (
-                              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-pink-500 text-white font-bold">HOY</span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-mono">
-                            {dayAppointments.length} turnos
-                          </span>
-                        </div>
-
-                        <div className="space-y-2 flex-1 overflow-y-auto max-h-[420px] pr-0.5">
-                          {/* Blocked Times on this day (Func 5) */}
-                          {dayBlocks.map((b) => (
-                            <div
-                              key={b.id}
-                              className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 relative group"
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-mono text-amber-400 font-bold flex items-center gap-1">
-                                  <LockSimple className="w-3 h-3" /> {b.allDay ? 'DÍA COMPLETO' : 'BLOQUEADO'}
-                                </span>
-                                <button
-                                  onClick={() => handleDeleteBlockedTime(b.id)}
-                                  className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
-                                  title="Eliminar bloqueo"
-                                >
-                                  <Trash className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                              <p className="text-xs font-semibold mt-1 truncate">{b.reason}</p>
-                              {!b.allDay && (
-                                <p className="text-[10px] text-amber-300/70 font-mono">
-                                  {new Date(b.startDate).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })} - {new Date(b.endDate).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                                </p>
-                              )}
-                            </div>
-                          ))}
-
-                          {/* Real Appointments */}
-                          {dayAppointments
-                            .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
-                            .map((apt) => {
-                              const isConfirmed = apt.status === 'CONFIRMED';
-                              const isPending = apt.status === 'PENDING';
-                              const isCancelled = apt.status === 'CANCELLED';
-
-                              return (
-                                <div
-                                  key={apt.id}
-                                  onClick={() => setSelectedAppointment(apt)}
-                                  className={`p-2.5 rounded-xl border transition-all cursor-pointer group ${
-                                    isConfirmed
-                                      ? 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/60'
-                                      : isPending
-                                      ? 'bg-amber-500/10 border-amber-500/30 hover:border-amber-500/60'
-                                      : isCancelled
-                                      ? 'bg-rose-500/10 border-rose-500/30 opacity-60'
-                                      : 'bg-pink-500/10 border-pink-500/20 hover:border-pink-500/50'
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-mono text-pink-300 font-bold">
-                                      {apt.time || '10:00'}hs
-                                    </span>
-                                    <span
-                                      className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
-                                        isConfirmed
-                                          ? 'bg-emerald-500/20 text-emerald-300'
-                                          : isPending
-                                          ? 'bg-amber-500/20 text-amber-300'
-                                          : isCancelled
-                                          ? 'bg-rose-500/20 text-rose-300'
-                                          : 'bg-slate-500/20 text-slate-300'
-                                      }`}
-                                    >
-                                      {apt.status}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs font-semibold text-white truncate group-hover:text-pink-300 mt-1">
-                                    {apt.customerName}
-                                  </p>
-                                  <p className="text-[10px] text-slate-400 truncate">{apt.service}</p>
-                                  {apt.price > 0 && (
-                                    <p className="text-[9px] font-mono text-slate-500 mt-1">${apt.price.toLocaleString('es-AR')}</p>
-                                  )}
-                                </div>
-                              );
-                            })}
-
-                          {dayAppointments.length === 0 && dayBlocks.length === 0 && (
-                            <div className="h-full flex flex-col items-center justify-center text-center py-10 opacity-40">
-                              <CalendarCheck className="w-8 h-8 text-slate-600 mb-1" />
-                              <p className="text-[10px] text-slate-500">Sin turnos</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                /* Month Grid */
-                <div className="space-y-4">
-                  <div className="grid grid-cols-7 gap-2">
-                    {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((d) => (
-                      <div key={d} className="py-2 text-center text-xs font-bold text-slate-400 border-b border-white/10">
-                        {d}
-                      </div>
-                    ))}
-                    {Array.from({ length: 31 }).map((_, i) => {
-                      const dayNumber = i + 1;
-                      const monthDayStr = `2026-08-${dayNumber.toString().padStart(2, '0')}`;
-                      const count = appointments.filter((a) => a.date === monthDayStr).length;
-
-                      return (
-                        <div
-                          key={i}
-                          className="dark-glass-card h-24 p-2.5 rounded-xl border border-white/5 flex flex-col justify-between hover:border-pink-500/30 transition-all cursor-pointer"
-                        >
-                          <span className="text-xs font-mono font-semibold text-slate-300">{dayNumber}</span>
-                          {count > 0 ? (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300 truncate">
-                              {count} {count === 1 ? 'Turno' : 'Turnos'}
-                            </span>
-                          ) : (
-                            <span className="text-[9px] text-slate-600">Libre</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </motion.div>
+            <CalendarTab
+              weekOffset={weekOffset}
+              setWeekOffset={setWeekOffset}
+              calendarView={calendarView}
+              setCalendarView={setCalendarView}
+              getWeekDays={getWeekDays}
+              appointments={appointments}
+              blockedTimes={blockedTimes}
+              waitlist={waitlist}
+              setShowBlockModal={setShowBlockModal}
+              setShowWaitlistModal={setShowWaitlistModal}
+              handleDeleteBlockedTime={handleDeleteBlockedTime}
+              setSelectedAppointment={setSelectedAppointment}
+            />
           )}
 
-          {/* ==================================================== */}
-          {/* TAB 3: CLIENTAS VIP (CRM) */}
-          {/* ==================================================== */}
           {activeTab === 'customers' && (
-            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="space-y-6">
-              <div className="dark-glass-panel rounded-3xl p-6 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
-                    <Users className="w-5 h-5 text-purple-400" /> Directorio de Clientas VIP
-                  </h2>
-                  <p className="text-xs text-slate-400">Historial completo, preferencias y contacto directo por WhatsApp.</p>
-                </div>
-                <div className="relative">
-                  <MagnifyingGlass className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Buscar por nombre o teléfono..."
-                    value={customerSearch}
-                    onChange={(e) => setCustomerSearch(e.target.value)}
-                    className="dark-glass-input pl-10 pr-4 py-2 rounded-2xl text-xs w-64"
-                  />
-                </div>
-              </div>
-
-              {/* Customers Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {(customersList.length > 0 ? customersList : [
-                  { id: '1', name: 'Camila Rodriguez', phone: '+5491145678901', visits: 12, totalSpent: 480000, level: 'VIP' },
-                  { id: '2', name: 'Lucía Fernández', phone: '+5491156789012', visits: 6, totalSpent: 120000, level: 'Frecuente' },
-                  { id: '3', name: 'Valentina Gomez', phone: '+5491167890123', visits: 2, totalSpent: 36000, level: 'Nueva' },
-                  { id: '4', name: 'Martina Paz', phone: '+5491178901234', visits: 8, totalSpent: 210000, level: 'Frecuente' },
-                ])
-                  .filter((c: any) => c.name?.toLowerCase().includes(customerSearch.toLowerCase()) || c.phone?.includes(customerSearch))
-                  .map((customer: any) => (
-                    <div
-                      key={customer.id}
-                      onClick={() => setSelectedCustomer(customer)}
-                      className="dark-glass-card rounded-3xl p-5 border border-white/10 space-y-4 hover:border-purple-500/30 transition-all cursor-pointer group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-500/20 to-pink-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300 font-bold text-sm">
-                            {customer.name?.charAt(0)}
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-white group-hover:text-purple-300 transition-colors">{customer.name}</h3>
-                            <p className="text-[11px] text-slate-400">{customer.phone}</p>
-                          </div>
-                        </div>
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                          {customer.level || 'VIP'}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs">
-                        <div>
-                          <span className="text-[10px] text-slate-500 block">Visitas</span>
-                          <span className="font-bold text-white">{customer.visits || 8} citas</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-500 block">Total Invertido</span>
-                          <span className="font-bold text-emerald-400">{formatPrice(customer.totalSpent || 240000)}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-2">
-                        <a
-                          href={`https://wa.me/${customer.phone?.replace(/[^0-9]/g, '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                        >
-                          <Phone className="w-3.5 h-3.5" /> Enviar Mensaje
-                        </a>
-                        <span className="text-[10px] text-slate-500">Ver Ficha &rarr;</span>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </motion.div>
+            <CustomersTab
+              customerSearch={customerSearch}
+              setCustomerSearch={setCustomerSearch}
+              customersList={customersList}
+              setSelectedCustomer={setSelectedCustomer}
+            />
           )}
 
-          {/* ==================================================== */}
-          {/* TAB 4: GESTIÓN DE SERVICIOS */}
-          {/* ==================================================== */}
           {activeTab === 'services' && (
-            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="space-y-6">
-              <div className="dark-glass-panel rounded-3xl p-6 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
-                    <Scissors className="w-5 h-5 text-pink-400" /> Catálogo de Servicios y Precios
-                  </h2>
-                  <p className="text-xs text-slate-400">Activá, pausá o modificá los valores de los tratamientos.</p>
-                </div>
-                <button
-                  onClick={handleOpenNewService}
-                  className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-pink-500 to-rose-600 text-white font-semibold text-xs shadow-lg shadow-pink-500/25 hover:brightness-110 transition-all flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" /> Agregar Servicio
-                </button>
-              </div>
-
-              {/* Services Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {servicesList.map((service) => (
-                  <div key={service.id} className="dark-glass-card rounded-3xl p-5 border border-white/10 space-y-4 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-pink-500/10 text-pink-400 border border-pink-500/20">
-                          {service.category || 'Cabello'}
-                        </span>
-                        {/* Toggle Active Switch */}
-                        <button
-                          onClick={() => handleToggleServiceActive(service)}
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all flex items-center gap-1 ${
-                            service.active !== false
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${service.active !== false ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                          {service.active !== false ? 'Disponible' : 'Pausado'}
-                        </button>
-                      </div>
-                      <h3 className="font-bold text-white text-base font-display">{service.name}</h3>
-                      <p className="text-xs text-slate-400 mt-1 line-clamp-2">{service.description}</p>
-                    </div>
-
-                    <div className="pt-4 border-t border-white/10 flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">Duración: {formatDuration(service.duration)}</span>
-                        <span className="text-lg font-bold text-white font-mono">{formatPrice(service.price)}</span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setEditingService(service);
-                          setServiceForm({
-                            name: service.name,
-                            description: service.description || '',
-                            price: service.price,
-                            duration: service.duration,
-                            category: service.category || 'cabello',
-                            imageUrl: service.imageUrl || '',
-                            active: service.active !== false,
-                          });
-                          setShowServiceModal(true);
-                        }}
-                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition-colors"
-                        title="Editar Servicio"
-                      >
-                        <PencilSimple className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
+            <ServicesTab
+              servicesList={servicesList}
+              handleOpenNewService={handleOpenNewService}
+              handleToggleServiceActive={handleToggleServiceActive}
+              setEditingService={setEditingService}
+              setServiceForm={setServiceForm}
+              setShowServiceModal={setShowServiceModal}
+            />
           )}
 
-          {/* ==================================================== */}
-          {/* TAB 5: ESTADÍSTICAS Y RENDIMIENTO */}
-          {/* ==================================================== */}
           {activeTab === 'analytics' && (
-            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="space-y-8">
-              {/* Financial Metrics Summary Header */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                <div className="dark-glass-card rounded-3xl p-5 border border-white/10 space-y-2">
-                  <span className="text-xs text-slate-400">Ingreso Mensual Actual</span>
-                  <h3 className="text-3xl font-bold text-emerald-400 font-mono">{formatPrice(financialData.revenueThisMonth)}</h3>
-                  <p className="text-[11px] text-emerald-300 font-semibold flex items-center gap-1">
-                    <TrendUp className="w-3.5 h-3.5" /> +{financialData.revenueGrowthPct}% vs mes anterior
-                  </p>
-                </div>
-                <div className="dark-glass-card rounded-3xl p-5 border border-white/10 space-y-2">
-                  <span className="text-xs text-slate-400">Ticket Promedio por Clienta</span>
-                  <h3 className="text-3xl font-bold text-white font-mono">{formatPrice(financialData.averageTicket)}</h3>
-                  <p className="text-[11px] text-slate-400">Basado en {financialData.totalAppointmentsMonth} turnos atedidos</p>
-                </div>
-                <div className="dark-glass-card rounded-3xl p-5 border border-white/10 space-y-2">
-                  <span className="text-xs text-slate-400">Tasa de Cancelación</span>
-                  <h3 className="text-3xl font-bold text-pink-400 font-mono">{financialData.cancellationRate}%</h3>
-                  <p className="text-[11px] text-slate-400">{financialData.cancelledMonth} cancelaciones registradas</p>
-                </div>
-              </div>
-
-              {/* Visual Breakdown Cards */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Revenue Weekly Bar Representation */}
-                <div className="dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-4">
-                  <h3 className="text-base font-bold text-white font-display flex items-center gap-2">
-                    <ChartBar className="w-5 h-5 text-pink-400" /> Ingresos Semanales
-                  </h3>
-                  <div className="space-y-3 pt-2">
-                    {financialData.weeklyRevenue.map((w, idx) => (
-                      <div key={idx} className="space-y-1">
-                        <div className="flex justify-between text-xs font-semibold">
-                          <span className="text-slate-300">{w.week}</span>
-                          <span className="text-emerald-400 font-mono">{formatPrice(w.revenue)}</span>
-                        </div>
-                        <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/5">
-                          <div
-                            className="h-full bg-gradient-to-r from-pink-500 to-purple-600 rounded-full"
-                            style={{ width: `${(w.revenue / 400000) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Top Services Ranking */}
-                <div className="dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-4">
-                  <h3 className="text-base font-bold text-white font-display flex items-center gap-2">
-                    <ChartPie className="w-5 h-5 text-purple-400" /> Servicios Más Solicitados
-                  </h3>
-                  <div className="space-y-3">
-                    {financialData.topServices.map((srv, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs">
-                        <div>
-                          <p className="font-semibold text-white">{srv.name}</p>
-                          <p className="text-[10px] text-slate-400">{srv.count} turnos realizados</p>
-                        </div>
-                        <span className="font-mono font-bold text-pink-400">{formatPrice(srv.revenue)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+            <AnalyticsTab financialData={financialData} />
           )}
 
         </main>

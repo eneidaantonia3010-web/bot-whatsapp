@@ -74,42 +74,61 @@ appointmentsRouter.post('/by-token/:token/reschedule', async (req: Request, res:
     const endDate = new Date(startDate);
     endDate.setMinutes(endDate.getMinutes() + appointment.service.duration);
 
-    // Overlap check
-    const overlapping = await prisma.appointment.findFirst({
-      where: {
-        id: { not: appointment.id },
-        status: { in: ['PENDING', 'CONFIRMED'] },
-        date: { lt: endDate },
-        endDate: { gt: startDate },
-      },
-    });
+    const resourceId = appointment.staffId || 'GLOBAL_SALON_RESOURCE';
+    const slotKey = `${resourceId}:${startDate.toISOString()}`;
 
-    if (overlapping) {
-      return res.status(409).json({ error: 'El horario seleccionado ya no está disponible.' });
-    }
+    let updated;
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        // Deterministic transaction-level advisory lock per staff/slot
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${slotKey}))`;
 
-    // Update Google Calendar
-    if (appointment.calendarEventId) {
-      try {
-        await updateCalendarEvent(appointment.calendarEventId, {
-          summary: `${appointment.service.name} — ${appointment.customer.name}`,
-          startTime: startDate,
-          endTime: endDate,
+        // Overlap check
+        const overlapping = await tx.appointment.findFirst({
+          where: {
+            id: { not: appointment.id },
+            status: { in: ['PENDING', 'CONFIRMED'] },
+            date: { lt: endDate },
+            endDate: { gt: startDate },
+            ...(appointment.staffId ? { staffId: appointment.staffId } : {}),
+          },
         });
-      } catch (calErr) {
-        console.warn('Google Calendar update warning:', calErr);
-      }
-    }
 
-    const updated = await prisma.appointment.update({
-      where: { id: appointment.id },
-      data: {
-        date: startDate,
-        endDate,
-        status: 'CONFIRMED',
-      },
-      include: { service: true, customer: true, staff: true },
-    });
+        if (overlapping) {
+          throw new Error('CONFLICT_OVERLAPPING');
+        }
+
+        const blockedConflict = await tx.blockedTime.findFirst({
+          where: {
+            startDate: { lt: endDate },
+            endDate: { gt: startDate },
+          },
+        });
+
+        if (blockedConflict) {
+          throw new Error(`CONFLICT_BLOCKED:${blockedConflict.reason}`);
+        }
+
+        return await tx.appointment.update({
+          where: { id: appointment.id },
+          data: {
+            date: startDate,
+            endDate,
+            status: 'CONFIRMED',
+          },
+          include: { service: true, customer: true, staff: true },
+        });
+      });
+    } catch (txErr: any) {
+      if (txErr.message === 'CONFLICT_OVERLAPPING') {
+        return res.status(409).json({ error: 'El horario seleccionado ya no está disponible.' });
+      }
+      if (txErr.message?.startsWith('CONFLICT_BLOCKED')) {
+        const reason = txErr.message.split(':')[1] || 'Horario no disponible';
+        return res.status(409).json({ error: `El horario no está disponible: ${reason}` });
+      }
+      throw txErr;
+    }
 
     broadcastRealtimeEvent({
       type: 'APPOINTMENT_RESCHEDULED',
@@ -428,42 +447,61 @@ appointmentsRouter.post('/:id/reschedule', requireAuth, async (req: Request, res
     const endDate = new Date(startDate);
     endDate.setMinutes(endDate.getMinutes() + appointment.service.duration);
 
-    // Check for overlapping appointments excluding current one
-    const overlapping = await prisma.appointment.findFirst({
-      where: {
-        id: { not: appointment.id },
-        status: { in: ['PENDING', 'CONFIRMED'] },
-        date: { lt: endDate },
-        endDate: { gt: startDate },
-      },
-    });
+    const resourceId = appointment.staffId || 'GLOBAL_SALON_RESOURCE';
+    const slotKey = `${resourceId}:${startDate.toISOString()}`;
 
-    if (overlapping) {
-      return res.status(409).json({ error: 'El nuevo horario seleccionado no está disponible.' });
-    }
+    let updated;
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        // Deterministic transaction-level advisory lock per staff/slot
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${slotKey}))`;
 
-    // Update Google Calendar event if it exists
-    if (appointment.calendarEventId) {
-      try {
-        await updateCalendarEvent(appointment.calendarEventId, {
-          summary: `${appointment.service.name} — ${appointment.customer.name}`,
-          startTime: startDate,
-          endTime: endDate,
+        // Check for overlapping appointments excluding current one
+        const overlapping = await tx.appointment.findFirst({
+          where: {
+            id: { not: appointment.id },
+            status: { in: ['PENDING', 'CONFIRMED'] },
+            date: { lt: endDate },
+            endDate: { gt: startDate },
+            ...(appointment.staffId ? { staffId: appointment.staffId } : {}),
+          },
         });
-      } catch (err) {
-        console.warn(`Could not update calendar event ${appointment.calendarEventId}:`, err);
-      }
-    }
 
-    const updated = await prisma.appointment.update({
-      where: { id: id as string },
-      data: {
-        date: startDate,
-        endDate,
-        status: 'CONFIRMED',
-      },
-      include: { service: true, customer: true },
-    });
+        if (overlapping) {
+          throw new Error('CONFLICT_OVERLAPPING');
+        }
+
+        const blockedConflict = await tx.blockedTime.findFirst({
+          where: {
+            startDate: { lt: endDate },
+            endDate: { gt: startDate },
+          },
+        });
+
+        if (blockedConflict) {
+          throw new Error(`CONFLICT_BLOCKED:${blockedConflict.reason}`);
+        }
+
+        return await tx.appointment.update({
+          where: { id: id as string },
+          data: {
+            date: startDate,
+            endDate,
+            status: 'CONFIRMED',
+          },
+          include: { service: true, customer: true, staff: true },
+        });
+      });
+    } catch (txErr: any) {
+      if (txErr.message === 'CONFLICT_OVERLAPPING') {
+        return res.status(409).json({ error: 'El nuevo horario seleccionado no está disponible.' });
+      }
+      if (txErr.message?.startsWith('CONFLICT_BLOCKED')) {
+        const reason = txErr.message.split(':')[1] || 'Horario no disponible';
+        return res.status(409).json({ error: `El horario no está disponible: ${reason}` });
+      }
+      throw txErr;
+    }
 
     console.log(`📅 Appointment ${id} rescheduled to ${startDate.toISOString()}`);
     res.json(updated);

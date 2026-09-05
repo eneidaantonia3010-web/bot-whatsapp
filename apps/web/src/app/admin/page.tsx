@@ -85,6 +85,15 @@ import {
   ServicesTab,
   AnalyticsTab,
 } from '@/components/admin/tabs';
+import {
+  AppointmentDrawer,
+  ServiceModal,
+  BlockedTimeModal,
+  WaitlistModal,
+  UsersModal,
+} from '@/components/admin/modals';
+import { AdminSidebar } from '@/components/admin/AdminSidebar';
+import { AdminHeader } from '@/components/admin/AdminHeader';
 
 
 // ----------------------------------------------------
@@ -570,144 +579,19 @@ export default function AdminPage() {
         {/* ==================================================== */}
         {/* 1. SIDEBAR LATERAL FLOTANTE (GLASSMORPHISM) */}
         {/* ==================================================== */}
-        <aside
-          className={`fixed left-4 top-4 bottom-4 z-40 dark-glass-panel rounded-3xl transition-all duration-300 flex flex-col justify-between p-4 border border-white/10 ${
-            isSidebarCollapsed ? 'w-20' : 'w-64'
-          }`}
-        >
-          {/* Top Brand & Logo */}
-          <div>
-            <div className="flex items-center justify-between mb-8 px-2">
-              {!isSidebarCollapsed && (
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-purple-600 p-[1px] shadow-lg shadow-pink-500/20">
-                    <div className="w-full h-full bg-[#0F0F16] rounded-2xl flex items-center justify-center">
-                      <Sparkle className="w-5 h-5 text-pink-400 animate-pulse" />
-                    </div>
-                  </div>
-                  <div>
-                    <h2 className="font-semibold text-sm tracking-tight text-white font-display">Glow Studio</h2>
-                    <p className="text-[10px] text-pink-400 font-medium tracking-wide uppercase">by Sofia</p>
-                  </div>
-                </div>
-              )}
-              {isSidebarCollapsed && (
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-purple-600 p-[1px] mx-auto">
-                  <div className="w-full h-full bg-[#0F0F16] rounded-2xl flex items-center justify-center">
-                    <Sparkle className="w-5 h-5 text-pink-400" />
-                  </div>
-                </div>
-              )}
-
-              <button
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
-                title={isSidebarCollapsed ? 'Expandir Menú' : 'Colapsar Menú'}
-              >
-                {isSidebarCollapsed ? <CaretRight className="w-4 h-4" /> : <CaretLeft className="w-4 h-4" />}
-              </button>
-            </div>
-
-            {/* Navigation Tabs */}
-            <nav className="space-y-1.5">
-              {[
-                { id: 'dashboard', label: t('admin.tabs.dashboard'), icon: ChartBar },
-                { id: 'calendar', label: t('admin.tabs.calendar'), icon: CalendarBlank },
-                { id: 'customers', label: t('admin.tabs.customers'), icon: Users },
-                { id: 'services', label: t('admin.tabs.services'), icon: Scissors },
-                { id: 'analytics', label: t('admin.tabs.analytics'), icon: TrendUp },
-              ].map((tab) => {
-
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-xs font-medium transition-all group relative ${
-                      isActive
-                        ? 'bg-gradient-to-r from-pink-500/20 to-purple-500/10 text-white border border-pink-500/30 shadow-lg shadow-pink-500/10'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 transition-transform group-hover:scale-110 ${isActive ? 'text-pink-400' : 'text-slate-400'}`} />
-                    {!isSidebarCollapsed && <span>{tab.label}</span>}
-                    {isActive && (
-                      <motion.div
-                        layoutId="activeTabIndicator"
-                        className="absolute right-2 w-1.5 h-6 rounded-full bg-pink-500 shadow-sm shadow-pink-500/50"
-                        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          {/* Bottom Widget & User Profile */}
-          <div className="space-y-3 pt-4 border-t border-white/10">
-            {/* Live WhatsApp Status Badge */}
-            {!isSidebarCollapsed ? (
-              <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/10">
-                <div className="flex items-center justify-between text-[11px] font-medium mb-1">
-                  <span className="text-slate-400 flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-pink-400" /> WhatsApp Bot
-                  </span>
-                  {waStatus?.state === 'open' ? (
-                    <span className="flex items-center gap-1 text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Activo
-                    </span>
-                  ) : (
-                    <a
-                      href={`${API_URL}/api/admin/whatsapp/qr?format=html`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-rose-400 font-semibold bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full animate-bounce hover:bg-rose-500/20"
-                    >
-                      <QrCode className="w-3 h-3" /> Escanear QR
-                    </a>
-                  )}
-                </div>
-                <p className="text-[10px] text-slate-500 truncate">+54 9 11 7829-6781</p>
-              </div>
-            ) : (
-              <div className="flex justify-center">
-                <span
-                  className={`w-3 h-3 rounded-full ${waStatus?.state === 'open' ? 'bg-emerald-500 shadow-lg shadow-emerald-500/50 animate-pulse' : 'bg-rose-500 animate-bounce'}`}
-                  title={waStatus?.state === 'open' ? 'WhatsApp Online' : 'Escanear QR'}
-                />
-              </div>
-            )}
-
-            {/* Profile & Logout */}
-            <div className="flex items-center justify-between p-2 rounded-2xl hover:bg-white/5 transition-colors">
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs shadow-md">
-                  S
-                </div>
-                {!isSidebarCollapsed && (
-                  <div className="truncate">
-                    <p className="text-xs font-semibold text-white truncate">{currentUser?.name || 'Sofia'}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{currentUser?.email || 'admin@glowstudio.com'}</p>
-                  </div>
-                )}
-              </div>
-              {!isSidebarCollapsed && (
-                <button
-                  onClick={handleLogout}
-                  className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors"
-                  title="Cerrar Sesión"
-                >
-                  <SignOut className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-        </aside>
+        <AdminSidebar
+          isSidebarCollapsed={isSidebarCollapsed}
+          setIsSidebarCollapsed={setIsSidebarCollapsed}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          waStatus={waStatus}
+          currentUser={currentUser}
+          handleLogout={handleLogout}
+          t={t}
+        />
 
         {/* ==================================================== */}
-        {/* 2. CONTENIDO PRINCIPAL Y HEADER () */}
+        {/* 2. CONTENIDO PRINCIPAL Y HEADER */}
         {/* ==================================================== */}
         <main
           className={`flex-1 transition-all duration-300 p-6 md:p-8 ${
@@ -715,88 +599,18 @@ export default function AdminPage() {
           }`}
         >
           {/* Top Floating Glass Header */}
-          <header className="dark-glass-panel rounded-3xl p-5 mb-8 flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-white/10">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight glow-pink-text font-display">
-                {activeTab === 'dashboard' && 'Panel de Control General'}
-                {activeTab === 'calendar' && 'Calendario de Turnos'}
-                {activeTab === 'customers' && 'Directorio de Clientas VIP'}
-                {activeTab === 'services' && 'Gestión de Servicios y Precios'}
-                {activeTab === 'analytics' && 'Métricas Financieras & Rendimiento'}
-              </h1>
-              <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
-                <span>Bienvenida, Sofia. Control en tiempo real de Glow Studio.</span>
-                <span className="text-slate-600">•</span>
-                <span className="text-pink-400 font-mono flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 inline" /> {currentTime || '15:40hs'} ART
-                </span>
-              </p>
-            </div>
-
-            {/* Header Right Action Buttons */}
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Language Switcher */}
-              <div className="flex items-center gap-1 bg-white/5 p-1 rounded-2xl border border-white/10">
-                <button
-                  onClick={() => setLanguage('es')}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all ${
-                    language === 'es' ? 'bg-pink-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Español"
-                >
-                  🇪🇸 ES
-                </button>
-                <button
-                  onClick={() => setLanguage('it')}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all ${
-                    language === 'it' ? 'bg-pink-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Italiano"
-                >
-                  🇮🇹 IT
-                </button>
-              </div>
-
-              {/* Search Bar Input */}
-
-              <div className="relative">
-                <MagnifyingGlass className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Buscar turnos, clientas... (CMD+K)"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="dark-glass-input pl-10 pr-4 py-2 rounded-2xl text-xs w-64 focus:w-72 transition-all placeholder:text-slate-500"
-                />
-              </div>
-
-              {/* Admin Users Button */}
-              {currentUser?.role === 'ADMIN' && (
-                <button
-                  onClick={handleOpenUsersModal}
-                  className="px-3 py-2 rounded-2xl text-xs font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 transition-all flex items-center gap-1.5 shadow-sm"
-                >
-                  <Users className="w-3.5 h-3.5" /> Equipo / Usuarios
-                </button>
-              )}
-
-              {/* Export Buttons */}
-              <a
-                href={getExportAppointmentsUrl()}
-                download
-                className="px-3 py-2 rounded-2xl text-xs font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5 shadow-sm"
-              >
-                <Download className="w-3.5 h-3.5" /> CSV Turnos
-              </a>
-              <a
-                href={getExportCustomersUrl()}
-                download
-                className="px-3 py-2 rounded-2xl text-xs font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20 transition-all flex items-center gap-1.5 shadow-sm"
-              >
-                <Download className="w-3.5 h-3.5" /> CSV Clientes
-              </a>
-            </div>
-          </header>
+          <AdminHeader
+            activeTab={activeTab}
+            currentTime={currentTime}
+            language={language}
+            setLanguage={setLanguage}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            currentUser={currentUser}
+            handleOpenUsersModal={handleOpenUsersModal}
+            getExportAppointmentsUrl={getExportAppointmentsUrl}
+            getExportCustomersUrl={getExportCustomersUrl}
+          />
 
           {/* ==================================================== */}
           {/* MODULAR ADMIN TABS */}
@@ -859,435 +673,65 @@ export default function AdminPage() {
       {/* ==================================================== */}
       {/* 3. QUICK DRAWER (PANEL DESLIZABLE DE TURNO) */}
       {/* ==================================================== */}
-      <AnimatePresence>
-        {selectedAppointment && (
-          <div className="fixed inset-0 z-50 flex justify-end">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedAppointment(null)}
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="relative w-full max-w-md h-full dark-glass-panel border-l border-white/10 p-6 flex flex-col justify-between z-10 space-y-6 overflow-y-auto"
-            >
-              <div className="space-y-6">
-                <div className="flex items-center justify-between pb-4 border-b border-white/10">
-                  <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
-                    <CalendarCheck className="w-5 h-5 text-pink-400" /> Ficha Técnica del Turno
-                  </h2>
-                  <button
-                    onClick={() => setSelectedAppointment(null)}
-                    className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Client Info Card */}
-                <div className="dark-glass-card p-4 rounded-2xl border border-white/10 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
-                      {selectedAppointment.customerName.charAt(0)}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-white text-base">{selectedAppointment.customerName}</h3>
-                      <p className="text-xs text-slate-400">{selectedAppointment.customerPhone}</p>
-                    </div>
-                  </div>
-                  <a
-                    href={`https://wa.me/${selectedAppointment.customerPhone.replace(/[^0-9]/g, '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-2 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
-                  >
-                    <Phone className="w-4 h-4" /> Enviar Mensaje de WhatsApp
-                  </a>
-                </div>
-
-                {/* Service & Time Details */}
-                <div className="space-y-3 text-xs">
-                  <div className="flex justify-between py-2 border-b border-white/5">
-                    <span className="text-slate-400">Tratamiento</span>
-                    <span className="font-semibold text-white">{selectedAppointment.service}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-white/5">
-                    <span className="text-slate-400">Fecha</span>
-                    <span className="font-mono font-semibold text-white">{selectedAppointment.date}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-white/5">
-                    <span className="text-slate-400">Hora</span>
-                    <span className="font-mono font-semibold text-pink-400">{selectedAppointment.time}hs</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-white/5">
-                    <span className="text-slate-400">Monto del Servicio</span>
-                    <span className="font-mono font-bold text-emerald-400 text-sm">{formatPrice(selectedAppointment.price)}</span>
-                  </div>
-                </div>
-
-                {/* Change Status Actions */}
-                <div className="space-y-2 pt-2">
-                  <label className="text-xs font-semibold text-slate-400 block">Cambiar Estado del Turno</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => handleStatusChange(selectedAppointment.id, 'CONFIRMED')}
-                      className="py-2.5 px-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 text-xs font-semibold flex items-center justify-center gap-1.5"
-                    >
-                      <Check className="w-4 h-4" /> Confirmar
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange(selectedAppointment.id, 'COMPLETED')}
-                      className="py-2.5 px-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 text-xs font-semibold flex items-center justify-center gap-1.5"
-                    >
-                      <Sparkle className="w-4 h-4" /> Completar
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange(selectedAppointment.id, 'CANCELLED')}
-                      className="py-2.5 px-3 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 text-xs font-semibold flex items-center justify-center gap-1.5"
-                    >
-                      <X className="w-4 h-4" /> Cancelar Cita
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange(selectedAppointment.id, 'NO_SHOW')}
-                      className="py-2.5 px-3 rounded-xl bg-zinc-500/10 text-zinc-400 border border-zinc-500/30 hover:bg-zinc-500/20 text-xs font-semibold flex items-center justify-center gap-1.5"
-                    >
-                      <UserCircle className="w-4 h-4" /> Marcar Ausente
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setSelectedAppointment(null)}
-                className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold border border-white/10 transition-colors"
-              >
-                Cerrar Ficha
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <AppointmentDrawer
+        selectedAppointment={selectedAppointment}
+        onClose={() => setSelectedAppointment(null)}
+        onStatusChange={handleStatusChange}
+        formatPrice={formatPrice}
+      />
 
       {/* ==================================================== */}
       {/* 4. MODAL CREAR / EDITAR SERVICIO */}
       {/* ==================================================== */}
-      <AnimatePresence>
-        {showServiceModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowServiceModal(false)} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-lg dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-6 z-10">
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <h3 className="text-lg font-bold text-white font-display">
-                  {editingService ? 'Editar Servicio' : 'Agregar Nuevo Servicio'}
-                </h3>
-                <button onClick={() => setShowServiceModal(false)} className="p-1 rounded-xl hover:bg-white/10 text-slate-400">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveService} className="space-y-4 text-xs">
-                <div>
-                  <label className="text-slate-300 font-semibold block mb-1">Nombre del Servicio</label>
-                  <input
-                    type="text"
-                    required
-                    value={serviceForm.name}
-                    onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
-                    className="w-full dark-glass-input rounded-xl px-3 py-2"
-                  />
-                </div>
-                <div>
-                  <label className="text-slate-300 font-semibold block mb-1">Categoría</label>
-                  <select
-                    value={serviceForm.category}
-                    onChange={(e) => setServiceForm({ ...serviceForm, category: e.target.value })}
-                    className="w-full dark-glass-input rounded-xl px-3 py-2 bg-[#12121A] text-white"
-                  >
-                    <option value="cabello">Cabello</option>
-                    <option value="unas">Uñas</option>
-                    <option value="pestanas">Pestañas & Cejas</option>
-                    <option value="facial">Facial</option>
-                    <option value="maquillaje">Maquillaje</option>
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-slate-300 font-semibold block mb-1">Precio ($ ARS)</label>
-                    <input
-                      type="number"
-                      required
-                      value={serviceForm.price}
-                      onChange={(e) => setServiceForm({ ...serviceForm, price: Number(e.target.value) })}
-                      className="w-full dark-glass-input rounded-xl px-3 py-2 font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-300 font-semibold block mb-1">Duración (min)</label>
-                    <input
-                      type="number"
-                      required
-                      value={serviceForm.duration}
-                      onChange={(e) => setServiceForm({ ...serviceForm, duration: Number(e.target.value) })}
-                      className="w-full dark-glass-input rounded-xl px-3 py-2 font-mono"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-slate-300 font-semibold block mb-1">Descripción</label>
-                  <textarea
-                    rows={3}
-                    value={serviceForm.description}
-                    onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
-                    className="w-full dark-glass-input rounded-xl px-3 py-2"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
-                  <button type="button" onClick={() => setShowServiceModal(false)} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-semibold">
-                    Cancelar
-                  </button>
-                  <button type="submit" className="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 text-white font-semibold shadow-lg shadow-pink-500/20">
-                    Guardar Servicio
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <ServiceModal
+        isOpen={showServiceModal}
+        onClose={() => setShowServiceModal(false)}
+        serviceForm={serviceForm}
+        setServiceForm={setServiceForm}
+        editingService={editingService}
+        onSave={handleSaveService}
+      />
 
       {/* ==================================================== */}
       {/* 5. MODAL GESTIÓN DE USUARIOS / EQUIPO */}
       {/* ==================================================== */}
-      <AnimatePresence>
-        {showUsersModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowUsersModal(false)} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-xl dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-6 z-10">
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-purple-400" /> Gestión del Equipo & Accesos
-                </h3>
-                <button onClick={() => setShowUsersModal(false)} className="p-1 rounded-xl hover:bg-white/10 text-slate-400">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Create User Form */}
-              <form onSubmit={handleCreateUser} className="space-y-3 bg-white/[0.02] p-4 rounded-2xl border border-white/5 text-xs">
-                <h4 className="font-bold text-white flex items-center gap-1.5">
-                  <UserPlus className="w-4 h-4 text-pink-400" /> Crear Nuevo Usuario
-                </h4>
-                {userActionError && <p className="text-rose-400 text-[11px]">{userActionError}</p>}
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="email"
-                    placeholder="Correo electrónico"
-                    required
-                    value={newUserEmail}
-                    onChange={(e) => setNewUserEmail(e.target.value)}
-                    className="dark-glass-input rounded-xl px-3 py-2"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Nombre completo"
-                    value={newUserName}
-                    onChange={(e) => setNewUserName(e.target.value)}
-                    className="dark-glass-input rounded-xl px-3 py-2"
-                  />
-                  <input
-                    type="password"
-                    placeholder="Contraseña"
-                    required
-                    value={newUserPassword}
-                    onChange={(e) => setNewUserPassword(e.target.value)}
-                    className="dark-glass-input rounded-xl px-3 py-2"
-                  />
-                  <select
-                    value={newUserRole}
-                    onChange={(e) => setNewUserRole(e.target.value as any)}
-                    className="dark-glass-input rounded-xl px-3 py-2 bg-[#12121A] text-white"
-                  >
-                    <option value="STAFF">Personal / Staff</option>
-                    <option value="ADMIN">Administradora</option>
-                  </select>
-                </div>
-                <button type="submit" className="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold shadow-md">
-                  Crear Usuario
-                </button>
-              </form>
-
-              {/* Active Users List */}
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Usuarios Activos</h4>
-                {usersList.map((u) => (
-                  <div key={u.id} className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs">
-                    <div>
-                      <p className="font-semibold text-white">{u.email}</p>
-                      <p className="text-[10px] text-slate-400">{u.name || 'Sin nombre'} • Rol: {u.role}</p>
-                    </div>
-                    {u.email !== 'admin@glowstudio.com' && (
-                      <button onClick={() => handleDeleteUser(u.id)} className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors">
-                        <Trash className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <UsersModal
+        isOpen={showUsersModal}
+        onClose={() => setShowUsersModal(false)}
+        usersList={usersList}
+        newUserEmail={newUserEmail}
+        setNewUserEmail={setNewUserEmail}
+        newUserName={newUserName}
+        setNewUserName={setNewUserName}
+        newUserPassword={newUserPassword}
+        setNewUserPassword={setNewUserPassword}
+        newUserRole={newUserRole}
+        setNewUserRole={setNewUserRole}
+        userActionError={userActionError}
+        onCreateUser={handleCreateUser}
+        onDeleteUser={handleDeleteUser}
+      />
 
       {/* ==================================================== */}
-      {/* 6. MODAL BLOQUEAR HORARIOS / FERIADOS (Func 5) */}
+      {/* 6. MODAL BLOQUEAR HORARIOS / FERIADOS */}
       {/* ==================================================== */}
-      <AnimatePresence>
-        {showBlockModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowBlockModal(false)} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-lg dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-5 z-10">
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
-                  <Lock className="w-5 h-5 text-amber-400" /> Bloquear Horario / Feriado
-                </h3>
-                <button onClick={() => setShowBlockModal(false)} className="p-1 rounded-xl hover:bg-white/10 text-slate-400">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleCreateBlockedTime} className="space-y-4 text-xs">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Motivo del Bloqueo</label>
-                  <input
-                    type="text"
-                    placeholder="Ej: Feriado Nacional, Almuerzo, Vacaciones Sofía"
-                    required
-                    value={blockForm.reason}
-                    onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
-                    className="dark-glass-input rounded-xl px-3 py-2 w-full"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="allDayCheck"
-                    checked={blockForm.allDay}
-                    onChange={(e) => setBlockForm({ ...blockForm, allDay: e.target.checked })}
-                    className="rounded bg-white/10 border-white/20 text-pink-500 focus:ring-0"
-                  />
-                  <label htmlFor="allDayCheck" className="text-slate-300 text-xs cursor-pointer">
-                    Bloquear día completo (09:00 a 19:00)
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Fecha & Hora Inicio</label>
-                    <input
-                      type="datetime-local"
-                      required
-                      value={blockForm.startDate}
-                      onChange={(e) => setBlockForm({ ...blockForm, startDate: e.target.value })}
-                      className="dark-glass-input rounded-xl px-3 py-2 w-full text-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Fecha & Hora Fin</label>
-                    <input
-                      type="datetime-local"
-                      required
-                      value={blockForm.endDate}
-                      onChange={(e) => setBlockForm({ ...blockForm, endDate: e.target.value })}
-                      className="dark-glass-input rounded-xl px-3 py-2 w-full text-slate-200"
-                    />
-                  </div>
-                </div>
-
-                <button type="submit" className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold shadow-lg shadow-amber-500/20 transition-all">
-                  Guardar Bloqueo de Horario
-                </button>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <BlockedTimeModal
+        isOpen={showBlockModal}
+        onClose={() => setShowBlockModal(false)}
+        blockForm={blockForm}
+        setBlockForm={setBlockForm}
+        onCreateBlockedTime={handleCreateBlockedTime}
+      />
 
       {/* ==================================================== */}
-      {/* 7. MODAL LISTA DE ESPERA INTELIGENTE (Func 2) */}
+      {/* 7. MODAL LISTA DE ESPERA INTELIGENTE */}
       {/* ==================================================== */}
-      <AnimatePresence>
-        {showWaitlistModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowWaitlistModal(false)} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-2xl dark-glass-panel rounded-3xl p-6 border border-white/10 space-y-5 z-10">
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
-                  <Hourglass className="w-5 h-5 text-purple-400" /> Lista de Espera Inteligente
-                </h3>
-                <button onClick={() => setShowWaitlistModal(false)} className="p-1 rounded-xl hover:bg-white/10 text-slate-400">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-400">
-                Cuando una clienta cancela un turno, el bot le envía una notificación automática por WhatsApp a la primera clienta en espera.
-              </p>
-
-              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                {waitlist.length === 0 ? (
-                  <div className="py-12 text-center text-slate-500 text-xs">
-                    <Hourglass className="w-8 h-8 mx-auto mb-2 opacity-40 text-purple-400" />
-                    No hay clientas en lista de espera en este momento.
-                  </div>
-                ) : (
-                  waitlist.map((w) => (
-                    <div key={w.id} className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-white">{w.customer?.name || 'Clienta'}</p>
-                          <span
-                            className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${
-                              w.status === 'WAITING'
-                                ? 'bg-purple-500/20 text-purple-300'
-                                : w.status === 'OFFERED'
-                                ? 'bg-amber-500/20 text-amber-300'
-                                : w.status === 'BOOKED'
-                                ? 'bg-emerald-500/20 text-emerald-300'
-                                : 'bg-slate-500/20 text-slate-400'
-                            }`}
-                          >
-                            {w.status === 'WAITING' ? 'EN ESPERA' : w.status === 'OFFERED' ? 'OFERTADO' : w.status === 'BOOKED' ? 'RESERVÓ' : w.status}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          💇 {w.service?.name} • 📅 {w.preferredDate ? new Date(w.preferredDate).toLocaleDateString('es-AR') : 'Fecha libre'} {w.timeRange ? `(${w.timeRange})` : ''}
-                        </p>
-                        {w.customer?.phone && (
-                          <p className="text-[10px] text-slate-500 font-mono">📱 {w.customer.phone}</p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleDeleteWaitlist(w.id)}
-                        className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors"
-                        title="Eliminar de lista"
-                      >
-                        <Trash className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <WaitlistModal
+        isOpen={showWaitlistModal}
+        onClose={() => setShowWaitlistModal(false)}
+        waitlist={waitlist}
+        onDeleteWaitlist={handleDeleteWaitlist}
+      />
 
       {/* ==================================================== */}
       {/* 6. TOAST NOTIFICATION CONTAINER (FRAMER MOTION) */}

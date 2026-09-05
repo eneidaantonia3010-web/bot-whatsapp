@@ -35,6 +35,8 @@ let connectionState: 'connecting' | 'open' | 'close' = 'connecting';
 let clearAuthState: (() => Promise<void>) | null = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 15;
+let reconnectTimer: NodeJS.Timeout | null = null;
+let isInitializing = false;
 
 function getReconnectDelay(attempt: number): number {
   const base = Math.min(1000 * Math.pow(2, attempt), 30000);
@@ -147,6 +149,16 @@ export async function destroyCurrentSocket(): Promise<void> {
 }
 
 export async function initNativeWhatsApp(): Promise<void> {
+  if (isInitializing) {
+    console.log('⚠️ Native WhatsApp: Initialization already in progress, skipping concurrent call.');
+    return;
+  }
+  isInitializing = true;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
   console.log('🚀 Initializing Native In-App WhatsApp Service (Baileys + PostgreSQL Store)...');
   await destroyCurrentSocket();
 
@@ -227,10 +239,12 @@ export async function initNativeWhatsApp(): Promise<void> {
             const delay = getReconnectDelay(reconnectAttempts);
             reconnectAttempts++;
             console.log(`🔄 Reconnecting Native WhatsApp in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
-            setTimeout(initNativeWhatsApp, delay);
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(initNativeWhatsApp, delay);
           } else {
             console.error('🚨 Max reconnection attempts reached for Native WhatsApp. Waiting 2 minutes before reset...');
-            setTimeout(() => {
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(() => {
               reconnectAttempts = 0;
               initNativeWhatsApp();
             }, 120000);
@@ -478,7 +492,10 @@ export async function initNativeWhatsApp(): Promise<void> {
     });
   } catch (error) {
     console.error('❌ Error initializing Native WhatsApp Service:', error);
-    setTimeout(initNativeWhatsApp, 10000);
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(initNativeWhatsApp, 10000);
+  } finally {
+    isInitializing = false;
   }
 }
 

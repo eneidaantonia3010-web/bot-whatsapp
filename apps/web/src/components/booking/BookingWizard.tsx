@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getServices, getStaff, getAvailability, createAppointment } from '@/lib/api';
+import { bookingFormSchema } from '@/lib/validations/booking';
 import type { Service } from '@/types';
 import {
   Scissors,
@@ -149,8 +150,11 @@ export function BookingWizard() {
       setErrorMessage('Por favor completa todos los pasos anteriores.');
       return;
     }
-    if (!formData.name.trim() || formData.phone.trim().length < 6) {
-      setErrorMessage('Por favor ingresa tu nombre completo y un teléfono válido.');
+
+    const validation = bookingFormSchema.safeParse(formData);
+    if (!validation.success) {
+      const firstIssue = validation.error.issues[0]?.message || 'Por favor ingresa tu nombre completo y un teléfono válido.';
+      setErrorMessage(firstIssue);
       return;
     }
 

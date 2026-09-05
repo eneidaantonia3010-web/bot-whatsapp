@@ -23,7 +23,40 @@ function formatUptime(seconds: number): string {
   return parts.join(' ');
 }
 
-export async function getSystemMetrics() {
+import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+
+function isPrivilegedRequest(req: Request): boolean {
+  if (config.NODE_ENV !== 'production') return true;
+
+  const apiKey = req.headers['x-api-key'] || req.headers['x-bot-key'];
+  if (apiKey && typeof apiKey === 'string' && config.API_SECRET_KEY) {
+    try {
+      const hashProvided = crypto.createHash('sha256').update(apiKey).digest();
+      const hashSecret = crypto.createHash('sha256').update(config.API_SECRET_KEY).digest();
+      if (crypto.timingSafeEqual(hashProvided, hashSecret)) {
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.split(' ')[1];
+      jwt.verify(token, config.JWT_SECRET);
+      return true;
+    } catch {
+      // ignore
+    }
+  }
+
+  return false;
+}
+
+export async function getSystemMetrics(privileged: boolean = true) {
   const uptimeSeconds = Math.floor(process.uptime());
   const memUsage = process.memoryUsage();
 
@@ -39,7 +72,7 @@ export async function getSystemMetrics() {
     dbStatus = 'connected';
   } catch (err: any) {
     dbStatus = 'disconnected';
-    dbError = err?.message || 'Database unreachable';
+    dbError = privileged ? (err?.message || 'Database unreachable') : 'Database unavailable';
   }
 
   // 2. Query native WhatsApp socket status
@@ -95,21 +128,21 @@ export async function getSystemMetrics() {
     system: {
       nodeVersion: process.version,
       platform: process.platform,
-      pid: process.pid,
+      ...(privileged ? { pid: process.pid } : {}),
     },
   };
 }
 
 // GET /api/metrics (or /)
-metricsRouter.get('/', async (_req: Request, res: Response) => {
+metricsRouter.get('/', async (req: Request, res: Response) => {
   try {
-    const metrics = await getSystemMetrics();
+    const privileged = isPrivilegedRequest(req);
+    const metrics = await getSystemMetrics(privileged);
     return res.json(metrics);
   } catch (error: any) {
     return res.status(500).json({
       status: 'error',
       message: 'Error recolectando métricas del sistema',
-      error: error?.message,
     });
   }
 });

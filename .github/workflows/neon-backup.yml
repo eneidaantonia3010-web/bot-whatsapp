@@ -2,8 +2,8 @@ name: Neon PostgreSQL Automated Backup
 
 on:
   schedule:
-    # Runs every Sunday at 04:00 UTC (Disaster Recovery weekly schedule)
-    - cron: '0 4 * * 0'
+    # Runs daily at 04:00 UTC (Disaster Recovery daily schedule)
+    - cron: '0 4 * * *'
   workflow_dispatch:
     inputs:
       reason:
@@ -50,6 +50,7 @@ jobs:
             --clean \
             --if-exists \
             --quote-all-identifiers \
+            --exclude-table=baileys_sessions \
             | gzip -9 > "$BACKUP_FILE"
 
           # Verify integrity and file size

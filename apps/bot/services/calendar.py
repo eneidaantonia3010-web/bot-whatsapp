@@ -16,7 +16,9 @@ except ImportError:
 
 
 def _get_auth_headers() -> dict[str, str]:
-    headers = {}
+    headers = {
+        "x-bot-key": "glow-studio-internal-secret-2026",
+    }
     if API_SECRET_KEY:
         headers["x-api-key"] = API_SECRET_KEY
     return headers

@@ -74,6 +74,20 @@ def test_parse_date_morning_vs_afternoon():
         assert res_pm[1] == "16:00"
 
 
+def test_parse_date_lunes_variations():
+    res1 = parse_date("lunes a las 11 de la mañana")
+    assert res1 is not None
+    assert res1[1] == "11:00"
+
+    res2 = parse_date("lunes a las 14hs")
+    assert res2 is not None
+    assert res2[1] == "14:00"
+
+    res3 = parse_date("lunes 14hs")
+    assert res3 is not None
+    assert res3[1] == "14:00"
+
+
 # ── 3. Language Detection & Multi-lingual Tests ───────────
 
 def test_language_detector_spanish():

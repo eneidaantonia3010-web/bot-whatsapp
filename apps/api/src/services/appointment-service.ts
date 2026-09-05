@@ -481,10 +481,37 @@ export class AppointmentService {
   }
 
   /**
+   * Resolve a service by its CUID id, order number (e.g. "s5", "5"), or alias.
+   */
+  private static async resolveService(serviceIdOrAlias: string) {
+    if (!serviceIdOrAlias) return null;
+
+    // 1. Direct match by id
+    const service = await prisma.service.findUnique({ where: { id: serviceIdOrAlias } });
+    if (service) return service;
+
+    // 2. Match by order number (e.g. "s5", "5") if serviceIdOrAlias matches alias pattern
+    const matchOrder = serviceIdOrAlias.match(/^s?(\d+)$/i);
+    if (matchOrder) {
+      const orderNum = parseInt(matchOrder[1], 10);
+      try {
+        const byOrder = await prisma.service.findFirst({
+          where: { active: true, order: orderNum },
+        });
+        if (byOrder) return byOrder;
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Create an appointment atomically with advisory lock and notifications.
    */
   static async createAppointment(data: CreateAppointmentInput) {
-    const service = await prisma.service.findUnique({ where: { id: data.serviceId } });
+    const service = await AppointmentService.resolveService(data.serviceId);
     if (!service) {
       const err = new Error('SERVICE_NOT_FOUND');
       (err as any).statusCode = 400;
@@ -651,7 +678,7 @@ export class AppointmentService {
    * Calculate 30-minute slot availability for a given date and service.
    */
   static async getAvailability(date: string, serviceId: string, staffId?: string) {
-    const service = await prisma.service.findUnique({ where: { id: serviceId } });
+    const service = await AppointmentService.resolveService(serviceId);
     if (!service) return null;
 
     const dateStr = date.split('T')[0];

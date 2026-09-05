@@ -24,7 +24,7 @@ except ImportError:
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
     BOT_API_KEY = os.getenv("BOT_API_KEY", os.getenv("API_SECRET_KEY", ""))
     IS_PROD = os.getenv("NODE_ENV") == "production" or os.getenv("RENDER") == "true"
-    GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 
 from models import MessageRequest, MessageResponse, AudioMessageRequest
 from agent import process_message

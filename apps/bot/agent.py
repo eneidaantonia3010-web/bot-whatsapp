@@ -193,56 +193,56 @@ def parse_date(text: str) -> tuple[str, str] | None:
     }
 
     target_date = None
-    if re.search(r'ma.?ana', norm_text) or "tomorrow" in norm_text:
-        target_date = today + timedelta(days=1)
-    elif re.search(r'pasado\s*ma.?ana', norm_text) or "pasado" in norm_text:
-        target_date = today + timedelta(days=2)
-    elif "hoy" in norm_text or "today" in norm_text:
-        target_date = today
-    else:
-        for day_name, day_num in day_map.items():
-            if day_name in norm_text:
-                days_ahead = day_num - today.weekday()
-                if days_ahead <= 0:
-                    days_ahead += 7
-                target_date = today + timedelta(days=days_ahead)
-                break
 
-    # Extract time with explicit context requirement (hs, hrs, :, a las, etc.)
-    has_time_context = bool(re.search(r'(?:a\s+las\s+\d{1,2}|\d{1,2}\s*(?:hs|hrs|h|am|pm|de\s+la\s+tarde|de\s+la\s+manana)|\d{1,2}:\d{2})', norm_text))
-    
+    # 1. First check explicit days of the week (e.g. lunes, martes)
+    for day_name, day_num in day_map.items():
+        if re.search(rf"\b{day_name}\b", norm_text):
+            days_ahead = day_num - today.weekday()
+            if days_ahead <= 0:
+                days_ahead += 7
+            target_date = today + timedelta(days=days_ahead)
+            break
+
+    # 2. Check relative keywords only if no explicit day of the week
+    if not target_date:
+        if re.search(r"pasado\s*ma.?ana", norm_text) or "pasadomanana" in norm_text:
+            target_date = today + timedelta(days=2)
+        # Ensure 'manana' is not preceded by 'de la' or 'por la' (which indicates morning time qualifier)
+        elif re.search(r"(?<!de la\s)(?<!por la\s)\bma.?ana\b", norm_text) or "tomorrow" in norm_text:
+            target_date = today + timedelta(days=1)
+        elif re.search(r"\bhoy\b", norm_text) or "today" in norm_text:
+            target_date = today
+
+    # 3. Extract time (e.g. "a las 11", "a las 11 de la manana", "14hs", "16:30", "3 de la tarde", "10am")
     hour = None
     minute = 0
-    if has_time_context:
-        colon_match = re.search(r'(\d{1,2}):(\d{2})', norm_text)
-        word_match = re.search(r'(?:a\s+las\s+(\d{1,2})|(\d{1,2})\s*(?:hs|hrs|h|am|pm))(?:\s*(de\s+la\s+tarde|de\s+la\s+manana|de\s+la\s+noche|am|pm))?', norm_text)
 
-        if colon_match:
-            raw_h = int(colon_match.group(1))
-            raw_m = int(colon_match.group(2))
-            hour = raw_h
-            minute = raw_m
-        elif word_match:
-            raw_h = int(word_match.group(1) or word_match.group(2))
-            qualifier = (word_match.group(3) or "").strip()
-            if "tarde" in qualifier or "noche" in qualifier or qualifier == "pm":
-                hour = raw_h + 12 if raw_h < 12 else raw_h
-            elif "manana" in qualifier or qualifier == "am":
-                hour = raw_h if raw_h != 12 else 0
-            else:
-                if 1 <= raw_h <= 7:
-                    hour = raw_h + 12
-                else:
-                    hour = raw_h
-            minute = 0
+    colon_match = re.search(r"(\d{1,2}):(\d{2})", norm_text)
+    period_match = re.search(
+        r"(?:a\s+las\s+)?(\d{1,2})\s*(?:hs|hrs|h)?\s*(de\s+la\s+tarde|de\s+la\s+manana|de\s+la\s+noche|am|pm)",
+        norm_text
+    )
+    unit_match = re.search(r"(?:a\s+las\s+(\d{1,2})|(\d{1,2})\s*(?:hs|hrs|h))", norm_text)
+
+    if colon_match:
+        hour = int(colon_match.group(1))
+        minute = int(colon_match.group(2))
+    elif period_match:
+        raw_h = int(period_match.group(1))
+        qualifier = period_match.group(2).strip()
+        if "tarde" in qualifier or "noche" in qualifier or qualifier == "pm":
+            hour = raw_h + 12 if raw_h < 12 else raw_h
+        elif "manana" in qualifier or qualifier == "am":
+            hour = raw_h if raw_h != 12 else 0
+        else:
+            hour = raw_h + 12 if 1 <= raw_h <= 7 else raw_h
+    elif unit_match:
+        raw_h = int(unit_match.group(1) or unit_match.group(2))
+        hour = raw_h + 12 if 1 <= raw_h <= 7 else raw_h
 
     if target_date and hour is not None:
         if target_date.weekday() == 6:  # Sunday
             return None
-        if 9 <= hour <= 19:
-            date_str = target_date.strftime("%Y-%m-%d")
-            time_str = f"{hour:02d}:{minute:02d}"
-            return date_str, time_str
         if 9 <= hour <= 19:
             date_str = target_date.strftime("%Y-%m-%d")
             time_str = f"{hour:02d}:{minute:02d}"
@@ -263,7 +263,7 @@ def parse_date(text: str) -> tuple[str, str] | None:
         if parsed_dt:
             if parsed_dt.weekday() == 6:
                 return None
-            if 9 <= parsed_dt.hour <= 19 and has_time_context:
+            if 9 <= parsed_dt.hour <= 19:
                 return parsed_dt.strftime("%Y-%m-%d"), parsed_dt.strftime("%H:%M")
     except Exception as e:
         logger.warning(f"dateparser exception: {e}")
@@ -363,19 +363,20 @@ async def _process_message_internal(
         intent, confidence = await classify_intent_with_confidence_async(message)
         logger.info(f"Intent classified for {sender_id}: {intent} (confidence={confidence:.2f})")
 
-        # Track consecutive low-confidence classifications (ignore standard navigation words)
+        # Track consecutive low-confidence classifications (ignore standard navigation words and form input stages)
+        in_data_input_stage = conv.get("stage") in ("date_selection", "name_input", "phone_input")
         clean_msg_nav = message.strip().lower()
         is_nav_command = any(w in clean_msg_nav for w in ("hola", "inicio", "reset", "menu", "menú", "bot", "empezar", "reiniciar", "reservar", "turno", "servicios"))
 
-        if not is_nav_command and (confidence < CONFIDENCE_THRESHOLD or intent == "UNKNOWN"):
+        if not is_nav_command and not in_data_input_stage and (confidence < CONFIDENCE_THRESHOLD or intent == "UNKNOWN"):
             conv["low_confidence_count"] = conv.get("low_confidence_count", 0) + 1
             logger.info(f"Low confidence count for {sender_id}: {conv['low_confidence_count']}")
-        else:
+        elif not in_data_input_stage:
             conv["low_confidence_count"] = 0
 
         # EXPERT HUMAN ESCALATION & PAUSED STATE TRIGGER:
-        # Triggered by explicit operator request OR 2 consecutive low-confidence classifications
-        if intent == "HUMAN_ESCALATION" or conv.get("low_confidence_count", 0) >= 2:
+        # Triggered by explicit operator request OR 2 consecutive low-confidence classifications OUTSIDE form input
+        if intent == "HUMAN_ESCALATION" or (not in_data_input_stage and conv.get("low_confidence_count", 0) >= 2):
             conv["stage"] = "PAUSED"
             sender_name = conv.get("customer_name") or f"Cliente ({sender_id[-4:] if len(sender_id)>=4 else sender_id})"
             summary = build_escalation_summary(conv, message)
@@ -674,9 +675,16 @@ async def _process_message_internal(
                 chat_history.append({"role": "model", "parts": [response]})
                 return welcome_back_prefix + response
 
-            # Aviso explícito si menciona domingo
-            if "domingo" in clean_msg:
-                response = "Recordá que los domingos el salón permanece cerrado. Abrimos de *Lunes a Sábado de 9:00 a 19:00hs* ✨ ¿Qué otro día te queda cómodo?"
+            # Aviso explícito si menciona domingo o si pide turno para un domingo (ej. "mañana" en sábado)
+            today_dt = datetime.now(TZ_AR).date()
+            is_explicit_sunday = "domingo" in clean_msg
+            is_tomorrow_sunday = (today_dt.weekday() == 5) and bool(re.search(r"(?<!de la\s)(?<!por la\s)\bma.?ana\b", clean_msg))
+            if is_explicit_sunday or is_tomorrow_sunday:
+                response = (
+                    "Recordá que los domingos el salón permanece cerrado 💕\n\n"
+                    "Abrimos de *Lunes a Sábado de 9:00 a 19:00hs* ✨\n\n"
+                    "¿Te gustaría agendar para este *lunes* o preferís algún otro día?"
+                )
                 chat_history.append({"role": "model", "parts": [response]})
                 save_conversation_state(sender_id, conv)
                 return welcome_back_prefix + response

@@ -138,12 +138,12 @@ def get_db_connection():
 
 
 _DEFAULT_FALLBACK_SERVICES = [
-    {"id": "s1", "name": "Corte Signature", "description": "Lavado, corte personalizado y brushing", "price": 25000, "duration": 45, "category": "cabello"},
-    {"id": "s2", "name": "Corte Hombre Premium", "description": "Corte masculino de precisión con toalla caliente", "price": 15000, "duration": 30, "category": "cabello"},
-    {"id": "s3", "name": "Uñas Gel Luxury", "description": "Esmaltado en gel con diseño artístico", "price": 28000, "duration": 75, "category": "unas"},
-    {"id": "s4", "name": "Esmaltado Semi Pro", "description": "Esmaltado semipermanente profesional", "price": 18000, "duration": 45, "category": "unas"},
-    {"id": "s5", "name": "Facial Glow", "description": "Limpieza profunda, exfoliación y ácido hialurónico", "price": 35000, "duration": 60, "category": "facial"},
-    {"id": "s6", "name": "Tratamiento Anti-frizz Keratina", "description": "Alisado con keratina brasileña premium", "price": 45000, "duration": 120, "category": "tratamientos"},
+    {"id": "cmt4niln50002ogpssn90a7pt", "name": "Corte Signature", "description": "Lavado, corte personalizado y brushing", "price": 25000, "duration": 45, "category": "cabello", "order": 1},
+    {"id": "cmt4nilra0003ogpsqhenrpgc", "name": "Corte Hombre Premium", "description": "Corte masculino de precisión con toalla caliente", "price": 15000, "duration": 30, "category": "cabello", "order": 2},
+    {"id": "cmt4nilsu0004ogpsbfx7nv2l", "name": "Uñas Gel Luxury", "description": "Esmaltado en gel con diseño artístico", "price": 28000, "duration": 75, "category": "unas", "order": 3},
+    {"id": "cmt4niluc0005ogpsov568g1d", "name": "Esmaltado Semi Pro", "description": "Esmaltado semipermanente profesional", "price": 18000, "duration": 45, "category": "unas", "order": 4},
+    {"id": "cmt4nilw20006ogpszxnqj9cj", "name": "Facial Glow", "description": "Limpieza profunda, exfoliación y ácido hialurónico", "price": 35000, "duration": 60, "category": "facial", "order": 5},
+    {"id": "cmt4nilxn0007ogpsh083yr8a", "name": "Tratamiento Anti-frizz Keratina", "description": "Alisado con keratina brasileña premium", "price": 45000, "duration": 120, "category": "tratamientos", "order": 6},
 ]
 
 

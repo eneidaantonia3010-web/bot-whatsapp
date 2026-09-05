@@ -89,8 +89,8 @@ class LLMPool:
             logger.warning("⚠️ No GROQ_API_KEY configured.")
             return None
 
-        target_model = model or GROQ_MODEL or "llama-3.3-70b-versatile"
-        fallback_model = GROQ_FALLBACK_MODEL or "llama-3.1-8b-instant"
+        target_model = model or GROQ_MODEL or "openai/gpt-oss-20b"
+        fallback_model = GROQ_FALLBACK_MODEL or "groq/compound-mini"
 
         # Format input messages
         formatted_messages = []
@@ -103,6 +103,9 @@ class LLMPool:
         models_to_try = [target_model]
         if fallback_model and fallback_model != target_model:
             models_to_try.append(fallback_model)
+        for guaranteed in ("openai/gpt-oss-20b", "groq/compound-mini"):
+            if guaranteed not in models_to_try:
+                models_to_try.append(guaranteed)
 
         for current_model in models_to_try:
             for attempt in range(1 + max_retries):
@@ -197,7 +200,7 @@ class LLMPool:
         if not self._sync_clients:
             return None
 
-        target_model = model or GROQ_MODEL or "llama-3.3-70b-versatile"
+        target_model = model or GROQ_MODEL or "openai/gpt-oss-20b"
         formatted_messages = []
         if system_msg:
             formatted_messages.append({"role": "system", "content": system_msg})

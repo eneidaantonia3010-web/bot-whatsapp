@@ -253,7 +253,7 @@ def classify_intent_with_confidence(message: str) -> tuple[str, float]:
         raw_res = llm_pool.get_completion(
             messages=[],
             system_msg=prompt,
-            model="llama-3.1-8b-instant",
+            model=None,
             max_tokens=15,
             timeout_sec=5,
             max_retries=1,
@@ -307,7 +307,7 @@ async def classify_intent_with_confidence_async(message: str) -> tuple[str, floa
         raw_res = await llm_pool.get_completion_async(
             messages=[],
             system_msg=prompt,
-            model="llama-3.1-8b-instant",
+            model=None,
             max_tokens=15,
             timeout_sec=5,
             max_retries=1,

@@ -1,7 +1,62 @@
 import cron from 'node-cron';
 import { prisma } from './prisma';
-import { sendSalonUpcomingAlert, sendCustomerReminder, sendCustomer24hReminder } from './whatsapp';
+import {
+  sendSalonUpcomingAlert,
+  sendCustomerReminder,
+  sendCustomer24hReminder,
+  sendCustomerConfirmationRequest,
+} from './whatsapp';
 import { config } from '../config';
+
+export async function runDailyConfirmationJob(): Promise<number> {
+  console.log('⏰ Running 7:00 AM & 10:00 AM appointment confirmation job...');
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const todayEnd = new Date(todayStart);
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const pendingToday = await prisma.appointment.findMany({
+    where: {
+      status: 'PENDING',
+      date: {
+        gte: todayStart,
+        lte: todayEnd,
+      },
+    },
+    include: { customer: true, service: true },
+  });
+
+  let sentCount = 0;
+  for (const apt of pendingToday) {
+    if (apt.customer?.phone) {
+      const timeStr =
+        apt.date.toLocaleTimeString('es-AR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone: 'America/Argentina/Buenos_Aires',
+        }) + 'hs';
+
+      const sent = await sendCustomerConfirmationRequest({
+        customerPhone: apt.customer.phone,
+        customerName: apt.customer.name,
+        serviceName: apt.service.name,
+        timeStr,
+      });
+
+      if (sent) sentCount++;
+
+      await prisma.appointment
+        .update({
+          where: { id: apt.id },
+          data: { reminderSent24h: true },
+        })
+        .catch(() => {});
+    }
+  }
+  return sentCount;
+}
 
 export function initCronJobs() {
   console.log('⏰ Initializing cron jobs for appointment reminders and WhatsApp monitor...');
@@ -92,55 +147,14 @@ export function initCronJobs() {
     }
   );
 
-  // 3. Daily 24-hour appointment confirmation check at 9:00 AM ART
+  // 3. Daily appointment confirmation check at 7:00 AM & 10:00 AM ART
   cron.schedule(
-    '0 9 * * *',
+    '0 7,10 * * *',
     async () => {
       try {
-        console.log('⏰ Running daily 24h appointment confirmation job...');
-        const tomorrowStart = new Date();
-        tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-        tomorrowStart.setHours(0, 0, 0, 0);
-
-        const tomorrowEnd = new Date(tomorrowStart);
-        tomorrowEnd.setHours(23, 59, 59, 999);
-
-        const pendingTomorrow = await prisma.appointment.findMany({
-          where: {
-            status: 'PENDING',
-            reminderSent24h: false,
-            date: {
-              gte: tomorrowStart,
-              lte: tomorrowEnd,
-            },
-          },
-          include: { customer: true, service: true },
-        });
-
-        for (const apt of pendingTomorrow) {
-          if (apt.customer.phone) {
-            const timeStr = apt.date.toLocaleTimeString('es-AR', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false,
-              timeZone: 'America/Argentina/Buenos_Aires',
-            }) + 'hs';
-
-            await prisma.appointment.update({
-              where: { id: apt.id },
-              data: { reminderSent24h: true },
-            }).catch(() => {});
-
-            await sendCustomer24hReminder({
-              customerPhone: apt.customer.phone,
-              customerName: apt.customer.name,
-              serviceName: apt.service.name,
-              timeStr,
-            });
-          }
-        }
+        await runDailyConfirmationJob();
       } catch (error) {
-        console.error('❌ Error in 24h confirmation cron:', error);
+        console.error('❌ Error in 7 AM / 10 AM confirmation cron:', error);
       }
     },
     { timezone: 'America/Argentina/Buenos_Aires' }

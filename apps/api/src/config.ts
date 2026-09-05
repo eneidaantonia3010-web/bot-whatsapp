@@ -46,6 +46,8 @@ export const envSchema = z.object({
   WHATSAPP_PHONE_ID: z.string().default(''),
   WHATSAPP_TOKEN: z.string().default(''),
   META_PAGE_ACCESS_TOKEN: z.string().default(''),
+  EVOLUTION_API_URL: z.string().default(''),
+  EVOLUTION_API_KEY: z.string().default(''),
 
   // Google Calendar
   GOOGLE_CALENDAR_ID: z.string().default('primary'),

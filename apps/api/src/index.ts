@@ -28,6 +28,7 @@ import { staffRouter } from './routes/staff';
 import { realtimeRouter } from './routes/realtime';
 import { metricsRouter } from './routes/metrics';
 import { instagramWebhookRouter } from './routes/webhooks/instagram';
+import { evolutionWebhookRouter } from './routes/webhooks/evolution';
 import { requireAuth, requireAdmin } from './middleware/auth';
 import { appointmentCreationLimiter, publicApiLimiter, webhookLimiter } from './middleware/rate-limit';
 import { initCronJobs } from './services/cron';
@@ -80,8 +81,8 @@ app.use((req, _res, next) => {
 });
 
 // ---- Webhooks (with high rate limit) ----
-// WhatsApp es 100% nativo (Baileys embebido en whatsapp-native.ts); no hay webhooks de WhatsApp.
 app.use('/api/webhooks/instagram', webhookLimiter, instagramWebhookRouter);
+app.use('/api/webhooks/evolution', webhookLimiter, evolutionWebhookRouter);
 
 // ---- Authentication & Public Routes ----
 app.use('/api/auth', authRouter);

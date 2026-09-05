@@ -10,7 +10,39 @@ interface SendMessageOptions {
   message: string;
 }
 
+export async function sendEvolutionWhatsAppMessage(to: string, message: string): Promise<boolean> {
+  if (!config.EVOLUTION_API_URL || !config.EVOLUTION_API_KEY) {
+    return false;
+  }
+  try {
+    const cleanPhone = to.replace(/\D/g, '');
+    const instanceName = config.INSTANCE_NAME || `glow-studio-${config.SALON_WHATSAPP}`;
+    const url = `${config.EVOLUTION_API_URL.replace(/\/$/, '')}/message/sendText/${instanceName}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': config.EVOLUTION_API_KEY,
+      },
+      body: JSON.stringify({
+        number: cleanPhone,
+        text: message,
+      }),
+    });
+    return res.ok;
+  } catch (err: any) {
+    console.error('❌ Error sending message via Evolution API:', err.message);
+    return false;
+  }
+}
+
 export async function sendWhatsAppMessage({ to, message }: SendMessageOptions): Promise<boolean> {
+  if (config.EVOLUTION_API_URL && config.EVOLUTION_API_KEY) {
+    const sentEvo = await sendEvolutionWhatsAppMessage(to, message);
+    if (sentEvo) return true;
+    console.warn('⚠️ Evolution API falló o no disponible. Intentando envío nativo con Baileys...');
+  }
+
   const nativeStatus = getNativeStatus();
   if (nativeStatus.state !== 'open') {
     console.warn('⚠️ Native WhatsApp no conectado. Mensaje no enviado (reintentar cuando la sesión esté abierta).');
@@ -91,6 +123,17 @@ export async function sendCustomer24hReminder(data: {
   timeStr: string;
 }): Promise<boolean> {
   const message = `✨ *¡Hola ${data.customerName}!* 💕\n\nTe recordamos tu turno para *mañana* en *Glow Studio*:\n\n💇 *Servicio:* ${data.serviceName}\n⏰ *Hora:* ${data.timeStr}\n\n👉 *Por favor, respondé este mensaje con un "Sí" para confirmar tu asistencia*, o avisanos si necesitás reprogramar.\n\n¡Te esperamos con muchas ganas! ✨`;
+
+  return sendWhatsAppMessage({ to: data.customerPhone, message });
+}
+
+export async function sendCustomerConfirmationRequest(data: {
+  customerPhone: string;
+  customerName: string;
+  serviceName: string;
+  timeStr: string;
+}): Promise<boolean> {
+  const message = `✨ *¡Hola ${data.customerName}!* 💕\n\nTe recordamos tu turno para hoy en *Glow Studio*:\n\n💇 *Servicio:* ${data.serviceName}\n⏰ *Hora:* ${data.timeStr}\n\n👉 *¿Confirmás tu asistencia?*\n- Respondé *SÍ* para confirmarlo.\n- Respondé *NO* si necesitás cancelarlo o reprogramarlo.\n\n¡Muchas gracias! ✨`;
 
   return sendWhatsAppMessage({ to: data.customerPhone, message });
 }

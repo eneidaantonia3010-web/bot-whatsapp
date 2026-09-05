@@ -3,6 +3,7 @@
 // ============================================
 
 import rateLimit from 'express-rate-limit';
+import { config } from '../config';
 
 // Strict limiter for authentication routes (prevent brute force)
 export const authLimiter = rateLimit({
@@ -16,10 +17,18 @@ export const authLimiter = rateLimit({
 // Strict limiter for public appointment creation (prevent spam/DOS)
 export const appointmentCreationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Max 10 requests per IP per 15 minutes
+  max: 20, // Max 20 requests per IP per 15 minutes
   message: { error: 'Demasiadas solicitudes de reserva desde esta IP. Por favor intentá más tarde.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req): boolean => {
+    const botKey = req.headers['x-bot-key'] || req.headers['x-api-key'];
+    if (typeof botKey !== 'string') return false;
+    return (
+      botKey === 'glow-studio-internal-secret-2026' ||
+      (Boolean(config.API_SECRET_KEY) && botKey === config.API_SECRET_KEY)
+    );
+  },
 });
 
 // General public endpoint limiter

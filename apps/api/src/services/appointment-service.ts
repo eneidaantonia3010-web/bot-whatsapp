@@ -557,9 +557,25 @@ export class AppointmentService {
           endDate: { gt: startDate },
           ...(data.staffId ? { staffId: data.staffId } : {}),
         },
+        include: {
+          customer: true,
+          service: true,
+          staff: true,
+        },
       });
 
       if (overlapping) {
+        // Idempotency check: if this exact customer has an appointment for this service created in the last 10 minutes,
+        // treat as an idempotent replay (e.g. from network retry, client reconnection, or bot timeout)
+        if (
+          overlapping.customerId === customer.id &&
+          overlapping.serviceId === service.id &&
+          Date.now() - overlapping.createdAt.getTime() < 10 * 60 * 1000
+        ) {
+          console.log(`ℹ️ Idempotent booking replay for customer ${customer.name} (appointment ${overlapping.id})`);
+          return overlapping;
+        }
+
         throw new Error('CONFLICT_OVERLAPPING');
       }
 
@@ -594,23 +610,25 @@ export class AppointmentService {
       });
     });
 
-    // Calendar sync
-    try {
-      const calendarEventId = await createCalendarEvent({
-        summary: `${service.name} — ${data.customerName}`,
-        description: `Cliente: ${data.customerName}\nTeléfono: ${data.customerPhone}\n${data.notes ? `Notas: ${data.notes}` : ''}`,
-        startTime: startDate,
-        endTime: endDate,
-      });
-      if (calendarEventId) {
-        appointment = await prisma.appointment.update({
-          where: { id: appointment.id },
-          data: { calendarEventId },
-          include: { customer: true, service: true, staff: true },
+    // Calendar sync (skip if already has calendarEventId from idempotent replay)
+    if (!appointment.calendarEventId) {
+      try {
+        const calendarEventId = await createCalendarEvent({
+          summary: `${service.name} — ${data.customerName}`,
+          description: `Cliente: ${data.customerName}\nTeléfono: ${data.customerPhone}\n${data.notes ? `Notas: ${data.notes}` : ''}`,
+          startTime: startDate,
+          endTime: endDate,
         });
+        if (calendarEventId) {
+          appointment = await prisma.appointment.update({
+            where: { id: appointment.id },
+            data: { calendarEventId },
+            include: { customer: true, service: true, staff: true },
+          });
+        }
+      } catch (calErr) {
+        console.warn('⚠️ Google Calendar sync error:', calErr);
       }
-    } catch (calErr) {
-      console.warn('⚠️ Google Calendar sync error:', calErr);
     }
 
     broadcastRealtimeEvent({
@@ -637,7 +655,7 @@ export class AppointmentService {
       console.warn('Warning updating waitlist entry:', wErr);
     }
 
-    // Format and send notifications
+    // Format and send notifications asynchronously (non-blocking) so HTTP response returns in <2s
     const dateStr = startDate.toLocaleDateString('es-AR', {
       weekday: 'long',
       day: 'numeric',
@@ -650,26 +668,34 @@ export class AppointmentService {
     });
     const dateTimeStr = `${dateStr} a las ${timeStr}hs`;
 
-    try {
-      await sendWhatsAppNotification({
-        customerName: data.customerName,
-        serviceName: service.name,
-        dateTime: dateTimeStr,
-        price: service.price,
-      });
+    setImmediate(() => {
+      void (async () => {
+        try {
+          await sendWhatsAppNotification({
+            customerName: data.customerName,
+            serviceName: service.name,
+            dateTime: dateTimeStr,
+            price: service.price,
+          });
+        } catch (notifErr: any) {
+          console.warn(`⚠️ Warning sending salon WhatsApp notification: ${notifErr?.message}`);
+        }
 
-      if (data.customerPhone) {
-        await sendBookingConfirmation({
-          customerPhone: data.customerPhone,
-          customerName: data.customerName,
-          serviceName: service.name,
-          dateTime: dateTimeStr,
-          price: service.price,
-        });
-      }
-    } catch (notifErr: any) {
-      console.warn(`⚠️ Warning sending booking notification: ${notifErr.message}`);
-    }
+        if (data.customerPhone) {
+          try {
+            await sendBookingConfirmation({
+              customerPhone: data.customerPhone,
+              customerName: data.customerName,
+              serviceName: service.name,
+              dateTime: dateTimeStr,
+              price: service.price,
+            });
+          } catch (notifErr: any) {
+            console.warn(`⚠️ Warning sending customer WhatsApp confirmation: ${notifErr?.message}`);
+          }
+        }
+      })();
+    });
 
     return appointment;
   }

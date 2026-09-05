@@ -862,7 +862,7 @@ async def _process_message_internal(
                     price_val = total_pr if len(selected_services) >= 2 else (service.get('price') if service else None)
                     price_line = f"\n💰 *Total a abonar:* {_format_price(price_val)}" if price_val else ""
 
-                    await send_whatsapp_notification(name, service_name_full, date_time_str, price_val)
+                    # The Express API backend natively sends asynchronous WhatsApp notifications to the salon and customer
                     remember_preference(phone, "last_service", service_name_full)
 
                     response = (

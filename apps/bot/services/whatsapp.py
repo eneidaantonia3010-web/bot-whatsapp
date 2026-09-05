@@ -11,10 +11,11 @@ import httpx
 logger = logging.getLogger("glow_bot.whatsapp")
 
 try:
-    from config import API_URL, SALON_WHATSAPP
+    from config import API_URL, SALON_WHATSAPP, BOT_API_KEY
 except ImportError:
     API_URL = os.getenv("API_URL", "https://glow-studio-api-2vzt.onrender.com")
     SALON_WHATSAPP = os.getenv("SALON_WHATSAPP", "5491178296781")
+    BOT_API_KEY = os.getenv("BOT_API_KEY", "glow-studio-internal-secret-2026")
 
 
 from typing import Optional
@@ -40,15 +41,22 @@ async def send_whatsapp_notification(
 async def send_message(to: str, text: str) -> bool:
     """Envía un mensaje de WhatsApp a través de la API del salón (Baileys Nativo)."""
     try:
+        headers = {
+            "Content-Type": "application/json",
+            "x-bot-key": "glow-studio-internal-secret-2026",
+        }
+        if BOT_API_KEY:
+            headers["x-api-key"] = BOT_API_KEY
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{API_URL}/api/admin/whatsapp/send",
-                headers={"Content-Type": "application/json"},
+                headers=headers,
                 json={
                     "to": to,
                     "message": text,
                 },
-                timeout=10.0,
+                timeout=15.0,
             )
             if response.status_code in [200, 201]:
                 logger.info(f"WA message sent to {to} via Express API")
@@ -59,3 +67,4 @@ async def send_message(to: str, text: str) -> bool:
     except Exception as e:
         logger.warning(f"WA send via API failed: {e}")
         return False
+

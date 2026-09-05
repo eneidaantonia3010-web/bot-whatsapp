@@ -60,19 +60,19 @@ async def create_appointment_via_api(
                 "notes": notes,
                 "source": source,
             },
-            timeout=15.0,
+            timeout=30.0,
         )
-        if response.status_code == 201:
-            logger.info("Appointment created successfully via API")
+        if response.status_code in (200, 201):
+            logger.info(f"Appointment created/confirmed successfully via API: status={response.status_code}")
             return response.json()
         elif response.status_code == 409:
             logger.warning(f"Appointment time conflict: {response.text}")
             return {"conflict": True, "error": "El horario ya no está disponible."}
         else:
-            logger.error(f"API error creating appointment ({response.status_code}): {response.text}")
+            logger.error(f"API error creating appointment (status={response.status_code}): {response.text}")
             return None
     except Exception as e:
-        logger.exception(f"Calendar/API error: {e}")
+        logger.exception(f"Calendar/API error connecting to {API_URL}/api/appointments: {e}")
         return None
 
 

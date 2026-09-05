@@ -79,11 +79,9 @@ def get_db_connection():
                 conn = pool.getconn()
                 from_pool = True
                 
-                # Test de conexión viva contra Neon serverless
+                # Check if connection in pool is closed
                 if conn.closed:
                     raise psycopg2.OperationalError("Connection in pool is closed")
-                with conn.cursor() as test_cur:
-                    test_cur.execute("SELECT 1")
                 conn.autocommit = True
             except Exception as e:
                 logger.warning(f"Pool connection dead or Neon waking up ({e}), purging and reconnecting...")
@@ -329,15 +327,28 @@ def delete_conversation_state(sender_id: str) -> bool:
         return False
 
 
+_customer_history_cache: dict[str, tuple[float, list[dict]]] = {}
+_HISTORY_CACHE_TTL = 120.0  # 2 minutes
+
+
 def get_customer_history(phone: str) -> list[dict]:
-    """Fetch the last 10 appointments for a customer by phone number.
+    """Fetch the last 10 appointments for a customer by phone number with cache.
     Used for personalized recommendations."""
     if not phone or len(phone) < 6:
         return []
+    import time
+    phone_suffix = phone[-8:] if len(phone) >= 8 else phone
+    now = time.time()
+    if phone_suffix in _customer_history_cache:
+        timestamp, cached = _customer_history_cache[phone_suffix]
+        if now - timestamp < _HISTORY_CACHE_TTL:
+            return cached
+
     try:
         # Use last 8 digits for flexible matching
-        phone_suffix = phone[-8:] if len(phone) >= 8 else phone
         with get_db_connection() as conn:
+            if not conn:
+                return []
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT a.date, a.status, s.name as service_name,
@@ -350,7 +361,9 @@ def get_customer_history(phone: str) -> list[dict]:
                     ORDER BY a.date DESC
                     LIMIT 10
                 """, (f"%{phone_suffix}%",))
-                return [dict(row) for row in cur.fetchall()]
+                history = [dict(row) for row in cur.fetchall()]
+                _customer_history_cache[phone_suffix] = (now, history)
+                return history
     except Exception as e:
         logger.warning(f"Error fetching customer history: {e}")
         return []
@@ -390,12 +403,23 @@ def get_gallery_image_for_category(category: str) -> Optional[dict]:
         return None
 
 
+_customer_prefs_cache: dict[str, tuple[float, Optional[dict]]] = {}
+_PREFS_CACHE_TTL = 300.0  # 5 minutes
+
+
 def get_customer_preferences(phone: str) -> Optional[dict]:
-    """Retrieve semantic memory and preferences for a customer by phone number."""
+    """Retrieve semantic memory and preferences for a customer by phone number with cache."""
     if not phone or len(phone) < 6:
         return None
+    import time
+    phone_suffix = phone[-8:] if len(phone) >= 8 else phone
+    now = time.time()
+    if phone_suffix in _customer_prefs_cache:
+        timestamp, cached = _customer_prefs_cache[phone_suffix]
+        if now - timestamp < _PREFS_CACHE_TTL:
+            return cached
+
     try:
-        phone_suffix = phone[-8:] if len(phone) >= 8 else phone
         with get_db_connection() as conn:
             if not conn:
                 return None
@@ -407,7 +431,10 @@ def get_customer_preferences(phone: str) -> Optional[dict]:
                 row = cur.fetchone()
                 if row and row.get("preferences"):
                     val = row["preferences"]
-                    return json.loads(val) if isinstance(val, str) else val
+                    result = json.loads(val) if isinstance(val, str) else val
+                    _customer_prefs_cache[phone_suffix] = (now, result)
+                    return result
+                _customer_prefs_cache[phone_suffix] = (now, None)
                 return None
     except Exception as e:
         logger.warning(f"Error reading customer preferences: {e}")
@@ -418,8 +445,10 @@ def update_customer_preferences(phone: str, preferences: dict) -> bool:
     """Update semantic memory and preferences for a customer by phone number."""
     if not phone or not preferences:
         return False
+    import time
+    phone_suffix = phone[-8:] if len(phone) >= 8 else phone
+    _customer_prefs_cache[phone_suffix] = (time.time(), preferences)
     try:
-        phone_suffix = phone[-8:] if len(phone) >= 8 else phone
         with get_db_connection() as conn:
             if not conn:
                 return False
@@ -433,4 +462,39 @@ def update_customer_preferences(phone: str, preferences: dict) -> bool:
     except Exception as e:
         logger.warning(f"Error updating customer preferences: {e}")
         return False
+
+
+# ============================================
+# Async Non-Blocking Database Helpers
+# ============================================
+import asyncio
+
+async def get_conversation_state_async(sender_id: str) -> Optional[dict]:
+    """Async wrapper executing in threadpool to avoid event loop blocking."""
+    return await asyncio.to_thread(get_conversation_state, sender_id)
+
+
+async def save_conversation_state_async(sender_id: str, state: dict) -> bool:
+    """Async wrapper executing in threadpool to avoid event loop blocking."""
+    return await asyncio.to_thread(save_conversation_state, sender_id, state)
+
+
+async def delete_conversation_state_async(sender_id: str) -> bool:
+    """Async wrapper executing in threadpool to avoid event loop blocking."""
+    return await asyncio.to_thread(delete_conversation_state, sender_id)
+
+
+async def get_customer_preferences_async(phone: str) -> Optional[dict]:
+    """Async wrapper executing in threadpool to avoid event loop blocking."""
+    return await asyncio.to_thread(get_customer_preferences, phone)
+
+
+async def update_customer_preferences_async(phone: str, preferences: dict) -> bool:
+    """Async wrapper executing in threadpool to avoid event loop blocking."""
+    return await asyncio.to_thread(update_customer_preferences, phone, preferences)
+
+
+async def get_customer_history_async(phone: str) -> list[dict]:
+    """Async wrapper executing in threadpool to avoid event loop blocking."""
+    return await asyncio.to_thread(get_customer_history, phone)
 

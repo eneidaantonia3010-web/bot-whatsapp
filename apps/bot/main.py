@@ -24,7 +24,7 @@ except ImportError:
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
     BOT_API_KEY = os.getenv("BOT_API_KEY", os.getenv("API_SECRET_KEY", ""))
     IS_PROD = os.getenv("NODE_ENV") == "production" or os.getenv("RENDER") == "true"
-    GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 from models import MessageRequest, MessageResponse
 from agent import process_message

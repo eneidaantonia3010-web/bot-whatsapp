@@ -33,6 +33,17 @@ function getCalendarClient(): calendar_v3.Calendar | null {
 
 const CALENDAR_ID = config.GOOGLE_CALENDAR_ID;
 
+interface FreeBusyCacheEntry {
+  data: Array<{ start: string; end: string }>;
+  expiresAt: number;
+}
+const freeBusyCache = new Map<string, FreeBusyCacheEntry>();
+const FREEBUSY_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+export function invalidateFreeBusyCache(): void {
+  freeBusyCache.clear();
+}
+
 export async function createCalendarEvent(data: {
   summary: string;
   description?: string;
@@ -73,6 +84,7 @@ export async function createCalendarEvent(data: {
       requestBody: event,
     });
 
+    invalidateFreeBusyCache();
     console.log(`📅 Calendar event created: ${response.data.id}`);
     return response.data.id || null;
   } catch (error) {
@@ -90,6 +102,7 @@ export async function deleteCalendarEvent(eventId: string): Promise<boolean> {
       calendarId: CALENDAR_ID,
       eventId,
     });
+    invalidateFreeBusyCache();
     console.log(`🗑️ Calendar event deleted: ${eventId}`);
     return true;
   } catch (error) {
@@ -124,6 +137,7 @@ export async function updateCalendarEvent(eventId: string, data: {
         },
       },
     });
+    invalidateFreeBusyCache();
     console.log(`📅 Calendar event updated: ${eventId}`);
     return true;
   } catch (error) {
@@ -133,6 +147,13 @@ export async function updateCalendarEvent(eventId: string, data: {
 }
 
 export async function getFreeBusy(startDate: Date, endDate: Date): Promise<Array<{ start: string; end: string }>> {
+  const cacheKey = `${startDate.toISOString()}_${endDate.toISOString()}`;
+  const now = Date.now();
+  const cached = freeBusyCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
   const calendar = getCalendarClient();
   if (!calendar) return [];
 
@@ -147,12 +168,28 @@ export async function getFreeBusy(startDate: Date, endDate: Date): Promise<Array
     });
 
     const busy = response.data.calendars?.[CALENDAR_ID]?.busy || [];
-    return busy.map((b) => ({
+    const result = busy.map((b) => ({
       start: b.start || '',
       end: b.end || '',
     }));
+
+    freeBusyCache.set(cacheKey, {
+      data: result,
+      expiresAt: now + FREEBUSY_CACHE_TTL_MS,
+    });
+
+    // Prune expired cache keys if map grows large
+    if (freeBusyCache.size > 100) {
+      for (const [key, entry] of freeBusyCache.entries()) {
+        if (entry.expiresAt <= now) {
+          freeBusyCache.delete(key);
+        }
+      }
+    }
+
+    return result;
   } catch (error) {
     console.error('❌ Failed to get free/busy:', error);
-    return [];
+    return cached?.data || [];
   }
 }

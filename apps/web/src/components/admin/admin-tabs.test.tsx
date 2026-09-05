@@ -6,11 +6,14 @@ import {
   CustomersTab,
   ServicesTab,
   AnalyticsTab,
+  CalendarTab,
   MockAppointment,
   MetricsData,
   FinancialData,
   ServiceItem,
   CustomerItem,
+  WeekDay,
+  getCategoryBadge,
 } from './tabs';
 
 describe('Admin Dashboard Modular Tabs', () => {
@@ -204,6 +207,82 @@ describe('Admin Dashboard Modular Tabs', () => {
       expect(screen.getByText('3.8%')).toBeInTheDocument();
       expect(screen.getByText('Balayage VIP')).toBeInTheDocument();
       expect(screen.getByText('Capping Gel')).toBeInTheDocument();
+    });
+  });
+
+  describe('CalendarTab', () => {
+    const mockWeekDays: WeekDay[] = [
+      {
+        date: new Date('2026-09-07T12:00:00.000Z'),
+        dateStr: '2026-09-07',
+        label: '7 sep',
+        shortDay: 'Lun',
+        isToday: false,
+      },
+      {
+        date: new Date('2026-09-08T12:00:00.000Z'),
+        dateStr: '2026-09-08',
+        label: '8 sep',
+        shortDay: 'Mar',
+        isToday: true,
+      },
+    ];
+
+    it('renders agenda header, week navigation, and calendar controls', () => {
+      const setWeekOffset = vi.fn();
+      const setCalendarView = vi.fn();
+      const setShowBlockModal = vi.fn();
+      const setShowWaitlistModal = vi.fn();
+      const handleDeleteBlockedTime = vi.fn();
+      const setSelectedAppointment = vi.fn();
+
+      render(
+        <CalendarTab
+          weekOffset={0}
+          setWeekOffset={setWeekOffset}
+          calendarView="week"
+          setCalendarView={setCalendarView}
+          getWeekDays={() => mockWeekDays}
+          appointments={mockAppointments}
+          blockedTimes={[]}
+          waitlist={[]}
+          setShowBlockModal={setShowBlockModal}
+          setShowWaitlistModal={setShowWaitlistModal}
+          handleDeleteBlockedTime={handleDeleteBlockedTime}
+          setSelectedAppointment={setSelectedAppointment}
+        />
+      );
+
+      expect(screen.getByText('Agenda Interactiva de Turnos')).toBeInTheDocument();
+      expect(screen.getByText('Semana')).toBeInTheDocument();
+      expect(screen.getByText('Mes')).toBeInTheDocument();
+
+      const blockBtn = screen.getByRole('button', { name: /Bloquear Horario/i });
+      fireEvent.click(blockBtn);
+      expect(setShowBlockModal).toHaveBeenCalledWith(true);
+
+      const waitlistBtn = screen.getByRole('button', { name: /Lista de Espera/i });
+      fireEvent.click(waitlistBtn);
+      expect(setShowWaitlistModal).toHaveBeenCalledWith(true);
+
+      const mesBtn = screen.getByText('Mes');
+      fireEvent.click(mesBtn);
+      expect(setCalendarView).toHaveBeenCalledWith('month');
+
+      const hoyBtn = screen.getByText('Hoy');
+      fireEvent.click(hoyBtn);
+      expect(setWeekOffset).toHaveBeenCalledWith(0);
+    });
+  });
+
+  describe('getCategoryBadge', () => {
+    it('returns appropriate badges for all supported categories and fallback', () => {
+      expect(getCategoryBadge('cabello').label).toBe('Cabello');
+      expect(getCategoryBadge('unas').label).toBe('Uñas');
+      expect(getCategoryBadge('pestanas').label).toBe('Pestañas & Cejas');
+      expect(getCategoryBadge('facial').label).toBe('Facial');
+      expect(getCategoryBadge('desconocido').label).toBe('Belleza');
+      expect(getCategoryBadge('').label).toBe('Belleza');
     });
   });
 });

@@ -44,6 +44,15 @@ def _detect_audio_extension(audio_bytes: bytes) -> str:
     return "audio.ogg"
 
 
+_audio_clients: dict[str, Groq] = {}
+
+
+def _get_audio_client(key: str) -> Groq:
+    if key not in _audio_clients:
+        _audio_clients[key] = Groq(api_key=key)
+    return _audio_clients[key]
+
+
 def transcribe_audio_bytes(audio_bytes: bytes, filename: Optional[str] = None) -> Optional[str]:
     """Transcribe in-memory audio bytes using Groq Whisper API with dynamic format detection."""
     if not audio_bytes or len(audio_bytes) < 150:
@@ -58,7 +67,7 @@ def transcribe_audio_bytes(audio_bytes: bytes, filename: Optional[str] = None) -
 
     for key in groq_keys:
         try:
-            client = Groq(api_key=key)
+            client = _get_audio_client(key)
             transcription = client.audio.transcriptions.create(
                 file=(actual_filename, audio_bytes),
                 model="whisper-large-v3-turbo",

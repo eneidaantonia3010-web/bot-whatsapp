@@ -17,6 +17,15 @@ except ImportError:
 logger = logging.getLogger("glow_bot.vision")
 
 
+_vision_clients: dict[str, Groq] = {}
+
+
+def _get_vision_client(key: str) -> Groq:
+    if key not in _vision_clients:
+        _vision_clients[key] = Groq(api_key=key)
+    return _vision_clients[key]
+
+
 def analyze_image(image_base64: str, caption: str = "") -> Optional[str]:
     """Use Groq Vision to interpret a customer's image with key and model fallback."""
     raw_keys = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
@@ -50,7 +59,7 @@ def analyze_image(image_base64: str, caption: str = "") -> Optional[str]:
     for model_name in models_to_try:
         for key in groq_keys:
             try:
-                client = Groq(api_key=key)
+                client = _get_vision_client(key)
                 completion = client.chat.completions.create(
                     model=model_name,
                     messages=[

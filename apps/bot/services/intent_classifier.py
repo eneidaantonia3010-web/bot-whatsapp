@@ -274,6 +274,60 @@ def classify_intent_with_confidence(message: str) -> tuple[str, float]:
     return "OTHER", 0.40
 
 
+async def classify_intent_with_confidence_async(message: str) -> tuple[str, float]:
+    """Clasificación de intención asíncrona sin bloquear el event loop."""
+    if not message or not message.strip():
+        return "OTHER", 0.0
+
+    text = message.lower().strip()
+
+    # Fast path 1: reglas deterministas de alta confianza
+    if text in _GREETING_SET:
+        return "GREETING", 1.0
+    if text in _THANKS_SET:
+        return "THANKS", 1.0
+    if text in _NUMBER_CHOICES:
+        return "BOOKING", 1.0
+
+    rule_result = _classify_by_rules(text)
+    if rule_result:
+        return rule_result, 0.92
+
+    # Fast path 2: cache
+    if text in _intent_cache:
+        return _intent_cache[text]
+
+    # Fast path 3: mensajes muy cortos
+    if len(text.split()) <= 1:
+        return "OTHER", 0.50
+
+    # LLM classification fallback (asíncrono con timeout estricto y max_tokens=15)
+    try:
+        prompt = INTENT_CLASSIFIER_PROMPT.replace("{message}", message)
+        raw_res = await llm_pool.get_completion_async(
+            messages=[],
+            system_msg=prompt,
+            model="llama-3.1-8b-instant",
+            max_tokens=15,
+            timeout_sec=5,
+            max_retries=1,
+        )
+        if raw_res:
+            cleaned = raw_res.strip().upper()
+            for v in VALID_INTENTS:
+                if v in cleaned:
+                    logger.info(f"Intent classified async as {v} (conf=0.85): {message[:50]}")
+                    if len(_intent_cache) > _MAX_CACHE_ENTRIES:
+                        _intent_cache.clear()
+                    result = (v, 0.85)
+                    _intent_cache[text] = result
+                    return result
+    except Exception as e:
+        logger.warning(f"Async intent classification LLM failed: {e}")
+
+    return "OTHER", 0.40
+
+
 def classify_intent(message: str) -> str:
     """Función de compatibilidad que retorna el intent como string."""
     intent, _ = classify_intent_with_confidence(message)

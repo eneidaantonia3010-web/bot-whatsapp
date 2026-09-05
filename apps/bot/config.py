@@ -37,4 +37,5 @@ GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview
 
 # WhatsApp & Salon Info
 SALON_WHATSAPP = "".join(c for c in os.getenv("SALON_WHATSAPP", "5491178296781") if c.isdigit())
+ADMIN_PHONE = "".join(c for c in os.getenv("ADMIN_PHONE", SALON_WHATSAPP) if c.isdigit())
 INSTANCE_NAME = os.getenv("INSTANCE_NAME", f"glow-studio-{SALON_WHATSAPP}")

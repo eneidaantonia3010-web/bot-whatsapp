@@ -52,6 +52,7 @@ from services.intent_classifier import (
 from services.language_detector import detect_language, t
 from services.escalation import escalate_to_human, build_escalation_summary
 from services.memory import format_memory_system_context, remember_preference, extract_and_remember_preferences
+from services.admin_commands import handle_admin_command
 from services.prompts import (
     SERVICE_HELP_PROMPT,
     DATE_CLARIFICATION_PROMPT,
@@ -289,6 +290,12 @@ async def _process_message_internal(
     platform: str = "INSTAGRAM",
 ) -> str | dict:
     """Internal message processing logic."""
+    # STEP 0: Admin Commands Check (Only for authorized salon administrator phone)
+    if message.strip().startswith("/"):
+        admin_reply = await handle_admin_command(sender_id, message.strip())
+        if admin_reply:
+            return admin_reply
+
     conv = get_conversation(sender_id)
     chat_history = conv["chat_history"]
 

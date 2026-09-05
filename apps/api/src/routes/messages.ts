@@ -51,22 +51,40 @@ messagesRouter.post('/', async (req: Request, res: Response) => {
     let botResponse = '';
 
     try {
+      const primaryBotUrl = (config.BOT_URL || 'https://glow-studio-bot-alrb.onrender.com').replace(/\/$/, '');
+      const fallbackBotUrl = 'https://glow-studio-bot-alrb.onrender.com';
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25000);
 
-      const aiResponse = await fetch(`${config.BOT_URL}/process-message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': config.API_SECRET_KEY,
-        },
-        body: JSON.stringify({ message, sender_id: senderId, platform }),
-        signal: controller.signal,
-      });
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        'x-api-key': config.API_SECRET_KEY,
+        'x-bot-key': 'glow-studio-internal-secret-2026',
+      };
+      const requestBody = JSON.stringify({ message, sender_id: senderId, platform });
 
-      clearTimeout(timeout);
+      let aiResponse: globalThis.Response | null = null;
+      try {
+        aiResponse = await fetch(`${primaryBotUrl}/process-message`, {
+          method: 'POST',
+          headers: requestHeaders,
+          body: requestBody,
+          signal: controller.signal,
+        });
 
-      if (aiResponse.ok) {
+        if (!aiResponse.ok && (aiResponse.status === 404 || aiResponse.status >= 500) && primaryBotUrl !== fallbackBotUrl) {
+          aiResponse = await fetch(`${fallbackBotUrl}/process-message`, {
+            method: 'POST',
+            headers: requestHeaders,
+            body: requestBody,
+            signal: controller.signal,
+          });
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (aiResponse && aiResponse.ok) {
         const data = await aiResponse.json() as { response: string };
         botResponse = data.response;
       }

@@ -47,12 +47,12 @@ async def verify_bot_api_key(
 ):
     """Verify mutual internal API key between Express API and Python Bot."""
     effective_bot_key = (BOT_API_KEY or "").strip()
-    provided_key = (x_api_key or x_bot_key or "").strip()
     default_internal = "glow-studio-internal-secret-2026"
-
     allowed_keys = [k for k in (effective_bot_key, default_internal) if k]
 
-    if not provided_key:
+    candidates = [k.strip() for k in (x_api_key, x_bot_key) if k and k.strip()]
+
+    if not candidates:
         if not IS_PROD and not effective_bot_key:
             return True
         raise HTTPException(
@@ -60,9 +60,10 @@ async def verify_bot_api_key(
             detail="Missing required x-api-key authentication header",
         )
 
-    for valid_key in allowed_keys:
-        if hmac.compare_digest(provided_key, valid_key):
-            return True
+    for candidate in candidates:
+        for valid_key in allowed_keys:
+            if hmac.compare_digest(candidate, valid_key):
+                return True
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

@@ -90,6 +90,30 @@ export async function getSystemMetrics(privileged: boolean = true) {
     };
   }
 
+  // 3. Query Bot connectivity
+  const botUrl = (config.BOT_URL || 'https://glow-studio-bot-alrb.onrender.com').replace(/\/$/, '');
+  let botMetrics: any = {
+    url: botUrl,
+    status: 'unknown',
+  };
+  try {
+    const botStart = Date.now();
+    const bRes = await fetch(`${botUrl}/health`, { signal: AbortSignal.timeout(3000) });
+    const bData = await bRes.json().catch(() => ({}));
+    botMetrics = {
+      url: botUrl,
+      status: bRes.ok ? 'connected' : `http_${bRes.status}`,
+      latencyMs: Date.now() - botStart,
+      data: bData,
+    };
+  } catch (bErr: any) {
+    botMetrics = {
+      url: botUrl,
+      status: 'unreachable',
+      error: bErr?.message,
+    };
+  }
+
   const isHealthy = dbStatus === 'connected';
 
   return {
@@ -117,6 +141,7 @@ export async function getSystemMetrics(privileged: boolean = true) {
       latencyMs: dbLatencyMs,
       ...(dbError ? { error: dbError } : {}),
     },
+    bot: botMetrics,
     whatsapp: {
       status: whatsappStatus.state,
       configured: whatsappStatus.configured,

@@ -33,7 +33,14 @@ export const envSchema = z.object({
   // Service URLs
   BOT_URL: z
     .string()
-    .default(isProd ? 'https://glow-studio-bot-alrb.onrender.com' : 'http://localhost:8000'),
+    .default(isProd ? 'https://glow-studio-bot-alrb.onrender.com' : 'http://localhost:8000')
+    .transform((url) => {
+      let clean = (url || '').trim().replace(/\/$/, '');
+      if (clean === 'https://glow-studio-bot.onrender.com' || !clean) {
+        clean = 'https://glow-studio-bot-alrb.onrender.com';
+      }
+      return clean;
+    }),
   FRONTEND_URL: z
     .string()
     .default(isProd ? 'https://glow-studio-web.onrender.com' : 'http://localhost:3000'),

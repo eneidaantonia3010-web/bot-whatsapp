@@ -165,34 +165,52 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
 
     // 3. Fallback: Forward message to Python Bot
     try {
+      const primaryBotUrl = (config.BOT_URL || 'https://glow-studio-bot-alrb.onrender.com').replace(/\/$/, '');
+      const fallbackBotUrl = 'https://glow-studio-bot-alrb.onrender.com';
       const botController = new AbortController();
       const botTimeout = setTimeout(() => botController.abort(), 30000);
 
-      const botRes = await fetch(`${config.BOT_URL}/process-message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': config.API_SECRET_KEY,
-        },
-        body: JSON.stringify({
-          message: text,
-          sender_id: remoteJid,
-          platform: 'WHATSAPP',
-        }),
-        signal: botController.signal,
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        'x-api-key': config.API_SECRET_KEY,
+        'x-bot-key': 'glow-studio-internal-secret-2026',
+      };
+      const requestBody = JSON.stringify({
+        message: text,
+        sender_id: remoteJid,
+        platform: 'WHATSAPP',
       });
 
-      clearTimeout(botTimeout);
+      let botRes: globalThis.Response | null = null;
+      try {
+        botRes = await fetch(`${primaryBotUrl}/process-message`, {
+          method: 'POST',
+          headers: requestHeaders,
+          body: requestBody,
+          signal: botController.signal,
+        });
 
-      if (botRes.ok) {
+        if (!botRes.ok && (botRes.status === 404 || botRes.status >= 500) && primaryBotUrl !== fallbackBotUrl) {
+          botRes = await fetch(`${fallbackBotUrl}/process-message`, {
+            method: 'POST',
+            headers: requestHeaders,
+            body: requestBody,
+            signal: botController.signal,
+          });
+        }
+      } finally {
+        clearTimeout(botTimeout);
+      }
+
+      if (botRes && botRes.ok) {
         const botData = (await botRes.json()) as { response?: string };
         if (botData.response) {
           await sendWhatsAppMessage({ to: remoteJid, message: botData.response });
           return { status: 'bot_replied' };
         }
       } else {
-        const errDetail = await botRes.text().catch(() => '');
-        console.error(`❌ Evolution webhook bot forward failed with HTTP ${botRes.status}: ${errDetail}`);
+        const errDetail = botRes ? await botRes.text().catch(() => '') : 'no response';
+        console.error(`❌ Evolution webhook bot forward failed with HTTP ${botRes?.status}: ${errDetail}`);
       }
     } catch (botErr: any) {
       console.warn('⚠️ Forwarding to bot warning:', botErr.message);

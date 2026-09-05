@@ -69,23 +69,41 @@ instagramWebhookRouter.post('/', async (req: Request, res: Response) => {
               const botController = new AbortController();
               const botTimeout = setTimeout(() => botController.abort(), 30000);
 
-              const agentResponse = await fetch(`${config.BOT_URL}/process-message`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-api-key': config.API_SECRET_KEY,
-                },
-                body: JSON.stringify({
-                  message,
-                  sender_id: senderId,
-                  platform: 'INSTAGRAM',
-                }),
-                signal: botController.signal,
+              const primaryBotUrl = (config.BOT_URL || 'https://glow-studio-bot-alrb.onrender.com').replace(/\/$/, '');
+              const fallbackBotUrl = 'https://glow-studio-bot-alrb.onrender.com';
+              const requestHeaders = {
+                'Content-Type': 'application/json',
+                'x-api-key': config.API_SECRET_KEY,
+                'x-bot-key': 'glow-studio-internal-secret-2026',
+              };
+              const requestBody = JSON.stringify({
+                message,
+                sender_id: senderId,
+                platform: 'INSTAGRAM',
               });
 
-              clearTimeout(botTimeout);
+              let agentResponse: globalThis.Response | null = null;
+              try {
+                agentResponse = await fetch(`${primaryBotUrl}/process-message`, {
+                  method: 'POST',
+                  headers: requestHeaders,
+                  body: requestBody,
+                  signal: botController.signal,
+                });
 
-              if (agentResponse.ok) {
+                if (!agentResponse.ok && (agentResponse.status === 404 || agentResponse.status >= 500) && primaryBotUrl !== fallbackBotUrl) {
+                  agentResponse = await fetch(`${fallbackBotUrl}/process-message`, {
+                    method: 'POST',
+                    headers: requestHeaders,
+                    body: requestBody,
+                    signal: botController.signal,
+                  });
+                }
+              } finally {
+                clearTimeout(botTimeout);
+              }
+
+              if (agentResponse && agentResponse.ok) {
                 const data = await agentResponse.json() as { response: string };
                 const reply = data.response;
 

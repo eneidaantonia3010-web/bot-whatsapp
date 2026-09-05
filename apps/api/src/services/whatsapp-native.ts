@@ -25,7 +25,14 @@ import {
 } from './message-queue';
 import { config } from '../config';
 
-const BOT_URL = config.BOT_URL;
+function getBotUrl(): string {
+  let url = (config.BOT_URL || '').trim().replace(/\/$/, '');
+  if (!url || url === 'https://glow-studio-bot.onrender.com') {
+    url = 'https://glow-studio-bot-alrb.onrender.com';
+  }
+  return url;
+}
+const BOT_URL = getBotUrl();
 const SALON_WHATSAPP = config.SALON_WHATSAPP;
 
 let sock: ReturnType<typeof makeWASocket> | null = null;
@@ -396,28 +403,47 @@ export async function initNativeWhatsApp(): Promise<void> {
 
           // Call Python AI Bot
           try {
-            console.log(`🤖 Calling Python Bot at: ${BOT_URL}/process-message`);
+            const primaryBotUrl = getBotUrl();
+            const fallbackBotUrl = 'https://glow-studio-bot-alrb.onrender.com';
+            console.log(`🤖 Calling Python Bot at: ${primaryBotUrl}/process-message`);
             
             const botController = new AbortController();
             const botTimeout = setTimeout(() => botController.abort(), 30000); // 30s safety timeout
             
-            const agentResponse = await fetch(`${BOT_URL}/process-message`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': config.API_SECRET_KEY,
-              },
-              body: JSON.stringify({
-                message: textMessage,
-                sender_id: remoteJid,
-                platform: 'WHATSAPP',
-              }),
-              signal: botController.signal
+            const requestHeaders = {
+              'Content-Type': 'application/json',
+              'x-api-key': config.API_SECRET_KEY,
+              'x-bot-key': 'glow-studio-internal-secret-2026',
+            };
+            const requestBody = JSON.stringify({
+              message: textMessage,
+              sender_id: remoteJid,
+              platform: 'WHATSAPP',
             });
-            
-            clearTimeout(botTimeout);
 
-            if (agentResponse.ok) {
+            let agentResponse: globalThis.Response | null = null;
+            try {
+              agentResponse = await fetch(`${primaryBotUrl}/process-message`, {
+                method: 'POST',
+                headers: requestHeaders,
+                body: requestBody,
+                signal: botController.signal,
+              });
+
+              if (!agentResponse.ok && (agentResponse.status === 404 || agentResponse.status >= 500) && primaryBotUrl !== fallbackBotUrl) {
+                console.warn(`⚠️ Primary bot URL returned ${agentResponse.status}. Retrying fallback: ${fallbackBotUrl}`);
+                agentResponse = await fetch(`${fallbackBotUrl}/process-message`, {
+                  method: 'POST',
+                  headers: requestHeaders,
+                  body: requestBody,
+                  signal: botController.signal,
+                });
+              }
+            } finally {
+              clearTimeout(botTimeout);
+            }
+
+            if (agentResponse && agentResponse.ok) {
               const data = (await agentResponse.json()) as { response: string; image_url?: string };
               let reply = data.response;
               const imageUrl = data.image_url;

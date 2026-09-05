@@ -3,6 +3,7 @@
 // ============================================
 
 import { google, calendar_v3 } from 'googleapis';
+import { prisma } from './prisma';
 import { config } from '../config';
 
 let calendarClient: calendar_v3.Calendar | null = null;
@@ -193,3 +194,73 @@ export async function getFreeBusy(startDate: Date, endDate: Date): Promise<Array
     return cached?.data || [];
   }
 }
+
+export async function syncExternalEventsToBlockedTimes(): Promise<number> {
+  const calendar = getCalendarClient();
+  if (!calendar) return 0;
+
+  try {
+    const now = new Date();
+    const timeMin = new Date(now.getTime() - 2 * 60 * 60 * 1000); // from 2 hours ago
+    const timeMax = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // up to 30 days ahead
+
+    const res = await calendar.events.list({
+      calendarId: CALENDAR_ID,
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+    });
+
+    const items = res.data.items || [];
+    let syncedCount = 0;
+
+    for (const item of items) {
+      if (!item.id || !item.start || !item.end) continue;
+      const startIso = item.start.dateTime || item.start.date;
+      const endIso = item.end.dateTime || item.end.date;
+      if (!startIso || !endIso) continue;
+
+      const startDate = new Date(startIso);
+      const endDate = new Date(endIso);
+      const summary = item.summary || 'Bloqueo externo de agenda';
+
+      // Check if this event was created by our internal booking system (has matching appointment)
+      const existingAppointment = await prisma.appointment.findFirst({
+        where: { calendarEventId: item.id },
+      });
+      if (existingAppointment) {
+        continue;
+      }
+
+      // Check if already blocked in blocked_times table
+      const existingBlock = await prisma.blockedTime.findFirst({
+        where: {
+          startDate: { lte: endDate },
+          endDate: { gte: startDate },
+          reason: summary,
+        },
+      });
+
+      if (!existingBlock) {
+        await prisma.blockedTime.create({
+          data: {
+            startDate,
+            endDate,
+            reason: summary,
+            allDay: !item.start.dateTime,
+          },
+        });
+        syncedCount++;
+        console.log(`📅 External Google Calendar event synced to BlockedTime: "${summary}" (${startIso} - ${endIso})`);
+      }
+    }
+
+    invalidateFreeBusyCache();
+    return syncedCount;
+  } catch (error) {
+    console.error('❌ Error syncing external calendar events:', error);
+    return 0;
+  }
+}
+

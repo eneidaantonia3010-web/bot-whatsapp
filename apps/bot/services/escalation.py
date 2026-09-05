@@ -69,24 +69,38 @@ async def escalate_to_human(
         if API_SECRET_KEY:
             headers["x-api-key"] = API_SECRET_KEY
 
-        # Send via the Express API's WhatsApp notification endpoint
-        async with httpx.AsyncClient() as client:
-            # Use the salon's own WhatsApp to notify
-            response = await client.post(
-                f"{API_URL}/api/admin/whatsapp/send",
-                headers=headers,
-                json={
-                    "to": SALON_WHATSAPP,
-                    "message": notification,
-                },
-                timeout=10.0,
-            )
-            if response.status_code in (200, 201):
-                logger.info(f"Escalation notification sent for {sender_id}")
-                return True
-            else:
-                logger.error(f"Escalation API error: {response.status_code} {response.text}")
-                return False
+        # Send via the Express API's endpoints
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # 1. Notify salon owner via WhatsApp
+            try:
+                await client.post(
+                    f"{API_URL}/api/admin/whatsapp/send",
+                    headers=headers,
+                    json={
+                        "to": SALON_WHATSAPP,
+                        "message": notification,
+                    },
+                )
+            except Exception as eWa:
+                logger.warning(f"Error sending WhatsApp escalation notification: {eWa}")
+
+            # 2. Notify admin dashboard via SSE realtime event
+            try:
+                await client.post(
+                    f"{API_URL}/api/realtime/escalate",
+                    headers=headers,
+                    json={
+                        "senderId": sender_id,
+                        "senderName": sender_name,
+                        "reason": "Derivación a operador / Baja confianza reiterada",
+                        "lastMessage": last_message,
+                    },
+                )
+            except Exception as eRealtime:
+                logger.warning(f"Error broadcasting escalation to realtime dashboard: {eRealtime}")
+
+            logger.info(f"Escalation notification processed for {sender_id}")
+            return True
     except Exception as e:
         logger.exception(f"Error sending escalation: {e}")
         return False

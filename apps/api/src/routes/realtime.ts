@@ -44,10 +44,32 @@ realtimeRouter.get('/events', (req: Request, res: Response) => {
 });
 
 export type RealtimeEvent = {
-  type: 'APPOINTMENT_CREATED' | 'APPOINTMENT_CANCELLED' | 'APPOINTMENT_CONFIRMED' | 'APPOINTMENT_RESCHEDULED' | 'WHATSAPP_STATUS';
+  type:
+    | 'APPOINTMENT_CREATED'
+    | 'APPOINTMENT_CANCELLED'
+    | 'APPOINTMENT_CONFIRMED'
+    | 'APPOINTMENT_RESCHEDULED'
+    | 'WHATSAPP_STATUS'
+    | 'HUMAN_ESCALATION';
   payload: any;
   timestamp?: string;
 };
+
+// POST /api/realtime/escalate — Broadcast human escalation alerts to connected panels
+realtimeRouter.post('/escalate', (req: Request, res: Response) => {
+  const { senderId, senderName, reason, lastMessage } = req.body;
+  broadcastRealtimeEvent({
+    type: 'HUMAN_ESCALATION',
+    payload: {
+      senderId,
+      senderName: senderName || 'Cliente WhatsApp',
+      reason: reason || 'Baja confianza o solicitud de atención humana',
+      lastMessage,
+      timestamp: new Date().toISOString(),
+    },
+  });
+  return res.json({ success: true, broadcasted: true });
+});
 
 /**
  * Broadcast an event to all connected admin clients in real-time

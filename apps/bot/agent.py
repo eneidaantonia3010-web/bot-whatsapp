@@ -114,6 +114,7 @@ def get_conversation(sender_id: str) -> dict:
         "language": "es",
         "last_message_at": datetime.now(TZ_AR).isoformat(),
         "fallback_count": 0,
+        "low_confidence_count": 0,
         "cancelling_apt": None,
         "rescheduling_apt": None,
         "upcoming_apts": [],
@@ -337,6 +338,19 @@ async def _process_message_internal(
     conv["last_message_at"] = datetime.now(TZ_AR).isoformat()
     chat_history.append({"role": "user", "parts": [message]})
 
+    # Check if conversation is PAUSED for human intervention
+    if conv.get("stage") in ("PAUSED", "human_escalated"):
+        clean_check = message.strip().lower()
+        if any(w in clean_check for w in ("hola", "inicio", "reset", "menu", "menú", "bot", "empezar", "reiniciar")):
+            conv["stage"] = "greeting"
+            conv["fallback_count"] = 0
+            conv["low_confidence_count"] = 0
+        else:
+            response = t("human_notified", lang) + "\n\n_💡 Si preferís volver al asistente virtual, escribí *menu* o *hola*._"
+            chat_history.append({"role": "model", "parts": [response]})
+            save_conversation_state(sender_id, conv)
+            return response
+
     # Inyectar memoria semántica de clienta
     clean_phone = normalize_phone(conv.get("customer_phone") or sender_id)
     if clean_phone:
@@ -348,6 +362,28 @@ async def _process_message_internal(
         # STEP 1: Intent Classification with Confidence Scoring (Non-blocking async)
         intent, confidence = await classify_intent_with_confidence_async(message)
         logger.info(f"Intent classified for {sender_id}: {intent} (confidence={confidence:.2f})")
+
+        # Track consecutive low-confidence classifications (ignore standard navigation words)
+        clean_msg_nav = message.strip().lower()
+        is_nav_command = any(w in clean_msg_nav for w in ("hola", "inicio", "reset", "menu", "menú", "bot", "empezar", "reiniciar", "reservar", "turno", "servicios"))
+
+        if not is_nav_command and (confidence < CONFIDENCE_THRESHOLD or intent == "UNKNOWN"):
+            conv["low_confidence_count"] = conv.get("low_confidence_count", 0) + 1
+            logger.info(f"Low confidence count for {sender_id}: {conv['low_confidence_count']}")
+        else:
+            conv["low_confidence_count"] = 0
+
+        # EXPERT HUMAN ESCALATION & PAUSED STATE TRIGGER:
+        # Triggered by explicit operator request OR 2 consecutive low-confidence classifications
+        if intent == "HUMAN_ESCALATION" or conv.get("low_confidence_count", 0) >= 2:
+            conv["stage"] = "PAUSED"
+            sender_name = conv.get("customer_name") or f"Cliente ({sender_id[-4:] if len(sender_id)>=4 else sender_id})"
+            summary = build_escalation_summary(conv, message)
+            await escalate_to_human(sender_id, sender_name, summary, message)
+            response = t("human_escalation", lang)
+            chat_history.append({"role": "model", "parts": [response]})
+            save_conversation_state(sender_id, conv)
+            return welcome_back_prefix + response
 
         # STEP 2: Handle thanks and small talk
         if intent == "THANKS":
@@ -380,28 +416,6 @@ async def _process_message_internal(
             "greeting", "service_selection", "date_selection",
             "name_input", "phone_input", "confirmation",
         }
-
-        # HUMAN ESCALATION
-        if intent == "HUMAN_ESCALATION":
-            conv["stage"] = "human_escalated"
-            sender_name = conv.get("customer_name") or f"Cliente ({sender_id[-4:] if len(sender_id)>=4 else sender_id})"
-            summary = build_escalation_summary(conv, message)
-            await escalate_to_human(sender_id, sender_name, summary, message)
-            response = t("human_escalation", lang)
-            chat_history.append({"role": "model", "parts": [response]})
-            save_conversation_state(sender_id, conv)
-            return welcome_back_prefix + response
-
-        if conv["stage"] == "human_escalated":
-            clean_check = message.strip().lower()
-            if any(w in clean_check for w in ("hola", "inicio", "reset", "menu", "menú", "bot", "empezar", "reiniciar")):
-                conv["stage"] = "greeting"
-                conv["fallback_count"] = 0
-            else:
-                response = t("human_notified", lang) + "\n\n_💡 Si preferís volver al asistente virtual, escribí *menu* o *hola*._"
-                chat_history.append({"role": "model", "parts": [response]})
-                save_conversation_state(sender_id, conv)
-                return response
 
         if conv["stage"] in flow_stages:
             if intent == "CONFIRM_APPOINTMENT":

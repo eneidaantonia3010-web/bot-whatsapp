@@ -586,6 +586,8 @@ export async function initNativeWhatsApp(): Promise<void> {
   }
 }
 
+export const initializeWhatsAppSocket = initNativeWhatsApp;
+
 export async function requestNativePairingCode(phoneNumber: string): Promise<string | null> {
   if (!sock) {
     console.warn('⚠️ Native WhatsApp socket is not initialized.');

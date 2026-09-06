@@ -35,7 +35,7 @@ import { appointmentCreationLimiter, publicApiLimiter, webhookLimiter } from './
 import { initCronJobs } from './services/cron';
 import { prisma } from './services/prisma';
 import { ensureAdminUserExists } from './services/seed-user';
-import { initNativeWhatsApp } from './services/whatsapp-native';
+import { initializeWhatsAppSocket } from './services/whatsapp-native';
 import { logger } from './services/logger';
 import { config } from './config';
 
@@ -163,7 +163,7 @@ if (process.env.NODE_ENV !== 'test') {
     initCronJobs();
 
     // Initialize Native In-App Baileys WhatsApp Service
-    initNativeWhatsApp();
+    initializeWhatsAppSocket();
   });
 
   // Graceful shutdown

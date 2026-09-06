@@ -15,6 +15,34 @@ export interface CreateAppointmentInput {
   recurrence?: string | null;
 }
 
+export interface TimeSlotAvailability {
+  time: string;
+  available: boolean;
+  score?: number;
+  isRecommended?: boolean;
+  gapReason?: string;
+}
+
+export interface SmartAvailabilityOptions {
+  staffId?: string;
+  recommendLimit?: number;
+  compactOnly?: boolean;
+}
+
+export interface SmartAvailabilityResult {
+  date: string;
+  serviceId: string;
+  serviceDuration: number;
+  totalSlots: number;
+  availableCount: number;
+  recommendedSlots: Array<{
+    time: string;
+    score: number;
+    reason: string;
+  }>;
+  slots: TimeSlotAvailability[];
+}
+
 export class AppointmentService {
   /**
    * Look up appointment by self-service portal token, with customer phone masked for privacy.
@@ -701,9 +729,225 @@ export class AppointmentService {
   }
 
   /**
-   * Calculate 30-minute slot availability for a given date and service.
+   * Pure mathematical function: scores available slots based on Smart Gaps logic
+   * (adjacency to confirmed appointments, opening/closing boundary alignment, anti-fragmentation, empty-day anchors)
    */
-  static async getAvailability(date: string, serviceId: string, staffId?: string) {
+  static scoreSlotsForSmartGaps(
+    slots: TimeSlotAvailability[],
+    existingAppointments: Array<{ date: Date | string; endDate: Date | string; status?: string }>,
+    serviceDuration: number,
+    recommendLimit: number = 4
+  ): {
+    scoredSlots: TimeSlotAvailability[];
+    recommended: Array<{ time: string; score: number; reason: string }>;
+  } {
+    const T_OPEN = 9 * 60; // 540 min (09:00 ART)
+    const T_CLOSE = 19 * 60; // 1140 min (19:00 ART)
+
+    // Helper to get minutes from midnight in ART
+    const getArtMinutes = (d: Date | string): number => {
+      if (typeof d === 'string' && /^\d{2}:\d{2}$/.test(d)) {
+        const [h, m] = d.split(':').map(Number);
+        return h * 60 + m;
+      }
+      const dateObj = typeof d === 'string' ? new Date(d) : d;
+      try {
+        const timeStr = dateObj.toLocaleTimeString('en-GB', {
+          timeZone: 'America/Argentina/Buenos_Aires',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+        const [h, m] = timeStr.split(':').map(Number);
+        return h * 60 + m;
+      } catch {
+        // Fallback: assume UTC-3
+        const utcHours = dateObj.getUTCHours();
+        const utcMinutes = dateObj.getUTCMinutes();
+        let artHours = utcHours - 3;
+        if (artHours < 0) artHours += 24;
+        return artHours * 60 + utcMinutes;
+      }
+    };
+
+    // Filter active confirmed/pending appointments and convert to intervals
+    const activeIntervals = existingAppointments
+      .filter((apt) => !apt.status || apt.status === 'CONFIRMED' || apt.status === 'PENDING')
+      .map((apt) => ({
+        start: getArtMinutes(apt.date),
+        end: getArtMinutes(apt.endDate),
+      }))
+      .filter((apt) => apt.end > T_OPEN && apt.start < T_CLOSE)
+      .sort((a, b) => a.start - b.start);
+
+    const hasExisting = activeIntervals.length > 0;
+
+    const scoredSlots: TimeSlotAvailability[] = slots.map((slot) => {
+      if (!slot.available) {
+        return {
+          ...slot,
+          score: 0,
+          isRecommended: false,
+          gapReason: 'unavailable',
+        };
+      }
+
+      const [sh, sm] = slot.time.split(':').map(Number);
+      const slotStart = sh * 60 + sm;
+      const slotEnd = slotStart + serviceDuration;
+
+      let score = 10;
+      const reasons: string[] = [];
+
+      // 1. Boundary alignment (Opening & Closing)
+      if (slotStart === T_OPEN) {
+        score += 90;
+        reasons.push('day_boundary_start');
+      }
+      if (slotEnd === T_CLOSE) {
+        score += 90;
+        reasons.push('day_boundary_end');
+      }
+
+      // 2. Empty day heuristics
+      if (!hasExisting) {
+        if (slotStart === 540) {
+          score += 90;
+          reasons.push('empty_day_anchor');
+        } else if (slotStart === 600) {
+          score += 70;
+          reasons.push('empty_day_anchor');
+        } else if (slotStart === 840) {
+          score += 60;
+          reasons.push('empty_day_anchor');
+        } else if (slotStart === 900) {
+          score += 50;
+          reasons.push('empty_day_anchor');
+        }
+      } else {
+        // 3. Proximity to existing confirmed appointments
+        let minDelta = Infinity;
+        let isBridge = false;
+
+        // Check if this slot fits exactly between two appointments (Bridge slot)
+        for (let i = 0; i < activeIntervals.length - 1; i++) {
+          const aptA = activeIntervals[i];
+          const aptB = activeIntervals[i + 1];
+          if (slotStart === aptA.end && slotEnd === aptB.start) {
+            score += 200;
+            reasons.push('bridge_slot');
+            isBridge = true;
+            break;
+          }
+        }
+
+        if (!isBridge) {
+          for (const apt of activeIntervals) {
+            if (slotEnd <= apt.start) {
+              const delta = apt.start - slotEnd;
+              if (delta < minDelta) minDelta = delta;
+            }
+            if (slotStart >= apt.end) {
+              const delta = slotStart - apt.end;
+              if (delta < minDelta) minDelta = delta;
+            }
+          }
+
+          if (minDelta === 0) {
+            score += 100;
+            reasons.push('adjacent_appointment_exact');
+          } else if (minDelta > 0 && minDelta <= 15) {
+            score += 80;
+            reasons.push('adjacent_appointment_buffer');
+          } else if (minDelta > 15 && minDelta <= 30) {
+            score += 40;
+            reasons.push('adjacent_appointment_near');
+          }
+        }
+
+        // 4. Anti-fragmentation penalty (orphan gap < 30 min)
+        let prevLimit = T_OPEN;
+        for (const apt of activeIntervals) {
+          if (apt.end <= slotStart && apt.end > prevLimit) {
+            prevLimit = apt.end;
+          }
+        }
+        const gapBefore = slotStart - prevLimit;
+        if (gapBefore > 0 && gapBefore < 30) {
+          score -= 60;
+          reasons.push('orphan_gap_before');
+        }
+
+        let nextLimit = T_CLOSE;
+        for (const apt of activeIntervals) {
+          if (apt.start >= slotEnd && apt.start < nextLimit) {
+            nextLimit = apt.start;
+          }
+        }
+        const gapAfter = nextLimit - slotEnd;
+        if (gapAfter > 0 && gapAfter < 30) {
+          score -= 60;
+          reasons.push('orphan_gap_after');
+        }
+      }
+
+      return {
+        ...slot,
+        score: Math.max(0, score),
+        isRecommended: false,
+        gapReason: reasons.join(';') || 'standard_slot',
+      };
+    });
+
+    // Pick top recommended slots
+    const availableSlots = scoredSlots.filter((s) => s.available);
+    const topRecommended = [...availableSlots]
+      .sort((a, b) => {
+        if ((b.score ?? 0) !== (a.score ?? 0)) {
+          return (b.score ?? 0) - (a.score ?? 0);
+        }
+        const [ah, am] = a.time.split(':').map(Number);
+        const [bh, bm] = b.time.split(':').map(Number);
+        return (ah * 60 + am) - (bh * 60 + bm);
+      })
+      .slice(0, recommendLimit);
+
+    const recommendedTimes = new Set(topRecommended.map((s) => s.time));
+
+    scoredSlots.forEach((slot) => {
+      if (recommendedTimes.has(slot.time)) {
+        slot.isRecommended = true;
+      }
+    });
+
+    const recommendedList = topRecommended
+      .sort((a, b) => {
+        const [ah, am] = a.time.split(':').map(Number);
+        const [bh, bm] = b.time.split(':').map(Number);
+        return (ah * 60 + am) - (bh * 60 + bm);
+      })
+      .map((s) => ({
+        time: s.time,
+        score: s.score ?? 0,
+        reason: s.gapReason || 'recommended',
+      }));
+
+    return {
+      scoredSlots,
+      recommended: recommendedList,
+    };
+  }
+
+  /**
+   * Calculate 30-minute slot availability for a given date and service,
+   * enriched with predictive Smart Gaps scoring and optional compact filtering.
+   */
+  static async getAvailability(
+    date: string,
+    serviceId: string,
+    staffId?: string,
+    options?: SmartAvailabilityOptions
+  ): Promise<TimeSlotAvailability[] | null> {
     const service = await AppointmentService.resolveService(serviceId);
     if (!service) return null;
 
@@ -738,7 +982,7 @@ export class AppointmentService {
     }
 
     const now = Date.now();
-    const slots: Array<{ time: string; available: boolean }> = [];
+    const rawSlots: TimeSlotAvailability[] = [];
 
     for (let h = 9; h < 19; h++) {
       for (const m of [0, 30]) {
@@ -746,7 +990,7 @@ export class AppointmentService {
         const slotEnd = new Date(slotStart.getTime() + service.duration * 60000);
 
         if (slotEnd.getTime() > dayEnd.getTime()) {
-          slots.push({ time: `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`, available: false });
+          rawSlots.push({ time: `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`, available: false });
           continue;
         }
 
@@ -770,13 +1014,61 @@ export class AppointmentService {
           return slotStart < busyEnd && slotEnd > busyStart;
         });
 
-        slots.push({
+        rawSlots.push({
           time: `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`,
           available: !isPast && !hasConflict && !hasBlockedConflict && !calBusy,
         });
       }
     }
 
-    return slots;
+    const { scoredSlots } = AppointmentService.scoreSlotsForSmartGaps(
+      rawSlots,
+      existing,
+      service.duration,
+      options?.recommendLimit ?? 4
+    );
+
+    if (options?.compactOnly) {
+      return scoredSlots.filter((s) => s.isRecommended);
+    }
+
+    return scoredSlots;
+  }
+
+  /**
+   * Returns a complete Smart Gaps analysis for a date and service with recommended slots metadata.
+   */
+  static async getSmartAvailability(
+    date: string,
+    serviceId: string,
+    options?: SmartAvailabilityOptions
+  ): Promise<SmartAvailabilityResult | null> {
+    const service = await AppointmentService.resolveService(serviceId);
+    if (!service) return null;
+
+    const slots = await AppointmentService.getAvailability(date, serviceId, options?.staffId, {
+      ...options,
+      compactOnly: false,
+    });
+    if (!slots) return null;
+
+    const availableCount = slots.filter((s) => s.available).length;
+    const recommended = slots
+      .filter((s) => s.isRecommended)
+      .map((s) => ({
+        time: s.time,
+        score: s.score ?? 0,
+        reason: s.gapReason || 'recommended',
+      }));
+
+    return {
+      date: date.split('T')[0],
+      serviceId: service.id,
+      serviceDuration: service.duration,
+      totalSlots: slots.length,
+      availableCount,
+      recommendedSlots: recommended,
+      slots,
+    };
   }
 }

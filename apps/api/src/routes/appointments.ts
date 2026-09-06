@@ -248,18 +248,22 @@ appointmentsRouter.patch('/:id', requireAdmin, async (req: Request, res: Respons
   }
 });
 
-// GET /api/appointments/availability — Get available time slots for a date
+// GET /api/appointments/availability — Get available time slots for a date (supports ?compact=true&limit=4)
 appointmentsRouter.get('/availability', async (req: Request, res: Response) => {
   try {
-    const { date, serviceId, staffId } = req.query;
+    const { date, serviceId, staffId, compact, limit } = req.query;
     if (!date || !serviceId) {
       return res.status(400).json({ error: 'date and serviceId are required' });
     }
 
+    const isCompact = compact === 'true' || compact === '1';
+    const recommendLimit = limit ? Math.max(1, Math.min(10, Number(limit))) : undefined;
+
     const slots = await AppointmentService.getAvailability(
       date as string,
       serviceId as string,
-      staffId as string | undefined
+      staffId as string | undefined,
+      { compactOnly: isCompact, recommendLimit }
     );
 
     if (slots === null) {
@@ -270,5 +274,32 @@ appointmentsRouter.get('/availability', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error checking availability:', error);
     res.status(500).json({ error: 'Failed to check availability' });
+  }
+});
+
+// GET /api/appointments/smart-availability — Get full Smart Gaps analysis with recommended metadata
+appointmentsRouter.get('/smart-availability', async (req: Request, res: Response) => {
+  try {
+    const { date, serviceId, staffId, limit } = req.query;
+    if (!date || !serviceId) {
+      return res.status(400).json({ error: 'date and serviceId are required' });
+    }
+
+    const recommendLimit = limit ? Math.max(1, Math.min(10, Number(limit))) : undefined;
+
+    const result = await AppointmentService.getSmartAvailability(
+      date as string,
+      serviceId as string,
+      { staffId: staffId as string | undefined, recommendLimit }
+    );
+
+    if (result === null) {
+      return res.status(400).json({ error: 'Invalid date or service not found' });
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error checking smart availability:', error);
+    res.status(500).json({ error: 'Failed to check smart availability' });
   }
 });

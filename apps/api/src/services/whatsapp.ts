@@ -217,15 +217,28 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
       });
 
       if (upcomingApt) {
+        const now = Date.now();
+        const aptTime = new Date(upcomingApt.date).getTime();
+        const diffHours = (aptTime - now) / (1000 * 60 * 60);
+
+        const cancellationNote = diffHours < 2
+          ? 'Cancelado vía respuesta de confirmación WhatsApp (<2hs de anticipación)'
+          : 'Cancelado vía respuesta de confirmación WhatsApp';
+
         await prisma.appointment.update({
           where: { id: upcomingApt.id },
           data: {
             status: 'CANCELLED',
-            notes: (upcomingApt.notes ? upcomingApt.notes + ' | ' : '') + 'Cancelado vía respuesta de confirmación WhatsApp',
+            notes: (upcomingApt.notes ? upcomingApt.notes + ' | ' : '') + cancellationNote,
           },
         });
 
-        const reply = `Entendido ${upcomingApt.customer.name}. Tu turno para *${upcomingApt.service.name}* ha sido *cancelado*.\n\nCuando desees reprogramar, escribinos o reservá desde nuestra web. ¡Que tengas un lindo día! 💕`;
+        let policyNotice = '';
+        if (diffHours < 2) {
+          policyNotice = '\n\n⚠️ *Política del salón:* Te recordamos con cariño que solicitamos avisar con al menos *2 horas de anticipación* para que otra clienta en lista de espera pueda aprovechar el lugar. Por esta vez no te preocupes 💕';
+        }
+
+        const reply = `Entendido ${upcomingApt.customer.name}. Tu turno para *${upcomingApt.service.name}* ha sido *cancelado*.${policyNotice}\n\nCuando desees reprogramar, escribinos o reservá desde nuestra web. ¡Que tengas un lindo día! 💕`;
         await sendWhatsAppMessage({ to: remoteJid, message: reply });
         return { status: 'cancelled', detail: upcomingApt.id };
       }

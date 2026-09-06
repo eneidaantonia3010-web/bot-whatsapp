@@ -160,3 +160,43 @@ def extract_and_remember_preferences(phone: str, message: str):
             remember_preference(phone, "preferred_day", d.capitalize())
             break
 
+
+def detect_cross_sell_opportunity(phone: str, selected_service: Optional[dict]) -> Optional[dict]:
+    """
+    Detects if a customer who frequently gets color treatments is currently only booking a haircut,
+    and returns a personalized, subtle recommendation for a complementary benefit.
+    """
+    if not phone or not selected_service:
+        return None
+
+    service_name = (selected_service.get("name") or "").lower()
+    # Check if currently booked service is a haircut without color
+    is_haircut = any(w in service_name for w in ("corte", "peinado", "brushing", "lavado"))
+    has_color_now = any(w in service_name for w in ("color", "tintura", "tinte", "mecha", "balayage", "reflejo", "decolora", "ilumina"))
+
+    if not is_haircut or has_color_now:
+        return None
+
+    profile = build_structured_customer_profile(phone)
+    fav_services = [s.lower() for s in profile.get("favorite_services", [])]
+    fav_categories = [c.upper() for c in profile.get("favorite_categories", [])]
+
+    # Check color affinity in past profile
+    has_color_affinity = (
+        "COLORACION" in fav_categories
+        or any(any(k in s for k in ("color", "tintura", "tinte", "mecha", "balayage", "reflejo")) for s in fav_services)
+    )
+
+    if not has_color_affinity:
+        return None
+
+    return {
+        "opportunity": True,
+        "affinity": "coloración frecuente",
+        "suggested_treatment": "Baño de Luz / Nutrición Brillo",
+        "message_hint": (
+            "💡 *Beneficio para vos:* Noté en tu historial que solés cuidar tu color 💕 "
+            "¿Te gustaría sumar un *Baño de Luz o Nutrición Express* con beneficio especial para que tu corte luzca aún más radiante? ✨"
+        ),
+    }
+

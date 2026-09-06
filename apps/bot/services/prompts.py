@@ -129,3 +129,31 @@ SYSTEM_PERSONALITY_MAP = {
     "en": SYSTEM_PERSONALITY_EN,
 }
 
+# Prompt para manejo inteligente de objeciones (horarios no convenientes, precios, indecisión)
+OBJECTION_HANDLING_PROMPT = (
+    "El cliente expresó una objeción o duda sobre los horarios, servicios o catálogo en Glow Studio by Sofia:\n"
+    "Mensaje del usuario:\n"
+    '"""{message}"""\n\n'
+    "Contexto actual de la reserva: {context}\n\n"
+    "Instrucciones para SofiaBot:\n"
+    "1. Mostrá empatía y calidez inmediata (en argentino con 'vos', tono cercano y breve, máximo 3 líneas).\n"
+    "2. Sugerí activamente una alternativa concreta:\n"
+    "   - Si los horarios de un día no le sirven o están ocupados: ofrecé revisar otro día o anotala en la *lista de espera* "
+    "(ej. '¿Preferís que te anote en la lista de espera para el sábado por si se libera un espacio? 💕').\n"
+    "   - Si objeta precio o catálogo: orientá hacia opciones más ligeras o consultá qué resultado específico busca para asesorarla.\n"
+    "3. No inventes precios ni servicios fuera del catálogo. Terminá siempre con una pregunta cordial para continuar."
+)
+
+# Prompt para sugerencias de promociones cruzadas (cross-selling personalizado y sutil)
+CROSS_SELL_PROMPT = (
+    "Generá una sugerencia de venta cruzada sutil y cariñosa para una clienta habitual de Glow Studio by Sofia.\n"
+    "Clienta: {customer_name}\n"
+    "Servicio que está reservando hoy: {booked_service}\n"
+    "Historial y afinidad previa: {affinity_details}\n"
+    "Tratamiento complementario sugerido: {suggested_service}\n\n"
+    "Instrucciones:\n"
+    "- Resaltá en máximo 2 líneas de forma dulce y no invasiva que notaste su preferencia habitual.\n"
+    "- Preguntale amablemente si le gustaría sumarlo a su turno de hoy como beneficio o mimo especial.\n"
+    "- En español argentino cálido y breve."
+)
+

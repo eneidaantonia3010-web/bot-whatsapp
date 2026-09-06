@@ -51,7 +51,12 @@ from services.intent_classifier import (
 )
 from services.language_detector import detect_language, t
 from services.escalation import escalate_to_human, build_escalation_summary
-from services.memory import format_memory_system_context, remember_preference, extract_and_remember_preferences
+from services.memory import (
+    format_memory_system_context,
+    remember_preference,
+    extract_and_remember_preferences,
+    detect_cross_sell_opportunity,
+)
 from services.admin_commands import handle_admin_command
 from services.prompts import (
     SERVICE_HELP_PROMPT,
@@ -60,6 +65,8 @@ from services.prompts import (
     BOOKING_EXTRACTION_PROMPT,
     MULTI_SERVICE_EXTRACTION_PROMPT,
     SYSTEM_PERSONALITY_MAP,
+    OBJECTION_HANDLING_PROMPT,
+    CROSS_SELL_PROMPT,
 )
 from services.formatters import (
     format_services_catalog,
@@ -300,6 +307,7 @@ async def _process_message_internal(
 
         conv = get_conversation(sender_id)
         chat_history = conv["chat_history"]
+        clean_msg = message.strip().lower()
 
         # Continuous Language Detection
         lang = conv.get("language", "es")
@@ -419,7 +427,16 @@ async def _process_message_internal(
         }
 
         if conv["stage"] in flow_stages:
-            if intent == "CONFIRM_APPOINTMENT":
+            is_cross_sell_acceptance = (
+                conv.get("stage") == "date_selection"
+                and conv.get("cross_sell_offered")
+                and any(w in clean_msg for w in (
+                    "sumalo", "sumar", "agregalo", "agregar", "dale", "si, sumalo", "sí, sumalo", "me gusta",
+                    "bano de luz", "baño de luz", "nutricion", "nutrición"
+                ))
+            )
+
+            if intent == "CONFIRM_APPOINTMENT" and not is_cross_sell_acceptance:
                 conv["fallback_count"] = 0
                 confirmed_apt = await confirm_upcoming_appointment(
                     phone=clean_phone, instagram=sender_id
@@ -456,10 +473,29 @@ async def _process_message_internal(
                     conv["stage"] = "confirm_cancellation"
                     service_name = apt.get("service", {}).get("name", "Servicio")
                     date_display = format_appointment_datetime(apt.get("date"))
+
+                    policy_notice = ""
+                    try:
+                        raw_date = apt.get("date")
+                        if raw_date:
+                            if isinstance(raw_date, str):
+                                apt_dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00")).astimezone(TZ_AR)
+                            elif isinstance(raw_date, datetime):
+                                apt_dt = raw_date if raw_date.tzinfo else TZ_AR.localize(raw_date)
+                            diff_hours = (apt_dt - datetime.now(TZ_AR)).total_seconds() / 3600.0
+                            if 0 <= diff_hours < 2:
+                                policy_notice = (
+                                    "\n\n⚠️ *Aviso de Política:* Faltan menos de 2 horas para tu turno. "
+                                    "Te recordamos con cariño que solicitamos avisar con al menos 2 horas de anticipación "
+                                    "para dar lugar a la lista de espera."
+                                )
+                    except Exception as date_err:
+                        logger.warning(f"Error calculating cancellation window: {date_err}")
+
                     response = (
                         f"📅 Tenés un turno agendado:\n"
                         f"💇 *{service_name}*\n"
-                        f"⏰ *{date_display}*\n\n"
+                        f"⏰ *{date_display}*{policy_notice}\n\n"
                         f"¿Confirmás que querés cancelarlo? "
                         f"Escribí *sí* para cancelar o *no* para mantenerlo 💕"
                     )
@@ -604,9 +640,18 @@ async def _process_message_internal(
                 conv["stage"] = "date_selection"
 
                 price_str = _format_price(matched_service["price"])
+
+                # Check for subtle cross-sell opportunity based on long-term memory
+                cross_sell_text = ""
+                clean_phone = normalize_phone(conv.get("customer_phone") or sender_id)
+                cross_sell = detect_cross_sell_opportunity(clean_phone, matched_service)
+                if cross_sell:
+                    cross_sell_text = f"\n\n{cross_sell['message_hint']}"
+                    conv["cross_sell_offered"] = cross_sell["suggested_treatment"]
+
                 response = (
                     f"¡Excelente elección! 💇 *{matched_service['name']}* "
-                    f"({price_str}, {matched_service['duration']}min).\n\n"
+                    f"({price_str}, {matched_service['duration']}min).{cross_sell_text}\n\n"
                     f"¿Para qué día y hora te gustaría reservar? "
                     f"(ejemplo: _\"mañana 14hs\"_, _\"jueves 16:30\"_ o _\"el 15 a las 11\"_) ✨"
                 )
@@ -616,6 +661,33 @@ async def _process_message_internal(
                 gallery = get_gallery_image_for_category(matched_service.get("category", ""))
                 if gallery and gallery.get("url"):
                     return {"response": welcome_back_prefix + response, "image_url": gallery["url"]}
+                return welcome_back_prefix + response
+
+            # Check for objection on price, catalog or doubts
+            is_service_objection = any(w in clean_msg for w in (
+                "muy caro", "carisimo", "carísimo", "mas barato", "más barato", "no me convence",
+                "no me gusta", "tienen otra cosa", "otro servicio", "no veo", "descuento", "promo"
+            ))
+            if is_service_objection:
+                services = get_services()
+                services_catalog = format_services_catalog(services)
+                objection_prompt = OBJECTION_HANDLING_PROMPT.replace("{message}", message).replace(
+                    "{context}", f"Catálogo disponible:\n{services_catalog}"
+                )
+                ai_response = await llm_pool.get_completion_async(
+                    messages=chat_history[-8:],
+                    system_msg=system_personality + "\n" + objection_prompt,
+                    model="llama-3.1-8b-instant",
+                    max_tokens=150,
+                )
+                if not ai_response:
+                    ai_response = (
+                        "Entiendo tu consulta 💕 Tenemos opciones adaptadas a cada gusto y necesidad. "
+                        "¿Qué estilo o resultado estás buscando para recomendarte la mejor alternativa? ✨"
+                    )
+                response = _apply_output_guardrails(ai_response)
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
                 return welcome_back_prefix + response
 
             # Increment fallback count
@@ -674,6 +746,25 @@ async def _process_message_internal(
                 delete_conversation_state(sender_id)
                 chat_history.append({"role": "model", "parts": [response]})
                 return welcome_back_prefix + response
+
+            # Check if user accepts cross-sell offer
+            if conv.get("cross_sell_offered") and any(w in clean_msg for w in (
+                "sumalo", "sumar", "agregalo", "agregar", "dale", "si, sumalo", "sí, sumalo", "me gusta",
+                "bano de luz", "baño de luz", "nutricion", "nutrición"
+            )):
+                services = get_services()
+                treatment = next((s for s in services if any(k in s["name"].lower() for k in ("luz", "nutrici", "brillo"))), None)
+                if treatment and treatment not in conv.get("selected_services", []):
+                    conv["selected_services"].append(treatment)
+                    conv["cross_sell_offered"] = None
+                    response = (
+                        f"¡Qué linda elección! 💕 Sumamos *{treatment['name']}* ({_format_price(treatment['price'])}) a tu turno.\n\n"
+                        f"¿Para qué día y horario te gustaría agendar? "
+                        f"(ejemplo: _\"mañana 14hs\"_ o _\"jueves 16:30\"_) ✨"
+                    )
+                    chat_history.append({"role": "model", "parts": [response]})
+                    save_conversation_state(sender_id, conv)
+                    return welcome_back_prefix + response
 
             # Aviso explícito si menciona domingo o si pide turno para un domingo (ej. "mañana" en sábado)
             today_dt = datetime.now(TZ_AR).date()
@@ -748,6 +839,33 @@ async def _process_message_internal(
                 summary = build_escalation_summary(conv, message)
                 await escalate_to_human(sender_id, sender_name, summary, message)
                 response = "Se me está complicando interpretar la fecha u horario. Ya le avisé a Sofía para coordinar tu turno directamente por WhatsApp 💕"
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return welcome_back_prefix + response
+
+            # Check for schedule objection / hesitation (propose waitlist or alternatives)
+            is_schedule_objection = any(w in clean_msg for w in (
+                "ninguno", "no puedo", "muy tarde", "muy temprano", "no me sirve", "no me convence",
+                "ocupado", "otro dia", "otro día", "otro horario", "otra hora", "otra fecha",
+                "no llego", "complicado", "mas temprano", "más temprano", "mas tarde", "más tarde"
+            ))
+            if is_schedule_objection:
+                service = conv.get("selected_service") or {}
+                service_name = service.get("name", "tu servicio")
+                context = f"Servicio seleccionado: {service_name}. Horarios del salón: Lun a Sáb 9-19hs."
+                objection_prompt = OBJECTION_HANDLING_PROMPT.replace("{message}", message).replace("{context}", context)
+                ai_response = await llm_pool.get_completion_async(
+                    messages=chat_history[-8:],
+                    system_msg=system_personality + "\n" + objection_prompt,
+                    model="llama-3.1-8b-instant",
+                    max_tokens=150,
+                )
+                if not ai_response:
+                    ai_response = (
+                        f"¡Entiendo totalmente! 💕 ¿Preferís que te anote en la *lista de espera* para el sábado "
+                        f"por si se libera un espacio, o te gustaría revisar opciones para otro día de la semana? ✨"
+                    )
+                response = _apply_output_guardrails(ai_response)
                 chat_history.append({"role": "model", "parts": [response]})
                 save_conversation_state(sender_id, conv)
                 return welcome_back_prefix + response
@@ -913,12 +1031,29 @@ async def _process_message_internal(
             confirmed = _is_close_confirmation_answer(message)
 
             if confirmed is True and apt:
+                policy_reminder = ""
+                try:
+                    raw_date = apt.get("date")
+                    if raw_date:
+                        if isinstance(raw_date, str):
+                            apt_dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00")).astimezone(TZ_AR)
+                        elif isinstance(raw_date, datetime):
+                            apt_dt = raw_date if raw_date.tzinfo else TZ_AR.localize(raw_date)
+                        diff_hours = (apt_dt - datetime.now(TZ_AR)).total_seconds() / 3600.0
+                        if 0 <= diff_hours < 2:
+                            policy_reminder = (
+                                "\n\n⚠️ *Aviso de Política:* Por favor recordá para la próxima avisar con al menos "
+                                "2 horas de anticipación para que otra clienta pueda aprovechar el espacio 💕"
+                            )
+                except Exception as date_err:
+                    logger.warning(f"Error calculating cancellation window: {date_err}")
+
                 await cancel_appointment(apt["id"])
                 service_name = apt.get("service", {}).get("name", "tu servicio")
                 date_display = format_appointment_datetime(apt.get("date"))
                 response = (
                     f"✅ Listo, tu turno para *{service_name}* del *{date_display}* "
-                    f"ha sido cancelado con éxito.\n\n"
+                    f"ha sido cancelado con éxito.{policy_reminder}\n\n"
                     f"Cuando quieras volver a visitarnos, estamos para ayudarte 💕"
                 )
                 conversations.pop(sender_id, None)

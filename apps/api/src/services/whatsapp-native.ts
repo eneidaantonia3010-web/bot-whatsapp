@@ -109,6 +109,80 @@ export function cacheSentMessage(id: string, message: proto.IMessage) {
   }
 }
 
+/**
+ * Filters out old or stale messages, particularly those with decryption failures or stubs,
+ * preventing them from clogging the Node.js Event Loop or triggering unnecessary processing.
+ */
+export function shouldIgnoreOldMessages(msg: any, maxAgeSeconds = 180): boolean {
+  if (!msg) return true;
+
+  // Ignore outbound messages from our own socket
+  if (msg.key?.fromMe) return true;
+
+  // Parse message timestamp (seconds)
+  const rawTimestamp = msg.messageTimestamp;
+  const timestamp =
+    typeof rawTimestamp === 'number'
+      ? rawTimestamp
+      : typeof rawTimestamp?.toNumber === 'function'
+      ? rawTimestamp.toNumber()
+      : Number(rawTimestamp) || 0;
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  // If timestamp is present, calculate age in seconds
+  if (timestamp > 0) {
+    const ageSeconds = nowSeconds - timestamp;
+    if (ageSeconds > maxAgeSeconds) {
+      return true;
+    }
+
+    // If it has decryption issues (no message body or stub type) and is not fresh (> 30 seconds)
+    const hasCryptoIssue =
+      !msg.message ||
+      Object.keys(msg.message).length === 0 ||
+      Boolean(msg.messageStubType);
+
+    if (hasCryptoIssue && ageSeconds > 30) {
+      return true;
+    }
+  }
+
+  // Any message with explicit stub indicating decryption failure (e.g. CIPHERTEXT = 2)
+  if (msg.messageStubType) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Detects internal WhatsApp protocol signals that are not user messages
+ * and should not be treated as decryption errors.
+ */
+export function isProtocolSignal(message: any): boolean {
+  if (!message) return false;
+  return Boolean(
+    message.protocolMessage ||
+      message.reactionMessage ||
+      message.senderKeyDistributionMessage ||
+      message.chat ||
+      message.keepAliveMessage
+  );
+}
+
+let consecutiveDecryptionFailures = 0;
+export const MAX_CONSECUTIVE_DECRYPTION_FAILURES = 3;
+let isReconnectingForCryptoSync = false;
+
+export function getConsecutiveDecryptionFailures(): number {
+  return consecutiveDecryptionFailures;
+}
+
+export function resetConsecutiveDecryptionFailures(): void {
+  consecutiveDecryptionFailures = 0;
+}
+
 function getBotUrl(): string {
   let url = (config.BOT_URL || '').trim().replace(/\/$/, '');
   if (!url || url === 'https://glow-studio-bot.onrender.com') {
@@ -128,6 +202,39 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 15;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let isInitializing = false;
+
+/**
+ * Re-synchronizes auth state and re-establishes the socket connection
+ * when repeated decryption failures are detected.
+ * CRITICAL: Preserves database session credentials (NEVER calls clearAuthState).
+ */
+export async function forceAuthSyncAndReconnect(): Promise<void> {
+  if (isReconnectingForCryptoSync) {
+    console.log('⚠️ [Baileys] Auth state refresh and reconnection already in progress, skipping duplicate.');
+    return;
+  }
+  isReconnectingForCryptoSync = true;
+  console.warn(`🔄 [Baileys] Reconnecting and refreshing Auth State from Neon DB after ${consecutiveDecryptionFailures} decryption failures...`);
+
+  try {
+    consecutiveDecryptionFailures = 0;
+
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+
+    await destroyCurrentSocket();
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    await initNativeWhatsApp();
+    console.log('✅ [Baileys] Auth State refresh & socket reconnection complete without session loss.');
+  } catch (err: any) {
+    console.error('❌ [Baileys] Error during Auth State refresh and reconnection:', err?.message || err);
+  } finally {
+    isReconnectingForCryptoSync = false;
+  }
+}
 
 function getReconnectDelay(attempt: number): number {
   const base = Math.min(1000 * Math.pow(2, attempt), 30000);
@@ -229,6 +336,7 @@ export async function destroyCurrentSocket(): Promise<void> {
       sock.ev.removeAllListeners('creds.update');
       sock.ev.removeAllListeners('connection.update');
       sock.ev.removeAllListeners('messages.upsert');
+      sock.ev.removeAllListeners('messages.update');
       sock.ws?.close();
       sock.end(undefined);
     } catch (e) {
@@ -385,25 +493,88 @@ export async function initNativeWhatsApp(): Promise<void> {
       }
     });
 
+    // Listen for message updates (e.g. decryption stub updates from WhatsApp)
+    sock.ev.on('messages.update', async (updates: any[]) => {
+      for (const update of updates) {
+        if (update.update?.messageStubType) {
+          console.warn(
+            `⚠️ [Baileys messages.update] Decryption stub update for ${update.key?.id}: stub ${update.update.messageStubType}`
+          );
+          consecutiveDecryptionFailures++;
+          if (consecutiveDecryptionFailures >= MAX_CONSECUTIVE_DECRYPTION_FAILURES) {
+            await forceAuthSyncAndReconnect();
+          }
+        }
+      }
+    });
+
     // Incoming messages handler
     sock.ev.on('messages.upsert', async (m: any) => {
       if (m.type !== 'notify') return;
 
       for (const msg of m.messages) {
-        if (!msg.message || msg.key.fromMe) continue;
+        if (!msg || msg.key?.fromMe) continue;
 
-        const remoteJid = msg.key.remoteJid;
+        const remoteJid = msg.key?.remoteJid;
         if (!remoteJid || isJidGroup(remoteJid) || isJidBroadcast(remoteJid)) continue;
+
+        // 1. Filter out old messages, decryption failure stubs, or stale backlogs to protect the Event Loop
+        if (shouldIgnoreOldMessages(msg)) {
+          console.log(
+            `⏳ [Baileys] Ignored old/stale message (${msg.key?.id}, timestamp: ${msg.messageTimestamp}) to keep Event Loop responsive.`
+          );
+          continue;
+        }
+
+        // 2. Filter internal protocol signals (keepAlive, reactions, protocolMessages)
+        if (isProtocolSignal(msg.message)) {
+          continue;
+        }
+
+        // 3. Unwrap ephemeral / viewOnce containers
+        const contentMessage =
+          msg.message?.ephemeralMessage?.message ||
+          msg.message?.viewOnceMessageV2?.message ||
+          msg.message?.viewOnceMessage?.message ||
+          msg.message?.documentWithCaptionMessage?.message ||
+          msg.message;
+
+        // 4. Check for cryptographic decryption failure
+        const isDecryptionFailure =
+          !contentMessage ||
+          Object.keys(contentMessage).length === 0 ||
+          Boolean(msg.messageStubType);
+
+        if (isDecryptionFailure) {
+          consecutiveDecryptionFailures++;
+          console.warn(
+            `⚠️ [Baileys Crypto] Decryption failure #${consecutiveDecryptionFailures} for message ${msg.key?.id} from ${remoteJid} (stub: ${msg.messageStubType || 'empty'}). Waiting defensively for new user message.`
+          );
+
+          // Defensive: Ensure typing status is NOT active
+          if (sock && connectionState === 'open') {
+            try {
+              await sock.sendPresenceUpdate('paused', remoteJid);
+            } catch {
+              // Ignore presence error
+            }
+          }
+
+          if (consecutiveDecryptionFailures >= MAX_CONSECUTIVE_DECRYPTION_FAILURES) {
+            await forceAuthSyncAndReconnect();
+          }
+          continue;
+        }
 
         // Extract text message (or transcribe audio)
         let textMessage =
-          msg.message.conversation ||
-          msg.message.extendedTextMessage?.text ||
-          msg.message.imageMessage?.caption ||
-          msg.message.videoMessage?.caption;
+          contentMessage.conversation ||
+          contentMessage.extendedTextMessage?.text ||
+          contentMessage.imageMessage?.caption ||
+          contentMessage.videoMessage?.caption;
 
         // Handle audio/voice messages via transcription
-        const hasAudio = msg.message.audioMessage;
+        const hasAudio = contentMessage.audioMessage;
         if (!textMessage && hasAudio) {
           const transcribedText = await transcribeAudioMessage(msg);
           if (transcribedText) {
@@ -412,7 +583,7 @@ export async function initNativeWhatsApp(): Promise<void> {
         }
 
         // Handle image messages via Groq Vision analysis
-        const hasImage = msg.message.imageMessage;
+        const hasImage = contentMessage.imageMessage;
         if (!textMessage && hasImage) {
           try {
             const buffer = await downloadMediaMessage(msg, 'buffer', {}, {
@@ -438,9 +609,9 @@ export async function initNativeWhatsApp(): Promise<void> {
                   sender_id: msg.key.remoteJid,
                   caption: hasImage.caption || '',
                 }),
-                signal: visionController.signal
+                signal: visionController.signal,
               });
-              
+
               clearTimeout(visionTimeout);
 
               if (visionResp.ok) {
@@ -460,16 +631,33 @@ export async function initNativeWhatsApp(): Promise<void> {
           }
         }
 
-        if (!textMessage) continue;
+        // 5. Defensive check: If message has no valid text or media, pause presence and wait for new message
+        if (!textMessage || !textMessage.trim()) {
+          console.warn(
+            `⚠️ [Baileys] Incoming message from ${remoteJid} has no valid text content. Waiting defensively for a new user message.`
+          );
+          if (sock && connectionState === 'open') {
+            try {
+              await sock.sendPresenceUpdate('paused', remoteJid);
+            } catch {
+              // Ignore presence error
+            }
+          }
+          continue;
+        }
 
-        if (msg.key?.id && msg.message) {
-          cacheSentMessage(msg.key.id, msg.message);
+        // Successfully decoded and verified message: reset crypto failure count
+        consecutiveDecryptionFailures = 0;
+
+        if (msg.key?.id && contentMessage) {
+          cacheSentMessage(msg.key.id, contentMessage);
         }
 
         const senderName = msg.pushName || remoteJid.split('@')[0];
-        const targetJid = remoteJid.endsWith('@lid') && ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
-          ? ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
-          : remoteJid;
+        const targetJid =
+          remoteJid.endsWith('@lid') && ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
+            ? (msg.key as any).remoteJidAlt || (msg.key as any).participantPn
+            : remoteJid;
 
         const clearPresence = async () => {
           if (sock && connectionState === 'open') {
@@ -484,12 +672,11 @@ export async function initNativeWhatsApp(): Promise<void> {
           }
         };
 
-        // Send instant read receipt and start typing indicator
+        // Send read receipt without triggering premature composing indicator
         if (sock && connectionState === 'open') {
           try {
             await sock.readMessages([msg.key]);
             await sock.presenceSubscribe(remoteJid);
-            await sock.sendPresenceUpdate('composing', remoteJid);
           } catch (pErr) {
             // Ignore presence startup error
           }

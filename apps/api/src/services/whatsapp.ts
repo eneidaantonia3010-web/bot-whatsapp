@@ -159,8 +159,12 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
       '';
 
     text = typeof text === 'string' ? text.trim() : '';
-    if (!text) {
-      return { status: 'empty_message' };
+    if (data.messageStubType || !text) {
+      console.warn(`⚠️ [Webhook] Incoming message has no valid text or has cryptographic stub (${data.messageStubType || 'empty'}). Waiting defensively for new user message.`);
+      return {
+        status: 'crypto_error_waiting_new_message',
+        detail: 'Empty text or cryptographic failure, waiting for new message',
+      };
     }
 
     const cleanText = text

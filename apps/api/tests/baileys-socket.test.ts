@@ -12,6 +12,11 @@ import {
   messageStoreCache,
   msgRetryCounterCache,
   cacheSentMessage,
+  shouldIgnoreOldMessages,
+  isProtocolSignal,
+  getConsecutiveDecryptionFailures,
+  resetConsecutiveDecryptionFailures,
+  forceAuthSyncAndReconnect,
 } from '../src/services/whatsapp-native';
 import {
   enqueueForSender,
@@ -217,6 +222,82 @@ describe('Baileys Native Socket & Queuing System', () => {
 
       msgRetryCounterCache.del('msg_retry_1');
       expect(msgRetryCounterCache.get('msg_retry_1')).toBeUndefined();
+    });
+  });
+
+  describe('Old Message Filtering (shouldIgnoreOldMessages)', () => {
+    it('should ignore null, undefined, or outbound messages', () => {
+      expect(shouldIgnoreOldMessages(null)).toBe(true);
+      expect(shouldIgnoreOldMessages(undefined)).toBe(true);
+      expect(shouldIgnoreOldMessages({ key: { fromMe: true } })).toBe(true);
+    });
+
+    it('should ignore messages older than 180 seconds to protect Event Loop', () => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const oldMsg = {
+        key: { fromMe: false, id: 'old_123' },
+        messageTimestamp: nowSec - 250,
+        message: { conversation: 'Mensaje viejo' },
+      };
+      expect(shouldIgnoreOldMessages(oldMsg)).toBe(true);
+    });
+
+    it('should NOT ignore fresh messages with valid body', () => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const freshMsg = {
+        key: { fromMe: false, id: 'fresh_123' },
+        messageTimestamp: nowSec - 5,
+        message: { conversation: 'Hola quiero un turno' },
+      };
+      expect(shouldIgnoreOldMessages(freshMsg)).toBe(false);
+    });
+
+    it('should ignore messages with cryptographic error stubs (e.g. CIPHERTEXT = 2)', () => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const stubMsg = {
+        key: { fromMe: false, id: 'stub_123' },
+        messageTimestamp: nowSec - 10,
+        messageStubType: 2,
+      };
+      expect(shouldIgnoreOldMessages(stubMsg)).toBe(true);
+    });
+
+    it('should ignore messages older than 30s that failed decryption', () => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const cryptoFailMsg = {
+        key: { fromMe: false, id: 'empty_123' },
+        messageTimestamp: nowSec - 45,
+        message: {},
+      };
+      expect(shouldIgnoreOldMessages(cryptoFailMsg)).toBe(true);
+    });
+  });
+
+  describe('Protocol Signal Filtering (isProtocolSignal)', () => {
+    it('should identify internal protocol messages and reactions', () => {
+      expect(isProtocolSignal({ protocolMessage: { key: 'test' } })).toBe(true);
+      expect(isProtocolSignal({ reactionMessage: { text: '👍' } })).toBe(true);
+      expect(isProtocolSignal({ senderKeyDistributionMessage: {} })).toBe(true);
+      expect(isProtocolSignal({ conversation: 'Hola!' })).toBe(false);
+      expect(isProtocolSignal(null)).toBe(false);
+    });
+  });
+
+  describe('Crypto Failure Recovery & Safe Auth Sync', () => {
+    it('should track and reset consecutive decryption failure counts', () => {
+      resetConsecutiveDecryptionFailures();
+      expect(getConsecutiveDecryptionFailures()).toBe(0);
+    });
+
+    it('should trigger auth state refresh without deleting PostgreSQL session credentials', async () => {
+      const deleteSpy = vi.spyOn(prisma.baileysSession, 'deleteMany');
+      vi.spyOn(prisma.baileysSession, 'findUnique').mockResolvedValueOnce(null);
+
+      await forceAuthSyncAndReconnect();
+
+      expect(getConsecutiveDecryptionFailures()).toBe(0);
+      // Verify credentials were NOT wiped
+      expect(deleteSpy).not.toHaveBeenCalled();
     });
   });
 });

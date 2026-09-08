@@ -160,5 +160,24 @@ describe('Cron Reminders & Evolution API Webhook Suite', () => {
       expect(res.body).toHaveProperty('success', true);
       expect(res.body).toHaveProperty('result');
     });
+
+    it('should respond defensively with crypto_error_waiting_new_message when message has crypto error or is empty without sending messages or presence', async () => {
+      const sendNativeSpy = vi.spyOn(whatsappNative, 'sendNativeWhatsAppMessage');
+
+      const res = await request(app)
+        .post('/api/webhooks/evolution')
+        .send({
+          data: {
+            key: { remoteJid: '5491112345678@s.whatsapp.net', fromMe: false },
+            messageStubType: 2, // CIPHERTEXT error stub
+            message: {},
+          },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.result.status).toBe('crypto_error_waiting_new_message');
+      expect(sendNativeSpy).not.toHaveBeenCalled();
+    });
   });
 });

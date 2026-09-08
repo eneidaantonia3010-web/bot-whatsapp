@@ -129,8 +129,26 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
       return { status: 'ignored' };
     }
 
-    const cleanPhone = remoteJid.split('@')[0].replace(/\D/g, '');
-    const phoneSuffix = cleanPhone.slice(-8);
+    const replyJid = (data.key as any)?.originalJid || remoteJid;
+    const rawDigits = remoteJid.split('@')[0].replace(/\D/g, '');
+    const phoneVariants: string[] = [];
+    if (rawDigits.length >= 7) {
+      phoneVariants.push(rawDigits);
+      phoneVariants.push(`+${rawDigits}`);
+      const without54 = rawDigits.replace(/^549?/, '');
+      if (without54) {
+        phoneVariants.push(without54);
+        phoneVariants.push(`15${without54.replace(/^11/, '')}`);
+      }
+    }
+    const phoneSuffix8 = rawDigits.slice(-8);
+    const phoneSuffix7 = rawDigits.slice(-7);
+
+    const customerPhoneMatch: any[] = [
+      ...phoneVariants.map((p) => ({ phone: p })),
+      ...(phoneSuffix8 ? [{ phone: { contains: phoneSuffix8 } }] : []),
+      ...(phoneSuffix7 ? [{ phone: { contains: phoneSuffix7 } }] : []),
+    ];
 
     const messageContent = data.message || {};
     let text =
@@ -153,31 +171,45 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
       .replace(/\s+/g, ' ')
       .trim();
 
+    const isIsolatedNegative = /^(no\b|nop\b|cancelo\b|cancelar\b|no voy\b|no puedo\b)/i.test(cleanText) && cleanText.length <= 25;
     const isNegative =
-      /^(no\b|cancelo\b|cancelar\b|no voy\b|no puedo\b|reprogramar\b)/i.test(cleanText) ||
-      /\b(cancelo|cancelar|no puedo asistir)\b/i.test(cleanText);
+      isIsolatedNegative ||
+      /\b(cancelo|cancelar|no voy a ir|no puedo asistir|no podre asistir)\b/i.test(cleanText);
 
+    const isIsolatedAffirmative = /^(si\b|confirmo\b|confirmar\b|dale\b|ok\b|asisto\b|ahi estare\b)/i.test(cleanText) && cleanText.length <= 25;
     const isAffirmative =
       !isNegative &&
-      (/^(si\b|confirmo\b|confirmar\b|dale\b|ok\b|asisto\b|ahi estare\b)/i.test(cleanText) ||
-        /\b(confirmo|asisto)\b/i.test(cleanText));
+      (isIsolatedAffirmative || /\b(confirmo|asisto)\b/i.test(cleanText));
+
+    const searchDateMin = new Date(Date.now() - 24 * 60 * 60 * 1000); // from 24h ago onwards
 
     // 1. Check for Confirmation ("SÍ")
     if (isAffirmative) {
-      const pendingApt = await prisma.appointment.findFirst({
+      let pendingApt = await prisma.appointment.findFirst({
         where: {
           customer: {
-            OR: [
-              { phone: { contains: phoneSuffix } },
-              { phone: cleanPhone },
-            ],
+            OR: customerPhoneMatch,
           },
           status: 'PENDING',
-          date: { gte: new Date(Date.now() - 60 * 60 * 1000) }, // from 1h ago onwards
+          date: { gte: searchDateMin },
         },
         include: { customer: true, service: true },
         orderBy: { date: 'asc' },
       });
+
+      // Fallback: check any future pending appointment
+      if (!pendingApt) {
+        pendingApt = await prisma.appointment.findFirst({
+          where: {
+            customer: {
+              OR: customerPhoneMatch,
+            },
+            status: 'PENDING',
+          },
+          include: { customer: true, service: true },
+          orderBy: { date: 'asc' },
+        });
+      }
 
       if (pendingApt) {
         await prisma.appointment.update({
@@ -194,27 +226,44 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
           }) + 'hs';
 
         const reply = `🎉 ¡Muchas gracias ${pendingApt.customer.name}! 💕\n\nTu turno para *${pendingApt.service.name}* a las *${timeStr}* ha quedado *confirmado*.\n\n¡Te esperamos en *Glow Studio*! ✨`;
-        await sendWhatsAppMessage({ to: remoteJid, message: reply });
+        await sendWhatsAppMessage({ to: replyJid, message: reply });
         return { status: 'confirmed', detail: pendingApt.id };
+      }
+
+      if (isIsolatedAffirmative) {
+        const reply = `Hola 💕 No encontré ningún turno pendiente de confirmación a este número. Si querés consultar tus turnos o agendar uno nuevo, escribí *turnos* o visitá nuestra web ✨`;
+        await sendWhatsAppMessage({ to: replyJid, message: reply });
+        return { status: 'no_appointment_found' };
       }
     }
 
     // 2. Check for Cancellation ("NO")
     if (isNegative) {
-      const upcomingApt = await prisma.appointment.findFirst({
+      let upcomingApt = await prisma.appointment.findFirst({
         where: {
           customer: {
-            OR: [
-              { phone: { contains: phoneSuffix } },
-              { phone: cleanPhone },
-            ],
+            OR: customerPhoneMatch,
           },
           status: { in: ['PENDING', 'CONFIRMED'] },
-          date: { gte: new Date(Date.now() - 60 * 60 * 1000) },
+          date: { gte: searchDateMin },
         },
         include: { customer: true, service: true },
         orderBy: { date: 'asc' },
       });
+
+      // Fallback: check any future appointment
+      if (!upcomingApt) {
+        upcomingApt = await prisma.appointment.findFirst({
+          where: {
+            customer: {
+              OR: customerPhoneMatch,
+            },
+            status: { in: ['PENDING', 'CONFIRMED'] },
+          },
+          include: { customer: true, service: true },
+          orderBy: { date: 'asc' },
+        });
+      }
 
       if (upcomingApt) {
         const now = Date.now();
@@ -239,8 +288,14 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
         }
 
         const reply = `Entendido ${upcomingApt.customer.name}. Tu turno para *${upcomingApt.service.name}* ha sido *cancelado*.${policyNotice}\n\nCuando desees reprogramar, escribinos o reservá desde nuestra web. ¡Que tengas un lindo día! 💕`;
-        await sendWhatsAppMessage({ to: remoteJid, message: reply });
+        await sendWhatsAppMessage({ to: replyJid, message: reply });
         return { status: 'cancelled', detail: upcomingApt.id };
+      }
+
+      if (isIsolatedNegative) {
+        const reply = `Hola 💕 No encontré ningún turno activo o pendiente a este número para cancelar. Si querés consultar tus reservas o agendar una nueva, podés escribir *turnos* o visitar nuestra web ✨`;
+        await sendWhatsAppMessage({ to: replyJid, message: reply });
+        return { status: 'no_appointment_found' };
       }
     }
 

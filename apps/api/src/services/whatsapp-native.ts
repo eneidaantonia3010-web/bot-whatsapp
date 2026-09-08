@@ -10,6 +10,7 @@ import makeWASocket, {
   isJidGroup,
   isJidBroadcast,
   downloadMediaMessage,
+  proto,
 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import pino from 'pino';
@@ -25,6 +26,88 @@ import {
 } from './message-queue';
 import { config } from '../config';
 import { processEvolutionMessage } from './whatsapp';
+
+/**
+ * Lightweight TTL CacheStore compatible with Baileys msgRetryCounterCache.
+ * Prevents retry loops and aids Signal E2EE re-encryption.
+ */
+class SimpleCacheStore {
+  private cache = new Map<string, { val: any; expiresAt: number }>();
+  private defaultTtlMs: number;
+
+  constructor(ttlSeconds = 900) {
+    this.defaultTtlMs = ttlSeconds * 1000;
+  }
+
+  get<T>(key: string): T | undefined {
+    const item = this.cache.get(key);
+    if (!item) return undefined;
+    if (Date.now() > item.expiresAt) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return item.val as T;
+  }
+
+  set<T>(key: string, value: T): void {
+    this.cache.set(key, { val: value, expiresAt: Date.now() + this.defaultTtlMs });
+    if (this.cache.size > 5000) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey) this.cache.delete(oldestKey);
+    }
+  }
+
+  del(key: string): void {
+    this.cache.delete(key);
+  }
+
+  flushAll(): void {
+    this.cache.clear();
+  }
+}
+
+/**
+ * Fast LRU Cache for outbound and inbound messages.
+ * When WhatsApp sends a 'retry' receipt, Baileys calls getMessage(key).
+ * Providing the original message enables WhatsApp to decrypt it immediately,
+ * eradicating "Esperando mensaje. Esto puede tomar tiempo."
+ */
+class MessageLRUCache {
+  private cache = new Map<string, proto.IMessage>();
+  private maxSize: number;
+
+  constructor(maxSize = 2000) {
+    this.maxSize = maxSize;
+  }
+
+  get(id: string): proto.IMessage | undefined {
+    const msg = this.cache.get(id);
+    if (msg) {
+      this.cache.delete(id);
+      this.cache.set(id, msg);
+    }
+    return msg;
+  }
+
+  set(id: string, msg: proto.IMessage): void {
+    if (this.cache.has(id)) {
+      this.cache.delete(id);
+    } else if (this.cache.size >= this.maxSize) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest) this.cache.delete(oldest);
+    }
+    this.cache.set(id, msg);
+  }
+}
+
+export const messageStoreCache = new MessageLRUCache(2000);
+export const msgRetryCounterCache = new SimpleCacheStore(900);
+
+export function cacheSentMessage(id: string, message: proto.IMessage) {
+  if (id && message) {
+    messageStoreCache.set(id, message);
+  }
+}
 
 function getBotUrl(): string {
   let url = (config.BOT_URL || '').trim().replace(/\/$/, '');
@@ -186,6 +269,47 @@ export async function initNativeWhatsApp(): Promise<void> {
       generateHighQualityLinkPreview: true,
       syncFullHistory: false,
       markOnlineOnConnect: true,
+      msgRetryCounterCache,
+      getMessage: async (key: proto.IMessageKey): Promise<proto.IMessage | undefined> => {
+        const msgId = key.id;
+        if (!msgId) return undefined;
+
+        // 1. Fast in-memory cache lookup
+        const cached = messageStoreCache.get(msgId);
+        if (cached) {
+          console.log(`🔄 [Baileys getMessage] Cache hit for message retry: ${msgId}`);
+          return cached;
+        }
+
+        // 2. PostgreSQL messageLog lookup
+        try {
+          const log = await prisma.messageLog.findFirst({
+            where: {
+              OR: [
+                { metadata: { path: ['waMessageId'], equals: msgId } },
+                { metadata: { path: ['key', 'id'], equals: msgId } },
+              ],
+            },
+          });
+
+          if (log?.metadata && (log.metadata as any).rawMessage) {
+            console.log(`🔄 [Baileys getMessage] DB rawMessage hit for retry: ${msgId}`);
+            return (log.metadata as any).rawMessage as proto.IMessage;
+          }
+
+          if (log?.message) {
+            console.log(`🔄 [Baileys getMessage] Reconstructed text hit for retry: ${msgId}`);
+            return {
+              conversation: log.message,
+            };
+          }
+        } catch (dbErr: any) {
+          console.warn(`⚠️ Error in getMessage DB lookup for ${msgId}:`, dbErr?.message);
+        }
+
+        console.warn(`⚠️ [Baileys getMessage] Message not found for retry: ${msgId}`);
+        return undefined;
+      },
     });
 
     // Save creds on update
@@ -215,8 +339,8 @@ export async function initNativeWhatsApp(): Promise<void> {
         currentQRBase64 = null; // Clear QR once connected
         console.log('🟢 Native WhatsApp: Connection OPEN & ACTIVE!');
         
-        // Register active socket with persistent queue processor
-        registerSocketForQueue(() => sock, () => connectionState);
+        // Register active socket with persistent queue processor & message caching
+        registerSocketForQueue(() => sock, () => connectionState, cacheSentMessage);
         startPersistentQueueWorker(8000);
         triggerQueueDrain();
 
@@ -338,6 +462,10 @@ export async function initNativeWhatsApp(): Promise<void> {
 
         if (!textMessage) continue;
 
+        if (msg.key?.id && msg.message) {
+          cacheSentMessage(msg.key.id, msg.message);
+        }
+
         const senderName = msg.pushName || remoteJid.split('@')[0];
         const targetJid = remoteJid.endsWith('@lid') && ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
           ? ((msg.key as any).remoteJidAlt || (msg.key as any).participantPn)
@@ -386,7 +514,7 @@ export async function initNativeWhatsApp(): Promise<void> {
               return;
             }
 
-            // Save INBOUND log
+            // Save INBOUND log with waMessageId for retry lookups
             await prisma.messageLog.create({
               data: {
                 platform: 'WHATSAPP',
@@ -394,6 +522,11 @@ export async function initNativeWhatsApp(): Promise<void> {
                 senderName,
                 message: textMessage,
                 direction: 'INBOUND',
+                metadata: {
+                  waMessageId: msg.key?.id,
+                  rawMessage: msg.message ? JSON.parse(JSON.stringify(msg.message)) : null,
+                  targetJid,
+                },
               },
             });
           } catch (dbErr: any) {
@@ -404,11 +537,15 @@ export async function initNativeWhatsApp(): Promise<void> {
           try {
             const conf = await processEvolutionMessage({
               data: {
-                key: { remoteJid, fromMe: false },
-                message: { conversation: textMessage },
+                key: {
+                  remoteJid: targetJid || remoteJid,
+                  originalJid: remoteJid,
+                  fromMe: false,
+                },
+                message: msg.message || { conversation: textMessage },
               },
             });
-            if (conf.status === 'confirmed' || conf.status === 'cancelled') {
+            if (conf.status === 'confirmed' || conf.status === 'cancelled' || conf.status === 'no_appointment_found') {
               console.log(`✅ Appointment automated confirmation/cancellation processed: ${conf.status} (${conf.detail})`);
               await clearPresence();
               return;
@@ -520,26 +657,38 @@ export async function initNativeWhatsApp(): Promise<void> {
                           if (imgRes.ok) {
                             const arrayBuf = await imgRes.arrayBuffer();
                             const buffer = Buffer.from(arrayBuf);
-                            await sock.sendMessage(targetJid, {
+                            const sentWithImg = await sock.sendMessage(targetJid, {
                               image: buffer,
                               mimetype: 'image/jpeg',
                               caption: reply,
                             }, { quoted: msg });
+                            if (sentWithImg?.key?.id && sentWithImg?.message) {
+                              cacheSentMessage(sentWithImg.key.id, sentWithImg.message);
+                            }
                             console.log(`✅ Native WA reply sent to ${targetJid} (with image)`);
                           } else {
                             throw new Error(`HTTP ${imgRes.status}`);
                           }
                         } catch (fetchErr: any) {
                           console.error(`⚠️ Image fetch failed for ${targetJid}: ${fetchErr.message}. Sending text only.`);
-                          await sock.sendMessage(targetJid, { text: reply }, { quoted: msg });
+                          const sentText = await sock.sendMessage(targetJid, { text: reply }, { quoted: msg });
+                          if (sentText?.key?.id && sentText?.message) {
+                            cacheSentMessage(sentText.key.id, sentText.message);
+                          }
                         }
                       } else {
-                        await sock.sendMessage(targetJid, { text: reply }, { quoted: msg });
+                        const sentText = await sock.sendMessage(targetJid, { text: reply }, { quoted: msg });
+                        if (sentText?.key?.id && sentText?.message) {
+                          cacheSentMessage(sentText.key.id, sentText.message);
+                        }
                         console.log(`✅ Native WA reply sent to ${targetJid} (text only)`);
                       }
                     } catch (e1) {
                       console.error(`⚠️ Error sending to ${targetJid}, trying direct text fallback:`, e1);
-                      await sock.sendMessage(targetJid, { text: reply });
+                      const sentFallback = await sock.sendMessage(targetJid, { text: reply });
+                      if (sentFallback?.key?.id && sentFallback?.message) {
+                        cacheSentMessage(sentFallback.key.id, sentFallback.message);
+                      }
                     } finally {
                       await clearPresence();
                     }
@@ -566,7 +715,10 @@ export async function initNativeWhatsApp(): Promise<void> {
                     `${config.FRONTEND_URL || 'https://glow-studio-web.onrender.com'}\n\n` +
                     "O dejanos tu consulta que en instantes te responderemos personalmente 💕";
                   
-                  await sock.sendMessage(targetJid, { text: fallbackMsg }, { quoted: msg });
+                  const sentFallback = await sock.sendMessage(targetJid, { text: fallbackMsg }, { quoted: msg });
+                  if (sentFallback?.key?.id && sentFallback?.message) {
+                    cacheSentMessage(sentFallback.key.id, sentFallback.message);
+                  }
                   console.log(`✅ Sent graceful fallback reply to ${targetJid}`);
                 }
               } catch (fallbackErr: any) {
@@ -671,7 +823,27 @@ export async function sendNativeWhatsAppMessage(to: string, message: string): Pr
       await new Promise((res) => setTimeout(res, typingDelay));
 
       // 2. Enviar mensaje
-      await sock.sendMessage(formattedJid, { text: dynamicMessage });
+      const sent = await sock.sendMessage(formattedJid, { text: dynamicMessage });
+      if (sent?.key?.id && sent?.message) {
+        cacheSentMessage(sent.key.id, sent.message);
+        try {
+          await prisma.messageLog.create({
+            data: {
+              platform: 'WHATSAPP',
+              senderId: formattedJid,
+              senderName: 'Glow Studio',
+              message: dynamicMessage,
+              direction: 'OUTBOUND',
+              metadata: {
+                waMessageId: sent.key.id,
+                rawMessage: JSON.parse(JSON.stringify(sent.message)),
+              },
+            },
+          });
+        } catch {
+          // ignore db log error
+        }
+      }
       
       try {
         await sock.sendPresenceUpdate('paused', formattedJid);

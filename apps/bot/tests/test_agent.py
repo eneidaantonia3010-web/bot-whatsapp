@@ -58,5 +58,7 @@ def test_classify_intent_patterns():
     assert classify_intent("cuales son los medios de pago") == "FAQ_PAGOS"
     assert classify_intent("cual es la politica de cancelacion") == "FAQ_CANCELACION"
     assert classify_intent("quiero cancelar mi turno") == "CANCEL_APPOINTMENT"
+    assert classify_intent("no") == "CANCEL_APPOINTMENT"
+    assert classify_intent("no voy") == "CANCEL_APPOINTMENT"
     assert classify_intent("necesito reprogramar el turno") == "RESCHEDULE_APPOINTMENT"
     assert classify_intent("sí, confirmo") == "CONFIRMED" or classify_intent("confirmo") == "CONFIRM_APPOINTMENT"

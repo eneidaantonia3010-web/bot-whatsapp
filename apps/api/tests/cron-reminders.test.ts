@@ -9,6 +9,7 @@ import { prisma } from '../src/services/prisma';
 import { runDailyConfirmationJob } from '../src/services/cron';
 import { processEvolutionMessage } from '../src/services/whatsapp';
 import * as whatsappService from '../src/services/whatsapp';
+import * as whatsappNative from '../src/services/whatsapp-native';
 
 describe('Cron Reminders & Evolution API Webhook Suite', () => {
   beforeEach(() => {
@@ -120,6 +121,26 @@ describe('Cron Reminders & Evolution API Webhook Suite', () => {
         })
       );
     });
+
+      it('should handle isolated "NO" gracefully with no_appointment_found when no appointment exists', async () => {
+        vi.spyOn(prisma.appointment, 'findFirst').mockResolvedValue(null);
+        vi.spyOn(whatsappNative, 'getNativeStatus').mockReturnValue({ state: 'open' } as any);
+        const sendNativeSpy = vi.spyOn(whatsappNative, 'sendNativeWhatsAppMessage').mockResolvedValueOnce(true);
+
+        const payload = {
+          data: {
+            key: { remoteJid: '5491112345678@s.whatsapp.net', fromMe: false },
+            message: { conversation: 'No' },
+          },
+        };
+
+        const result = await processEvolutionMessage(payload);
+        expect(result.status).toBe('no_appointment_found');
+        expect(sendNativeSpy).toHaveBeenCalledWith(
+          '5491112345678@s.whatsapp.net',
+          expect.stringContaining('No encontré ningún turno')
+        );
+      });
   });
 
   describe('POST /api/webhooks/evolution', () => {

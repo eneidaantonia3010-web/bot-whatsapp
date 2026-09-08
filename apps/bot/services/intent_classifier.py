@@ -62,6 +62,8 @@ _CANCEL_KEYWORDS = frozenset({
     "baja el turno", "darme de baja", "borrar la reserva",
     "eliminar turno", "eliminar cita", "cancelar reserva",
     "baja mi turno", "cancelar lo que reservé",
+    "no voy", "no puedo", "no llego", "no asisto", "no voy a poder",
+    "cancelo el turno", "no podre asistir", "no podré asistir",
 })
 
 _RESCHEDULE_KEYWORDS = frozenset({
@@ -170,7 +172,7 @@ def _classify_by_rules(text: str) -> str | None:
         return "GREETING"
 
     # CANCEL_APPOINTMENT
-    if any(w in t for w in _CANCEL_KEYWORDS):
+    if any(w in t for w in _CANCEL_KEYWORDS) or t in ("no", "nop", "no voy", "no puedo", "no llego", "cancelo", "cancelar"):
         return "CANCEL_APPOINTMENT"
 
     # RESCHEDULE_APPOINTMENT

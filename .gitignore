@@ -73,3 +73,6 @@ creds.json
 session-*.json
 pre-key-*.json
 app-state-sync-*.json
+
+# Antigravity
+.antigravity/

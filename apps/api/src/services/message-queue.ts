@@ -69,10 +69,18 @@ let isProcessingQueue = false;
 let queuePausedUntil: number | null = null;
 let activeSocketGetter: (() => any) | null = null;
 let activeConnectionStateGetter: (() => string) | null = null;
+let messageSentCallback: ((id: string, msg: any) => void) | null = null;
 
-export function registerSocketForQueue(getSocket: () => any, getConnectionState: () => string) {
+export function registerSocketForQueue(
+  getSocket: () => any,
+  getConnectionState: () => string,
+  onMessageSent?: (id: string, msg: any) => void
+) {
   activeSocketGetter = getSocket;
   activeConnectionStateGetter = getConnectionState;
+  if (onMessageSent) {
+    messageSentCallback = onMessageSent;
+  }
 }
 
 /**
@@ -175,7 +183,10 @@ export async function processPersistentQueue(): Promise<void> {
         const delayMs = 1500 + Math.floor(Math.random() * 1500);
         await new Promise((r) => setTimeout(r, delayMs));
 
-        await socket.sendMessage(item.jid, content);
+        const sent = await socket.sendMessage(item.jid, content);
+        if (sent?.key?.id && sent?.message && messageSentCallback) {
+          messageSentCallback(sent.key.id, sent.message);
+        }
 
         try {
           await socket.sendPresenceUpdate('paused', item.jid);

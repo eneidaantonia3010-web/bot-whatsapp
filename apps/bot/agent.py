@@ -374,9 +374,16 @@ async def _process_message_internal(
         # Track consecutive low-confidence classifications (ignore standard navigation words and form input stages)
         in_data_input_stage = conv.get("stage") in ("date_selection", "name_input", "phone_input")
         clean_msg_nav = message.strip().lower()
-        is_nav_command = any(w in clean_msg_nav for w in ("hola", "inicio", "reset", "menu", "menú", "bot", "empezar", "reiniciar", "reservar", "turno", "servicios"))
+        is_safe_word = any(
+            w in clean_msg_nav
+            for w in (
+                "hola", "inicio", "reset", "menu", "menú", "bot", "empezar", "reiniciar",
+                "reservar", "turno", "servicios", "no", "nop", "si", "sí", "ok", "dale",
+                "bueno", "listo", "gracias", "chau", "perfecto", "genial", "cancelar"
+            )
+        )
 
-        if not is_nav_command and not in_data_input_stage and (confidence < CONFIDENCE_THRESHOLD or intent == "UNKNOWN"):
+        if not is_safe_word and not in_data_input_stage and (confidence < CONFIDENCE_THRESHOLD or intent == "UNKNOWN"):
             conv["low_confidence_count"] = conv.get("low_confidence_count", 0) + 1
             logger.info(f"Low confidence count for {sender_id}: {conv['low_confidence_count']}")
         elif not in_data_input_stage:

@@ -9,6 +9,9 @@ import {
   getNativeStatus,
   getNativeQRBase64,
   sendNativeWhatsAppMessage,
+  messageStoreCache,
+  msgRetryCounterCache,
+  cacheSentMessage,
 } from '../src/services/whatsapp-native';
 import {
   enqueueForSender,
@@ -190,6 +193,30 @@ describe('Baileys Native Socket & Queuing System', () => {
       await clearState();
 
       expect(deleteSpy).toHaveBeenCalledWith({});
+    });
+  });
+
+  describe('Message Caching & Anti-Decryption Error Store', () => {
+    it('should store and retrieve sent messages by ID for retry handling', () => {
+      const msgId = 'test_msg_id_123';
+      const fakeMessage = { conversation: 'Hola! Mensaje de prueba' };
+
+      cacheSentMessage(msgId, fakeMessage as any);
+
+      const retrieved = messageStoreCache.get(msgId);
+      expect(retrieved).toBeDefined();
+      expect(retrieved).toEqual(fakeMessage);
+    });
+
+    it('should manage retry count cache and TTL correctly', () => {
+      msgRetryCounterCache.set('msg_retry_1', 1);
+      expect(msgRetryCounterCache.get('msg_retry_1')).toBe(1);
+
+      msgRetryCounterCache.set('msg_retry_1', 2);
+      expect(msgRetryCounterCache.get('msg_retry_1')).toBe(2);
+
+      msgRetryCounterCache.del('msg_retry_1');
+      expect(msgRetryCounterCache.get('msg_retry_1')).toBeUndefined();
     });
   });
 });

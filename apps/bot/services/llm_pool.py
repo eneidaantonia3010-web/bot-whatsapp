@@ -139,6 +139,54 @@ class LLMPool:
         logger.error("LLM pool exhausted all async clients and model fallbacks.")
         return None
 
+    async def get_semantic_completion_async(
+        self,
+        messages: list[dict] = None,
+        model: Optional[str] = "llama-3.1-8b-instant",
+        system_msg: Optional[str] = None,
+        max_retries: int = 1,
+        temperature: float = 0.1,
+        max_tokens: Optional[int] = 250,
+        timeout_sec: int = 4,
+    ) -> Optional[str]:
+        """Dedicated semantic router completion using AsyncGroq pool directly."""
+        if not self._async_clients:
+            self._reload_keys()
+
+        if not self._async_clients:
+            return None
+
+        target_model = model or "llama-3.1-8b-instant"
+        formatted_messages = []
+        if system_msg:
+            formatted_messages.append({"role": "system", "content": system_msg})
+        if messages:
+            formatted_messages.extend(normalize_history_for_groq(messages))
+
+        for attempt in range(1 + max_retries):
+            client_idx = self._get_next_client_idx()
+            client = self._async_clients[client_idx]
+            try:
+                kwargs: dict[str, Any] = {
+                    "messages": formatted_messages,
+                    "model": target_model,
+                    "temperature": temperature,
+                    "timeout": timeout_sec,
+                }
+                if max_tokens:
+                    kwargs["max_tokens"] = max_tokens
+
+                completion = await client.chat.completions.create(**kwargs)
+                content = completion.choices[0].message.content
+                if content and content.strip():
+                    return content.strip()
+            except Exception as e:
+                logger.warning(f"Semantic completion failed on client {client_idx}: {e}")
+                if attempt < max_retries:
+                    await asyncio.sleep(0.1)
+
+        return None
+
     def get_completion(
         self,
         messages: list[dict] = None,

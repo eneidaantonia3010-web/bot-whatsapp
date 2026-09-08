@@ -76,6 +76,11 @@ from services.formatters import (
     _is_close_confirmation_answer,
     _apply_output_guardrails,
 )
+from services.semantic_router import (
+    analyze_message_semantics_async,
+    build_contextual_return_prompt,
+    SemanticAnalysis,
+)
 
 logger = logging.getLogger("glow_bot.agent")
 TZ_AR = pytz.timezone("America/Argentina/Buenos_Aires")
@@ -371,6 +376,38 @@ async def _process_message_internal(
         intent, confidence = await classify_intent_with_confidence_async(message)
         logger.info(f"Intent classified for {sender_id}: {intent} (confidence={confidence:.2f})")
 
+        # STEP 1.5: Deep Semantic Analysis & Dynamic Entity Extraction (llama-3.1-8b-instant + rule fallback)
+        services_catalog = get_services()
+        semantic_analysis = await analyze_message_semantics_async(
+            message=message,
+            stage=conv.get("stage", "greeting"),
+            context=conv,
+            available_services=services_catalog,
+        )
+        logger.info(
+            f"Semantic analysis for {sender_id}: intent={semantic_analysis.intent}, "
+            f"digression={semantic_analysis.has_digression} ({semantic_analysis.digression_topic}), "
+            f"change={semantic_analysis.change_of_mind} ({semantic_analysis.change_type}), "
+            f"slots(services={semantic_analysis.services}, date={semantic_analysis.date_time_text}, "
+            f"name={semantic_analysis.customer_name}, phone={semantic_analysis.customer_phone})"
+        )
+
+        # Update long-term memory and conversation context with extracted slots
+        if semantic_analysis.customer_name and len(semantic_analysis.customer_name) >= 2:
+            candidate_name = semantic_analysis.customer_name.strip()
+            if not any(candidate_name.lower() == s.get("name", "").lower() for s in services_catalog):
+                conv["customer_name"] = candidate_name
+                if clean_phone:
+                    remember_preference(clean_phone, "nombre", candidate_name)
+
+        if semantic_analysis.customer_phone:
+            candidate_phone = normalize_phone(semantic_analysis.customer_phone)
+            if candidate_phone:
+                conv["customer_phone"] = candidate_phone
+                if clean_phone:
+                    remember_preference(clean_phone, "telefono", candidate_phone)
+                clean_phone = candidate_phone
+
         # Track consecutive low-confidence classifications (ignore standard navigation words and form input stages)
         in_data_input_stage = conv.get("stage") in ("date_selection", "name_input", "phone_input")
         clean_msg_nav = message.strip().lower()
@@ -382,6 +419,15 @@ async def _process_message_internal(
                 "bueno", "listo", "gracias", "chau", "perfecto", "genial", "cancelar"
             )
         )
+        if (
+            semantic_analysis.has_digression
+            or semantic_analysis.change_of_mind
+            or semantic_analysis.customer_name
+            or semantic_analysis.customer_phone
+            or semantic_analysis.services
+            or semantic_analysis.date_time_text
+        ):
+            is_safe_word = True
 
         if not is_safe_word and not in_data_input_stage and (confidence < CONFIDENCE_THRESHOLD or intent == "UNKNOWN"):
             conv["low_confidence_count"] = conv.get("low_confidence_count", 0) + 1
@@ -568,14 +614,79 @@ async def _process_message_internal(
                 "FAQ_PAGOS": "metodos_pago",
                 "FAQ_CANCELACION": "cancelacion",
             }
-            if intent in faq_map:
+            topic_to_faq = {
+                "pagos": "metodos_pago",
+                "precios": "servicios",
+                "ubicacion": "ubicacion",
+                "horario": "horario",
+                "cancelacion": "cancelacion",
+                "servicios": "servicios",
+            }
+            faq_key = faq_map.get(intent) or (topic_to_faq.get(semantic_analysis.digression_topic) if semantic_analysis.has_digression else None)
+            if faq_key:
                 conv["fallback_count"] = 0
-                faq_response = get_faq_response(faq_map[intent])
+                faq_response = get_faq_response(faq_key)
                 if faq_response:
-                    response = faq_response + "\n\n¿Querés reservar un turno? Escribí *turno* o *reservar* 😊"
+                    if conv["stage"] in ("service_selection", "date_selection", "name_input", "phone_input", "confirmation"):
+                        # Contextual return bridge without resetting or leaving active booking stage
+                        return_bridge = build_contextual_return_prompt(conv["stage"], conv, lang)
+                        response = f"{faq_response}{return_bridge}"
+                    else:
+                        response = faq_response + "\n\n¿Querés reservar un turno? Escribí *turno* o *reservar* 😊"
                     chat_history.append({"role": "model", "parts": [response]})
                     save_conversation_state(sender_id, conv)
                     return welcome_back_prefix + response
+
+        # STEP 3.5: Handle Mid-Process Change of Mind (Arrepentimiento)
+        if conv["stage"] in ("date_selection", "name_input", "phone_input", "confirmation") and semantic_analysis.change_of_mind:
+            conv["fallback_count"] = 0
+
+            # 1. Did the customer change service?
+            if semantic_analysis.services:
+                for s_cand in semantic_analysis.services:
+                    matched = get_service_by_name(s_cand)
+                    if matched:
+                        conv["selected_service"] = matched
+                        conv["selected_services"] = [matched]
+                        break
+
+            # 2. Did the customer provide/change date/time?
+            parsed_new_date = parse_date(semantic_analysis.date_time_text or message)
+            if parsed_new_date:
+                conv["selected_date"], conv["selected_time"] = parsed_new_date
+
+            curr_service = conv.get("selected_service")
+            s_name = curr_service.get("name", "tu servicio") if curr_service else "tu servicio"
+            s_price = _format_price(curr_service.get("price", 0)) if curr_service else ""
+
+            # Guide customer to next pending slot
+            if not conv.get("selected_date") or not conv.get("selected_time"):
+                conv["stage"] = "date_selection"
+                response = f"¡Dale, perfecto! 💕 Cambiamos a *{s_name}* ({s_price}).\n\n¿Para qué día y horario te gustaría agendar? ✨"
+            elif not conv.get("customer_name"):
+                conv["stage"] = "name_input"
+                disp_d = _format_date_display(conv["selected_date"])
+                response = f"¡Dale, perfecto! 💕 Cambiamos a *{s_name}* para el *{disp_d} a las {conv['selected_time']}hs*.\n\nPara confirmar tu turno, ¿me dirías tu *nombre completo*? 😊"
+            elif not conv.get("customer_phone"):
+                conv["stage"] = "phone_input"
+                disp_d = _format_date_display(conv["selected_date"])
+                response = f"¡Dale, perfecto! 💕 Actualizamos a *{s_name}* para el *{disp_d} a las {conv['selected_time']}hs* a nombre de *{conv['customer_name']}*.\n\nPor último, ¿cuál es tu número de teléfono o WhatsApp de contacto? 📱"
+            else:
+                conv["stage"] = "confirmation"
+                disp_d = _format_date_display(conv["selected_date"])
+                response = (
+                    f"✨ *Resumen de tu turno actualizado:*\n\n"
+                    f"💇 Servicio: *{s_name}*\n"
+                    f"💰 Precio: {s_price}\n"
+                    f"📅 Fecha: *{disp_d} a las {conv['selected_time']}hs*\n"
+                    f"👤 Nombre: *{conv['customer_name']}*\n"
+                    f"📱 Teléfono: *{conv['customer_phone']}*\n\n"
+                    f"¿Confirmamos el cambio? Escribí *sí* para reservar 💕"
+                )
+
+            chat_history.append({"role": "model", "parts": [response]})
+            save_conversation_state(sender_id, conv)
+            return welcome_back_prefix + response
 
         # STEP 4: Stage Handling
         stage = conv["stage"]
@@ -592,6 +703,69 @@ async def _process_message_internal(
             conv["fallback_count"] = 0
             services = get_services()
             catalog = format_services_catalog(services)
+
+            # Dynamic Slot Filling in Greeting (e.g. "Hola soy Romina, quiero un corte mañana 15hs")
+            greet_service = None
+            if semantic_analysis.services:
+                for s_cand in semantic_analysis.services:
+                    greet_service = get_service_by_name(s_cand)
+                    if greet_service:
+                        break
+            if not greet_service and len(message.split()) > 1:
+                greet_service = get_service_by_name(message)
+
+            parsed_greet_date = parse_date(semantic_analysis.date_time_text or message)
+
+            if greet_service and parsed_greet_date:
+                conv["selected_service"] = greet_service
+                conv["selected_services"] = [greet_service]
+                conv["selected_date"], conv["selected_time"] = parsed_greet_date
+                disp_date = _format_date_display(parsed_greet_date[0])
+                price_str = _format_price(greet_service["price"])
+
+                if not conv.get("customer_name"):
+                    conv["stage"] = "name_input"
+                    response = (
+                        f"¡Hola! 💕 ¡Qué lindo tenerte por acá! Agendamos *{greet_service['name']}* ({price_str}) "
+                        f"para el *{disp_date} a las {parsed_greet_date[1]}hs*.\n\n"
+                        f"Para confirmar tu turno, ¿me dirías tu *nombre completo*? 😊"
+                    )
+                elif not conv.get("customer_phone"):
+                    conv["stage"] = "phone_input"
+                    response = (
+                        f"¡Hola *{conv['customer_name']}*! 💕 Te agendamos *{greet_service['name']}* ({price_str}) "
+                        f"para el *{disp_date} a las {parsed_greet_date[1]}hs*.\n\n"
+                        f"Por último, ¿cuál es tu número de WhatsApp de contacto? 📱"
+                    )
+                else:
+                    conv["stage"] = "confirmation"
+                    response = (
+                        f"✨ *Resumen de tu turno:*\n\n"
+                        f"💇 Servicio: *{greet_service['name']}*\n"
+                        f"💰 Precio: {price_str}\n"
+                        f"📅 Fecha: *{disp_date} a las {parsed_greet_date[1]}hs*\n"
+                        f"👤 Nombre: *{conv['customer_name']}*\n"
+                        f"📱 Teléfono: *{conv['customer_phone']}*\n\n"
+                        f"¿Confirmamos? Escribí *sí* para reservar 💕"
+                    )
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return welcome_back_prefix + response
+
+            elif greet_service:
+                conv["selected_service"] = greet_service
+                conv["selected_services"] = [greet_service]
+                conv["stage"] = "date_selection"
+                price_str = _format_price(greet_service["price"])
+                response = (
+                    f"¡Excelente elección! 💇 *{greet_service['name']}* "
+                    f"({price_str}, {greet_service['duration']}min).\n\n"
+                    f"¿Para qué día y hora te gustaría reservar? "
+                    f"(ejemplo: _\"mañana 14hs\"_ o _\"jueves 16:30\"_) ✨"
+                )
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return welcome_back_prefix + response
 
             if intent == "BOOKING" and len(message.split()) > 3:
                 multi = await _parse_multi_service(message, services, chat_history)
@@ -637,6 +811,11 @@ async def _process_message_internal(
                     matched_service = get_service_by_index(int(clean_digits))
                 except (ValueError, IndexError):
                     matched_service = None
+            if not matched_service and semantic_analysis.services:
+                for s_cand in semantic_analysis.services:
+                    matched_service = get_service_by_name(s_cand)
+                    if matched_service:
+                        break
             if not matched_service:
                 matched_service = get_service_by_name(message)
 
@@ -644,9 +823,44 @@ async def _process_message_internal(
                 conv["fallback_count"] = 0
                 conv["selected_service"] = matched_service
                 conv["selected_services"] = [matched_service]
-                conv["stage"] = "date_selection"
-
                 price_str = _format_price(matched_service["price"])
+
+                # Check if date was also provided in the same turn
+                parsed_dt = parse_date(semantic_analysis.date_time_text or message)
+                if parsed_dt:
+                    conv["selected_date"], conv["selected_time"] = parsed_dt
+                    disp_date = _format_date_display(parsed_dt[0])
+
+                    if not conv.get("customer_name"):
+                        conv["stage"] = "name_input"
+                        response = (
+                            f"¡Excelente elección! 💇 *{matched_service['name']}* ({price_str}).\n\n"
+                            f"Te agendamos para el *{disp_date} a las {parsed_dt[1]}hs*.\n\n"
+                            f"Para confirmar tu turno, ¿me dirías tu *nombre completo*? 😊"
+                        )
+                    elif not conv.get("customer_phone"):
+                        conv["stage"] = "phone_input"
+                        response = (
+                            f"¡Excelente elección! 💇 *{matched_service['name']}* ({price_str}) "
+                            f"para el *{disp_date} a las {parsed_dt[1]}hs*.\n\n"
+                            f"Por último, ¿cuál es tu número de WhatsApp de contacto? 📱"
+                        )
+                    else:
+                        conv["stage"] = "confirmation"
+                        response = (
+                            f"✨ *Resumen de tu turno:*\n\n"
+                            f"💇 Servicio: *{matched_service['name']}*\n"
+                            f"💰 Precio: {price_str}\n"
+                            f"📅 Fecha: *{disp_date} a las {parsed_dt[1]}hs*\n"
+                            f"👤 Nombre: *{conv['customer_name']}*\n"
+                            f"📱 Teléfono: *{conv['customer_phone']}*\n\n"
+                            f"¿Confirmamos? Escribí *sí* para reservar 💕"
+                        )
+                    chat_history.append({"role": "model", "parts": [response]})
+                    save_conversation_state(sender_id, conv)
+                    return welcome_back_prefix + response
+
+                conv["stage"] = "date_selection"
 
                 # Check for subtle cross-sell opportunity based on long-term memory
                 cross_sell_text = ""
@@ -829,11 +1043,33 @@ async def _process_message_internal(
                 conv["selected_time"] = time_str
                 display_date = _format_date_display(date_str)
 
-                response = (
-                    f"Perfecto! 📅 *{display_date} a las {time_str}hs*\n\n"
-                    f"Para confirmar tu turno, necesito tu *nombre completo* 😊"
-                )
-                conv["stage"] = "name_input"
+                if not conv.get("customer_name"):
+                    response = (
+                        f"Perfecto! 📅 *{display_date} a las {time_str}hs*\n\n"
+                        f"Para confirmar tu turno, necesito tu *nombre completo* 😊"
+                    )
+                    conv["stage"] = "name_input"
+                elif not conv.get("customer_phone"):
+                    response = (
+                        f"Perfecto *{conv['customer_name']}*! 📅 *{display_date} a las {time_str}hs*\n\n"
+                        f"Por último, ¿cuál es tu número de WhatsApp de contacto? 📱"
+                    )
+                    conv["stage"] = "phone_input"
+                else:
+                    service = conv.get("selected_service")
+                    service_display = service["name"] if service else "Servicio"
+                    price = _format_price(service["price"] if service else 0)
+                    response = (
+                        f"✨ *Resumen de tu turno:*\n\n"
+                        f"💇 Servicio: *{service_display}*\n"
+                        f"💰 Precio: {price}\n"
+                        f"📅 Fecha: *{display_date} a las {time_str}hs*\n"
+                        f"👤 Nombre: *{conv['customer_name']}*\n"
+                        f"📱 Teléfono: *{conv['customer_phone']}*\n\n"
+                        f"¿Confirmamos? Escribí *sí* para reservar 💕"
+                    )
+                    conv["stage"] = "confirmation"
+
                 chat_history.append({"role": "model", "parts": [response]})
                 save_conversation_state(sender_id, conv)
                 return welcome_back_prefix + response
@@ -891,10 +1127,48 @@ async def _process_message_internal(
 
         # ---- NAME_INPUT ----
         elif stage == "name_input":
-            name = message.strip()
+            name = (semantic_analysis.customer_name or message).strip()
+            # If user also provided phone in this turn
+            phone_cand = normalize_phone(semantic_analysis.customer_phone or message)
+            if phone_cand:
+                conv["customer_phone"] = phone_cand
+                if clean_phone:
+                    remember_preference(clean_phone, "telefono", phone_cand)
+
             if len(name) >= 2:
                 conv["fallback_count"] = 0
                 conv["customer_name"] = name
+                if clean_phone:
+                    remember_preference(clean_phone, "nombre", name)
+
+                # If phone is already provided or was provided in this message, jump straight to confirmation!
+                if conv.get("customer_phone"):
+                    selected_services = conv.get("selected_services", [])
+                    if len(selected_services) >= 2:
+                        service_display = " + ".join([s["name"] for s in selected_services])
+                        total_price = sum(s["price"] for s in selected_services)
+                        price = _format_price(total_price)
+                    else:
+                        service = conv.get("selected_service")
+                        service_display = service["name"] if service else "Servicio"
+                        price = _format_price(service["price"] if service else 0)
+
+                    display_date = _format_date_display(conv.get("selected_date", ""))
+                    response = (
+                        f"Gracias *{name}* 💕\n\n"
+                        f"✨ *Resumen de tu turno:*\n\n"
+                        f"💇 Servicio: *{service_display}*\n"
+                        f"💰 Precio: {price}\n"
+                        f"📅 Fecha: *{display_date} a las {conv.get('selected_time', '')}hs*\n"
+                        f"👤 Nombre: *{name}*\n"
+                        f"📱 Teléfono: *{conv['customer_phone']}*\n\n"
+                        f"¿Confirmamos? Escribí *sí* para reservar 💕"
+                    )
+                    conv["stage"] = "confirmation"
+                    chat_history.append({"role": "model", "parts": [response]})
+                    save_conversation_state(sender_id, conv)
+                    return welcome_back_prefix + response
+
                 response = (
                     f"Gracias *{name}* 💕\n\n"
                     f"Por último, ¿cuál es tu número de teléfono o WhatsApp con código de país? 📱\n"

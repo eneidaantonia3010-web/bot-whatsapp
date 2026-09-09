@@ -151,10 +151,34 @@ async def handle_message(request: MessageRequest):
         return MessageResponse(response=str(result))
     except Exception as e:
         import logging
+        from agent import conversations
+        from services.database import delete_conversation_state, get_services
+        from services.formatters import format_services_catalog
+
         logging.getLogger("glow_bot.main").exception(f"Unhandled error in /process-message: {e}")
-        return MessageResponse(
-            response="¡Hola! Bienvenida a *Glow Studio by Sofia* 💕\n\nDisculpá la demora. Podés consultar nuestros servicios y turnos en nuestra web oficial o escribirnos al *+5491178296781* ✨"
-        )
+
+        # Resilient recovery: purge corrupt session in memory and PostgreSQL
+        try:
+            conversations.pop(request.sender_id, None)
+            delete_conversation_state(request.sender_id)
+        except Exception as cleanup_err:
+            logging.getLogger("glow_bot.main").warning(f"Error resetting corrupt session: {cleanup_err}")
+
+        try:
+            catalog = format_services_catalog(get_services())
+            fallback_text = (
+                "¡Hola! Bienvenida a *Glow Studio by Sofia* 💕\n\n"
+                "Tuvimos un breve inconveniente al procesar tu mensaje, pero ya reiniciamos tu consulta. "
+                "¿Qué servicio te gustaría reservar hoy? Podés elegir el número de opción:\n\n"
+                f"{catalog}"
+            )
+        except Exception:
+            fallback_text = (
+                "¡Hola! Bienvenida a *Glow Studio by Sofia* 💕\n\n"
+                "Disculpá la demora. Podés consultar nuestros servicios y turnos en nuestra web oficial o escribirnos al *+5491178296781* ✨"
+            )
+
+        return MessageResponse(response=fallback_text)
 
 
 @app.post("/process-audio-message", response_model=MessageResponse, dependencies=[Depends(verify_bot_api_key)])

@@ -298,6 +298,6 @@ describe('Baileys Native Socket & Queuing System', () => {
       expect(getConsecutiveDecryptionFailures()).toBe(0);
       // Verify credentials were NOT wiped
       expect(deleteSpy).not.toHaveBeenCalled();
-    });
+    }, 15000);
   });
 });

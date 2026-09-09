@@ -115,6 +115,15 @@ def _extract_semantics_rules(
             analysis.customer_phone = digits
 
     # 5. Extract Services Mentioned
+    # 5a. Direct catalog option number (e.g., "5", "opcion 5", "#5")
+    opt_match = re.match(r"^(?:opci[oó]n\s*#?|#)?\s*([1-9]\d?)\.?$", clean_msg, re.IGNORECASE)
+    if opt_match and available_services:
+        opt_idx = int(opt_match.group(1))
+        if 1 <= opt_idx <= len(available_services):
+            matched_s = available_services[opt_idx - 1]
+            if matched_s.get("name") and matched_s["name"] not in analysis.services:
+                analysis.services.append(matched_s["name"])
+
     service_names = [s.get("name", "") for s in available_services if s.get("name")]
     msg_lower = clean_msg.lower()
     for s_name in service_names:
@@ -133,7 +142,7 @@ def _extract_semantics_rules(
     if "keratina" in msg_lower and not any("keratina" in s.lower() for s in analysis.services):
         analysis.services.append("Anti-frizz Keratina")
 
-    if analysis.services and stage in ("date_selection", "name_input", "confirmation"):
+    if analysis.services and stage in ("date_selection", "name_input", "phone_input", "confirmation"):
         analysis.change_of_mind = True
         analysis.change_type = "service"
 

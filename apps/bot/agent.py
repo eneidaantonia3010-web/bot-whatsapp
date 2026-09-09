@@ -636,6 +636,121 @@ async def _process_message_internal(
                     chat_history.append({"role": "model", "parts": [response]})
                     save_conversation_state(sender_id, conv)
                     return welcome_back_prefix + response
+        # STEP 3.4: Global Catalog Option / Service Selection Interceptor
+        # If the user selects a catalog service (by option 1-6 or direct service name),
+        # force a clean reset of any old/orphaned reservation state and transition cleanly to date_selection.
+        clean_msg_strip = message.strip()
+        is_cancelling_apt_pick = (
+            conv.get("stage") in ("select_apt_to_cancel", "select_apt_to_reschedule")
+            and clean_msg_strip.isdigit()
+            and 1 <= int(clean_msg_strip) <= len(conv.get("upcoming_apts", []))
+        )
+
+        catalog_selected_service = None
+        if not is_cancelling_apt_pick and clean_msg not in (
+            "hola", "buenas", "buen día", "buen dia", "buenas tardes", "buenas noches",
+            "inicio", "reset", "menu", "menú", "empieza", "empezar de nuevo",
+            "si", "sí", "no", "nop", "cancelar"
+        ):
+            opt_match = re.match(r"^(?:opci[oó]n\s*#?|#)?\s*([1-9]\d?)\.?$", clean_msg_strip, re.IGNORECASE)
+            opt_with_text = re.match(r"^(?:opci[oó]n\s*#?|#)?\s*([1-9]\d?)\s+(.+)$", clean_msg_strip, re.IGNORECASE)
+
+            if opt_match:
+                opt_idx = int(opt_match.group(1))
+                catalog_selected_service = get_service_by_index(opt_idx)
+            elif opt_with_text:
+                opt_idx = int(opt_with_text.group(1))
+                catalog_selected_service = get_service_by_index(opt_idx)
+
+            if not catalog_selected_service:
+                # Check exact service name match
+                for s in get_services():
+                    s_low = s["name"].lower()
+                    if clean_msg == s_low or clean_msg == s_low.replace("tratamiento ", ""):
+                        catalog_selected_service = s
+                        break
+
+            # If not conversational change of mind, also check short service names
+            if not catalog_selected_service and not semantic_analysis.change_of_mind and len(clean_msg_strip.split()) <= 4:
+                direct_s = get_service_by_name(clean_msg_strip)
+                if direct_s and (direct_s["name"].lower() in clean_msg or clean_msg in direct_s["name"].lower()):
+                    catalog_selected_service = direct_s
+
+        if catalog_selected_service:
+            conv["fallback_count"] = 0
+            conv["low_confidence_count"] = 0
+            conv["selected_service"] = catalog_selected_service
+            conv["selected_services"] = [catalog_selected_service]
+
+            # Force clean reset of stale/orphaned booking slots
+            conv["selected_date"] = None
+            conv["selected_time"] = None
+            conv["cross_sell_offered"] = None
+            conv["cancelling_apt"] = None
+            conv["rescheduling_apt"] = None
+            conv["upcoming_apts"] = []
+
+            price_str = _format_price(catalog_selected_service["price"])
+
+            # Did the user also provide date/time in the same message?
+            parsed_dt = parse_date(semantic_analysis.date_time_text or message)
+            if parsed_dt:
+                conv["selected_date"], conv["selected_time"] = parsed_dt
+                disp_date = _format_date_display(parsed_dt[0])
+
+                if not conv.get("customer_name"):
+                    conv["stage"] = "name_input"
+                    response = (
+                        f"¡Excelente elección! 💇 *{catalog_selected_service['name']}* ({price_str}).\n\n"
+                        f"Te agendamos para el *{disp_date} a las {parsed_dt[1]}hs*.\n\n"
+                        f"Para confirmar tu turno, ¿me dirías tu *nombre completo*? 😊"
+                    )
+                elif not conv.get("customer_phone"):
+                    conv["stage"] = "phone_input"
+                    response = (
+                        f"¡Excelente elección! 💇 *{catalog_selected_service['name']}* ({price_str}) "
+                        f"para el *{disp_date} a las {parsed_dt[1]}hs*.\n\n"
+                        f"Por último, ¿cuál es tu número de WhatsApp de contacto? 📱"
+                    )
+                else:
+                    conv["stage"] = "confirmation"
+                    response = (
+                        f"✨ *Resumen de tu turno:*\n\n"
+                        f"💇 Servicio: *{catalog_selected_service['name']}*\n"
+                        f"💰 Precio: {price_str}\n"
+                        f"📅 Fecha: *{disp_date} a las {parsed_dt[1]}hs*\n"
+                        f"👤 Nombre: *{conv['customer_name']}*\n"
+                        f"📱 Teléfono: *{conv['customer_phone']}*\n\n"
+                        f"¿Confirmamos? Escribí *sí* para reservar 💕"
+                    )
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return welcome_back_prefix + response
+
+            # No date provided: advance session directly to date_selection
+            conv["stage"] = "date_selection"
+
+            # Check subtle cross-sell opportunity based on long-term memory
+            cross_sell_text = ""
+            clean_phone = normalize_phone(conv.get("customer_phone") or sender_id)
+            cross_sell = detect_cross_sell_opportunity(clean_phone, catalog_selected_service)
+            if cross_sell:
+                cross_sell_text = f"\n\n{cross_sell['message_hint']}"
+                conv["cross_sell_offered"] = cross_sell["suggested_treatment"]
+
+            response = (
+                f"¡Excelente elección! 💇 *{catalog_selected_service['name']}* "
+                f"({price_str}, {catalog_selected_service['duration']}min).{cross_sell_text}\n\n"
+                f"¿Para qué día y horario te gustaría reservar? "
+                f"(ejemplo: _\"mañana 14hs\"_, _\"jueves 16:30\"_ o _\"el 15 a las 11\"_) ✨"
+            )
+            chat_history.append({"role": "model", "parts": [response]})
+            save_conversation_state(sender_id, conv)
+
+            gallery = get_gallery_image_for_category(catalog_selected_service.get("category", ""))
+            if gallery and gallery.get("url"):
+                return {"response": welcome_back_prefix + response, "image_url": gallery["url"]}
+            return welcome_back_prefix + response
 
         # STEP 3.5: Handle Mid-Process Change of Mind (Arrepentimiento)
         if conv["stage"] in ("date_selection", "name_input", "phone_input", "confirmation") and semantic_analysis.change_of_mind:
@@ -648,6 +763,9 @@ async def _process_message_internal(
                     if matched:
                         conv["selected_service"] = matched
                         conv["selected_services"] = [matched]
+                        if not semantic_analysis.date_time_text:
+                            conv["selected_date"] = None
+                            conv["selected_time"] = None
                         break
 
             # 2. Did the customer provide/change date/time?
@@ -697,7 +815,6 @@ async def _process_message_internal(
                          "empieza", "empezar de nuevo"):
             conv["stage"] = "greeting"
             stage = "greeting"
-
         # ---- GREETING ----
         if stage == "greeting":
             conv["fallback_count"] = 0
@@ -1434,17 +1551,30 @@ async def _process_message_internal(
 
     except Exception as e:
         logger.exception(f"Agent error processing message: {e}")
-        response = (
-            "Disculpá, tuvimos una breve demora al procesar tu mensaje. 😔\n"
-            f"Podés consultar nuestros servicios o escribirnos directamente a "
-            f"*+{SALON_WHATSAPP}*. ¡Te atenderemos encantadas! 💕"
-        )
         try:
-            if "conv" in locals() and isinstance(conv, dict):
-                history = conv.get("chat_history")
-                if isinstance(history, list):
-                    history.append({"role": "model", "parts": [response]})
-                save_conversation_state(sender_id, conv)
-        except Exception as save_err:
-            logger.warning(f"Failed to record fallback response: {save_err}")
+            conversations.pop(sender_id, None)
+            delete_conversation_state(sender_id)
+        except Exception as del_err:
+            logger.warning(f"Error purging corrupted conversation state: {del_err}")
+
+        try:
+            services = get_services()
+            catalog = format_services_catalog(services)
+            response = (
+                "¡Hola! Bienvenida a *Glow Studio by Sofia* 💕\n\n"
+                "Tuvimos un breve inconveniente al procesar tu mensaje, pero ya reiniciamos tu consulta. "
+                "¿Qué servicio te gustaría reservar hoy? ✨\n\n"
+                f"{catalog}"
+            )
+            fresh_conv = get_conversation(sender_id)
+            fresh_conv["stage"] = "service_selection"
+            fresh_conv["chat_history"].append({"role": "user", "parts": [message]})
+            fresh_conv["chat_history"].append({"role": "model", "parts": [response]})
+            save_conversation_state(sender_id, fresh_conv)
+        except Exception:
+            response = (
+                "Disculpá, tuvimos una breve demora al procesar tu mensaje. 😔\n"
+                f"Podés consultar nuestros servicios o escribirnos directamente a "
+                f"*+{SALON_WHATSAPP}*. ¡Te atenderemos encantadas! 💕"
+            )
         return response

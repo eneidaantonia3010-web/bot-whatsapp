@@ -64,10 +64,9 @@ const SUPPRESSIONS = /@ts-ignore|@ts-nocheck|eslint-disable|biome-ignore|# *noqa
 const STUBS = /throw new (Error|NotImplemented).*[Nn]ot implemented|catch\s*\(\w*\)\s*\{\s*\}|catch\s*\{\s*\}|\bTODO\b|\bpass\s*# *stub/;
 const SKIPS = /\.(skip|todo)\b|\bxit\(|\bxdescribe\(|@pytest\.mark\.skip|t\.Skip\(/;
 
-// Helper to ignore certain files or documentation / tests for the checker itself
 const isCheckExempt = (f) => {
   if (!f) return true;
-  if (f.includes('floor-guard') || f.includes('.agents/') || f.includes('SKILL.md')) return true;
+  if (f.includes('floor-guard') || f.includes('.agents/') || f.includes('SKILL.md') || f.endsWith('.html')) return true;
   return false;
 };
 

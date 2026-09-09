@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Arquitectura y Flujo de Datos del Monorepo",
+    "output": "arquitectura-monorepo.html",
+    "quality_profile": "showcase",
+    "viewBox": [1060, 410],
+    "views": [
+      {
+        "id": "main-flow",
+        "label": "Flujo de reserva WhatsApp",
+        "focus": ["whatsapp", "baileys", "api", "neon", "bot", "antiban"],
+        "note": "Traza completa desde el mensaje entrante hasta la respuesta enriquecida y protegida."
+      },
+      {
+        "id": "ai-intelligence",
+        "label": "Motor de IA y Memoria",
+        "focus": ["api", "bot", "groq", "neon"],
+        "note": "Análisis semántico con LLaMA 3.1 8B en Groq y persistencia en Neon PostgreSQL."
+      },
+      {
+        "id": "antiban-delivery",
+        "label": "Salida protegida Anti-Ban",
+        "focus": ["bot", "antiban", "baileys", "whatsapp"],
+        "note": "Cola con jitter estocástico (1.5s - 4.5s) y presencia de escritura humana."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "whatsapp",
+      "type": "external",
+      "label": "WhatsApp Client",
+      "sublabel": "Clienta móvil / Web",
+      "brand": "whatsapp",
+      "pos": [40, 180],
+      "size": [140, 54]
+    },
+    {
+      "id": "baileys",
+      "type": "backend",
+      "label": "Socket Baileys",
+      "sublabel": "apps/api Native Socket",
+      "tag": "WebSocket TLS",
+      "pos": [290, 180],
+      "size": [150, 54]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "API Express",
+      "sublabel": "apps/api REST Service",
+      "tag": "Node.js / TS",
+      "pos": [580, 180],
+      "size": [150, 54]
+    },
+    {
+      "id": "neon",
+      "type": "database",
+      "label": "Neon PostgreSQL",
+      "sublabel": "Serverless Database",
+      "brand": "postgresql",
+      "tag": "Prisma ORM",
+      "pos": [580, 50],
+      "size": [150, 54]
+    },
+    {
+      "id": "bot",
+      "type": "backend",
+      "label": "Bot de IA",
+      "sublabel": "apps/bot FastAPI",
+      "tag": "Python 3.11",
+      "pos": [870, 180],
+      "size": [150, 54]
+    },
+    {
+      "id": "groq",
+      "type": "cloud",
+      "label": "Groq LPU Cloud",
+      "sublabel": "LLaMA 3.1 8B Instant",
+      "tag": "Inferencia LPUs",
+      "pos": [870, 50],
+      "size": [150, 54]
+    },
+    {
+      "id": "antiban",
+      "type": "messagebus",
+      "label": "Cola Anti-Ban",
+      "sublabel": "Rate Limit + Jitter",
+      "tag": "1.5s - 4.5s delay",
+      "pos": [290, 310],
+      "size": [150, 54]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "apps/api (Backend & Baileys)",
+      "wraps": ["baileys", "api", "antiban"]
+    },
+    {
+      "kind": "security-group",
+      "label": "apps/bot (Motor de IA)",
+      "wraps": ["bot"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "msg-inbound",
+      "from": "whatsapp",
+      "to": "baileys",
+      "label": "Mensaje WA",
+      "fromSide": "right",
+      "toSide": "left",
+      "variant": "emphasis"
+    },
+    {
+      "id": "baileys-to-api",
+      "from": "baileys",
+      "to": "api",
+      "label": "Socket Upsert",
+      "fromSide": "right",
+      "toSide": "left",
+      "variant": "emphasis"
+    },
+    {
+      "id": "api-to-neon",
+      "from": "api",
+      "to": "neon",
+      "label": "Prisma ORM",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "variant": "default"
+    },
+    {
+      "id": "api-to-bot",
+      "from": "api",
+      "to": "bot",
+      "label": "Webhook /process",
+      "fromSide": "right",
+      "toSide": "left",
+      "variant": "emphasis"
+    },
+    {
+      "id": "bot-to-groq",
+      "from": "bot",
+      "to": "groq",
+      "label": "Extracción LLaMA",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDy": -20,
+      "variant": "default"
+    },
+    {
+      "id": "bot-to-antiban",
+      "from": "bot",
+      "to": "antiban",
+      "label": "Respuesta procesada",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "variant": "emphasis"
+    },
+    {
+      "id": "antiban-to-baileys",
+      "from": "antiban",
+      "to": "baileys",
+      "label": "Despacho con jitter",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "variant": "security"
+    },
+    {
+      "id": "baileys-to-whatsapp",
+      "from": "baileys",
+      "to": "whatsapp",
+      "label": "Envío protegido",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Ingesta y Conexión WhatsApp",
+      "items": [
+        "Socket Baileys nativo integrado en apps/api con conexión TLS permanente",
+        "Filtrado temprano de mensajes obsoletos (>180s) y stubs criptográficos",
+        "Sincronización y persistencia de llaves de autenticación en Neon DB"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Motor de Inteligencia LLaMA 3.1",
+      "items": [
+        "Agente FastAPI en apps/bot con Router Semántico y extracción dinámica",
+        "Inferencia ultra-rápida mediante Groq LPUs (llama-3.1-8b-instant)",
+        "Detección de intenciones, soporte de cambios de opinión y memoria de clientas"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Blindaje Anti-Ban y Entrega",
+      "items": [
+        "Cola de salida regulada con retardos estocásticos de 1.5 a 4.5 segundos",
+        "Simulación de presencia humana activa (marcado de leído y 'composing')",
+        "Resolución canónica en zona horaria America/Argentina/Buenos_Aires"
+      ]
+    }
+  ]
+}

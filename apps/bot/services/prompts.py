@@ -171,7 +171,7 @@ SEMANTIC_ROUTER_PROMPT = (
     "6. 'extracted_slots': objeto con las entidades detectadas:\n"
     "   - 'services': lista de nombres de servicios solicitados (o vacía).\n"
     "   - 'date_time_text': texto crudo de fecha u horario mencionado (ej: 'mañana a las 15hs', 'viernes', null).\n"
-    "   - 'customer_name': nombre del cliente si se presenta o lo menciona (ej: 'Soy Valeria', 'Me llamo Ana García', null).\n"
+    "   - 'customer_name': nombre propio del cliente ÚNICAMENTE si se presenta o dice su nombre (ej: 'Soy Valeria', 'Me llamo Ana García', null). NUNCA extraer frases conversacionales, fechas, horas o cambios de opinión como nombre (ej: 'no quiero para el martes sino para el miercoles' o 'cambiar horario' NO son nombres, poner null).\n"
     "   - 'customer_phone': teléfono si lo proporciona (ej: '1123456789', null).\n\n"
     "Contexto actual de la conversación:\n"
     "Etapa: {stage}\n"

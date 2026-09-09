@@ -12,13 +12,14 @@ import os
 import sys
 import pytest
 from datetime import datetime
+import re
 import pytz
 from unittest.mock import patch, AsyncMock
 
 # Add bot directory to python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from agent import conversations, get_conversation, process_message, TZ_AR
+from agent import conversations, get_conversation, process_message, TZ_AR, _is_valid_customer_name
 
 MOCK_SERVICES = [
     {"id": "srv-1", "name": "Corte Signature", "price": 25000, "duration": 45, "category": "cabello"},
@@ -197,3 +198,134 @@ async def test_continuity_different_option_selects_new_service():
         assert conv["selected_service"]["name"] == "Corte Signature"
         assert conv["stage"] == "date_selection"
         assert "Corte Signature" in reply
+
+
+@pytest.mark.anyio
+async def test_change_time_intent_in_phone_input_resets_date_and_offers_smart_gaps():
+    """
+    When user is in phone_input stage and writes "quiero cambiar el horario":
+    1. Clears selected_date and selected_time.
+    2. Moves stage back to date_selection cleanly.
+    3. Actively re-offers the 3 compact Smart Gaps slots.
+    """
+    sender_id = "5491166496150"
+    conv = get_conversation(sender_id)
+    conv["stage"] = "phone_input"
+    conv["selected_service"] = MOCK_SERVICES[3]  # Esmaltado Semi Pro
+    conv["selected_date"] = "2026-09-12"
+    conv["selected_time"] = "14:00"
+    conv["customer_name"] = "Lucia Gomez"
+
+    mock_smart_payload = {
+        "date": "2026-09-09",
+        "serviceId": "srv-4",
+        "recommendedSlots": [
+            {"time": "14:30", "score": 100},
+            {"time": "16:00", "score": 90},
+            {"time": "18:30", "score": 85},
+        ],
+        "slots": [],
+    }
+
+    with patch("agent.get_services", return_value=MOCK_SERVICES), \
+         patch("agent.get_smart_availability", new_callable=AsyncMock, return_value=mock_smart_payload), \
+         patch("agent.save_conversation_state", return_value=True):
+
+        reply = await process_message(sender_id, "quiero cambiar el horario")
+        if isinstance(reply, dict):
+            reply = reply.get("response", "")
+
+        assert conv["stage"] == "date_selection"
+        assert conv["selected_date"] is None
+        assert conv["selected_time"] is None
+        assert "Cambiamos el horario" in reply or "opciones más recomendadas" in reply
+        assert "*14:30hs*" in reply
+        assert "*16:00hs*" in reply
+        assert "*18:30hs*" in reply
+
+
+@pytest.mark.anyio
+async def test_invalid_customer_name_rejection():
+    """
+    Validates that sentences with scheduling words, digits or >4 words are rejected.
+    """
+    assert not _is_valid_customer_name("no quiero para el martes sino para el miercoles 12", MOCK_SERVICES)
+    assert not _is_valid_customer_name("quiero cambiar el horario", MOCK_SERVICES)
+    assert not _is_valid_customer_name("1166496150", MOCK_SERVICES)
+    assert not _is_valid_customer_name("Esmaltado Semi Pro", MOCK_SERVICES)
+    assert _is_valid_customer_name("Lucia Gomez", MOCK_SERVICES)
+    assert _is_valid_customer_name("Ana Maria Rossi", MOCK_SERVICES)
+
+
+@pytest.mark.anyio
+async def test_name_input_rejects_conversational_sentence():
+    """
+    In name_input, if the user types a sentence like "quiero saber mas detalles",
+    it rejects it and asks politely for their full name without storing it as customer_name.
+    If they type a date-changing phrase like "no quiero para el martes sino para el miercoles 12",
+    it redirects to date_selection and NEVER stores the phrase as customer_name.
+    """
+    sender_id = "5491177665544"
+    conv = get_conversation(sender_id)
+    conv["stage"] = "name_input"
+    conv["selected_service"] = MOCK_SERVICES[3]
+    conv["selected_date"] = "2026-09-12"
+    conv["selected_time"] = "14:00"
+
+    with patch("agent.get_services", return_value=MOCK_SERVICES), \
+         patch("agent.save_conversation_state", return_value=True):
+
+        # 1. Non-name conversational sentence
+        reply = await process_message(sender_id, "quiero saber mas detalles")
+        if isinstance(reply, dict):
+            reply = reply.get("response", "")
+
+        assert conv["stage"] == "name_input"
+        assert conv.get("customer_name") != "quiero saber mas detalles"
+        assert "nombre completo" in reply.lower()
+
+        # 2. Date-changing phrase during name_input must NOT be saved as name
+        reply2 = await process_message(sender_id, "no quiero para el martes sino para el miercoles 12")
+        if isinstance(reply2, dict):
+            reply2 = reply2.get("response", "")
+
+        assert conv.get("customer_name") != "no quiero para el martes sino para el miercoles 12"
+        assert conv["stage"] == "date_selection"
+
+
+@pytest.mark.anyio
+async def test_confirmation_sanitizes_corrupt_date_and_recovers_gracefully():
+    """
+    In confirmation stage, if selected_date is corrupt or missing,
+    the bot recovers from previous user messages or gracefully reoffers slots via Smart Gaps
+    instead of crashing or throwing an error.
+    """
+    sender_id = "5491188776655"
+    conv = get_conversation(sender_id)
+    conv["stage"] = "confirmation"
+    conv["selected_service"] = MOCK_SERVICES[3]
+    conv["selected_date"] = "invalid-date-string"
+    conv["selected_time"] = "invalid-time"
+    conv["customer_name"] = "no quiero para el martes sino para el miercoles 12"  # Corrupt name
+    conv["customer_phone"] = "5491166496150"
+    conv["chat_history"] = [
+        {"role": "user", "parts": ["el viernes a las 15hs"]},
+        {"role": "model", "parts": ["¿Confirmamos el turno? Respondé SÍ para confirmar"]}
+    ]
+
+    with patch("agent.get_services", return_value=MOCK_SERVICES), \
+         patch("agent.create_appointment_via_api", new_callable=AsyncMock) as mock_create, \
+         patch("agent.save_conversation_state", return_value=True):
+
+        mock_create.return_value = {"id": "apt_recovered_1", "conflict": False}
+
+        reply = await process_message(sender_id, "sí")
+        if isinstance(reply, dict):
+            reply = reply.get("response", "")
+
+        # Verify create_appointment_via_api was called with sanitized date and name
+        assert mock_create.called
+        call_kwargs = mock_create.call_args.kwargs
+        assert re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00-03:00$", call_kwargs["date"])
+        assert call_kwargs["customer_name"] != "no quiero para el martes sino para el miercoles 12"
+        assert "Turno confirmado" in reply

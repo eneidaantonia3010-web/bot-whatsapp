@@ -235,9 +235,31 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
       }
 
       if (isIsolatedAffirmative) {
-        const reply = `Hola 💕 No encontré ningún turno pendiente de confirmación a este número. Si querés consultar tus turnos o agendar uno nuevo, escribí *turnos* o visitá nuestra web ✨`;
-        await sendWhatsAppMessage({ to: replyJid, message: reply });
-        return { status: 'no_appointment_found' };
+        let hasActiveBotConv = false;
+        try {
+          const conv = await prisma.conversationState.findFirst({
+            where: {
+              OR: [
+                { senderId: replyJid },
+                ...(remoteJid && remoteJid !== replyJid ? [{ senderId: remoteJid }] : []),
+                ...(phoneSuffix8 ? [{ senderId: { contains: phoneSuffix8 } }] : []),
+              ],
+            },
+          });
+          if (conv?.state && (conv.state as any)?.stage && (conv.state as any).stage !== 'greeting') {
+            hasActiveBotConv = true;
+          }
+        } catch {
+          // ignore
+        }
+
+        if (!hasActiveBotConv) {
+          const reply = `Hola 💕 No encontré ningún turno pendiente de confirmación a este número. Si querés consultar tus turnos o agendar uno nuevo, escribí *turnos* o visitá nuestra web ✨`;
+          await sendWhatsAppMessage({ to: replyJid, message: reply });
+          return { status: 'no_appointment_found' };
+        } else {
+          return { status: 'unhandled' };
+        }
       }
     }
 
@@ -297,9 +319,31 @@ export async function processEvolutionMessage(payload: any): Promise<{ status: s
       }
 
       if (isIsolatedNegative) {
-        const reply = `Hola 💕 No encontré ningún turno activo o pendiente a este número para cancelar. Si querés consultar tus reservas o agendar una nueva, podés escribir *turnos* o visitar nuestra web ✨`;
-        await sendWhatsAppMessage({ to: replyJid, message: reply });
-        return { status: 'no_appointment_found' };
+        let hasActiveBotConv = false;
+        try {
+          const conv = await prisma.conversationState.findFirst({
+            where: {
+              OR: [
+                { senderId: replyJid },
+                ...(remoteJid && remoteJid !== replyJid ? [{ senderId: remoteJid }] : []),
+                ...(phoneSuffix8 ? [{ senderId: { contains: phoneSuffix8 } }] : []),
+              ],
+            },
+          });
+          if (conv?.state && (conv.state as any)?.stage && (conv.state as any).stage !== 'greeting') {
+            hasActiveBotConv = true;
+          }
+        } catch {
+          // ignore
+        }
+
+        if (!hasActiveBotConv) {
+          const reply = `Hola 💕 No encontré ningún turno activo o pendiente a este número para cancelar. Si querés consultar tus reservas o agendar una nueva, podés escribir *turnos* o visitar nuestra web ✨`;
+          await sendWhatsAppMessage({ to: replyJid, message: reply });
+          return { status: 'no_appointment_found' };
+        } else {
+          return { status: 'unhandled' };
+        }
       }
     }
 

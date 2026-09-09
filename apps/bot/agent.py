@@ -29,6 +29,7 @@ from services.database import (
     delete_conversation_state,
     get_customer_history,
     get_gallery_image_for_category,
+    get_customer_preferences,
 )
 from services.calendar import (
     create_appointment_via_api,
@@ -264,6 +265,47 @@ def _strip_accents(text: str) -> str:
     )
 
 
+def _is_valid_customer_name(name: Optional[str], services_catalog: Optional[list] = None) -> bool:
+    """Validate that a candidate string is a legitimate personal name and not a conversational phrase, date or command."""
+    if not name or not isinstance(name, str):
+        return False
+    clean = name.strip()
+    if len(clean) < 2 or len(clean) > 40:
+        return False
+    # Reject if it contains digits
+    if any(c.isdigit() for c in clean):
+        return False
+    words = clean.split()
+    # Reject long conversational sentences
+    if len(words) > 4:
+        return False
+
+    clean_norm = _strip_accents(clean)
+    invalid_keywords = {
+        "quiero", "cambiar", "turno", "horario", "hora", "fecha", "sino", "para",
+        "lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo",
+        "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+        "septiembre", "octubre", "noviembre", "diciembre",
+        "hoy", "manana", "tarde", "noche", "mediodia", "temprano",
+        "cancelar", "cancelo", "confirmar", "confirmo", "reserva", "reservar",
+        "precio", "cuanto", "costo", "vale", "disponible", "disponibilidad",
+        "por favor", "gracias", "hola", "chau", "adios", "buenos dias", "buenas tardes",
+        "si", "no", "ok", "dale", "bien", "mejor", "otro", "otra"
+    }
+
+    norm_words = [_strip_accents(re.sub(r'[^\w\s]', '', w)) for w in words]
+    if any(w in invalid_keywords for w in norm_words):
+        return False
+
+    if services_catalog:
+        for s in services_catalog:
+            s_norm = _strip_accents(s.get("name", ""))
+            if clean_norm == s_norm or s_norm in clean_norm:
+                return False
+
+    return True
+
+
 def parse_date(text: str) -> tuple[str, str] | None:
     """Parse human date/time from Spanish text into (YYYY-MM-DD, HH:MM)."""
     norm_text = _strip_accents(text.strip())
@@ -311,10 +353,13 @@ def parse_date(text: str) -> tuple[str, str] | None:
     is_manana = bool(not is_pasado_manana and (re.search(r"(?<!de la\s)(?<!por la\s)\bma.?ana\b", norm_text) or "tomorrow" in norm_text))
 
     matched_day_num = None
+    day_matches = []
     for day_name, day_num in day_map.items():
-        if re.search(rf"\b{day_name}\b", norm_text):
-            matched_day_num = day_num
-            break
+        for m in re.finditer(rf"\b{day_name}\b", norm_text):
+            day_matches.append((m.start(), day_name, day_num))
+    if day_matches:
+        day_matches.sort(key=lambda x: x[0])
+        matched_day_num = day_matches[-1][2]
 
     if is_hoy:
         target_date = today
@@ -485,12 +530,15 @@ async def _process_message_internal(
         )
 
         # Update long-term memory and conversation context with extracted slots
-        if semantic_analysis.customer_name and len(semantic_analysis.customer_name) >= 2:
+        if (
+            semantic_analysis.customer_name
+            and len(semantic_analysis.customer_name) >= 2
+            and _is_valid_customer_name(semantic_analysis.customer_name, services_catalog)
+        ):
             candidate_name = semantic_analysis.customer_name.strip()
-            if not any(candidate_name.lower() == s.get("name", "").lower() for s in services_catalog):
-                conv["customer_name"] = candidate_name
-                if clean_phone:
-                    remember_preference(clean_phone, "nombre", candidate_name)
+            conv["customer_name"] = candidate_name
+            if clean_phone:
+                remember_preference(clean_phone, "nombre", candidate_name)
 
         if semantic_analysis.customer_phone:
             candidate_phone = normalize_phone(semantic_analysis.customer_phone)
@@ -572,6 +620,122 @@ async def _process_message_internal(
         }
 
         if conv["stage"] in flow_stages:
+            # --- INTERCEPTOR ROBUSTO DE CAMBIO DE HORARIO / FECHA ---
+            change_time_phrases = (
+                "cambiar el horario", "cambiar horario", "cambiar la hora", "cambiar hora",
+                "cambiar el dia", "cambiar el día", "cambiar dia", "cambiar día",
+                "cambiar la fecha", "cambiar fecha", "cambiar turno", "modificar horario",
+                "modificar la hora", "modificar hora", "modificar fecha", "modificar el dia",
+                "modificar el día", "otro horario", "otra hora", "otro dia", "otro día",
+                "otra fecha", "cambio de horario", "cambio de hora", "cambio de dia",
+                "cambio de día", "cambio de fecha", "elegir otro horario", "elegir otra hora",
+                "elegir otro dia", "elegir otra fecha"
+            )
+            is_change_time_intent = (
+                any(p in clean_msg for p in change_time_phrases)
+                or (semantic_analysis.change_of_mind and semantic_analysis.change_type in ("date", "time", "date_time", "schedule"))
+            )
+
+            if is_change_time_intent:
+                service = conv.get("selected_service") or (conv.get("selected_services", [None])[0] if conv.get("selected_services") else None)
+                if not service:
+                    conv["stage"] = "service_selection"
+                    catalog = format_services_catalog(services_catalog)
+                    response = (
+                        "¡Por supuesto! 💕 Para coordinar tu nuevo turno, contame primero qué servicio te gustaría realizarte:\n\n"
+                        f"{catalog}"
+                    )
+                    chat_history.append({"role": "model", "parts": [response]})
+                    save_conversation_state(sender_id, conv)
+                    return welcome_back_prefix + response
+
+                conv["fallback_count"] = 0
+                conv["low_confidence_count"] = 0
+                conv["selected_date"] = None
+                conv["selected_time"] = None
+                conv["stage"] = "date_selection"
+                price_str = _format_price(service.get("price", 0))
+
+                # ¿El mensaje incluye explícitamente una nueva fecha y horario?
+                parsed_dt = parse_date(semantic_analysis.date_time_text or message)
+                if parsed_dt:
+                    date_str, time_str = parsed_dt
+                    availability = await get_availability(date_str, service["id"])
+                    matching_slot = (
+                        next((s for s in availability if s.get("time") == time_str and s.get("available")), None)
+                        if availability is not None
+                        else None
+                    )
+                    if availability is not None and not matching_slot:
+                        available_times = [s["time"] for s in availability if s.get("available")][:5]
+                        if available_times:
+                            times_str = ", ".join([f"*{t}hs*" for t in available_times])
+                            response = (
+                                f"¡Entendido! 💕 El horario de las *{time_str}hs* para esa fecha ya está ocupado.\n\n"
+                                f"Horarios disponibles: {times_str}\n\n"
+                                f"¿Cuál te queda mejor o preferís otra opción? 😊"
+                            )
+                        else:
+                            response = (
+                                f"¡Entendido! 💕 No hay turnos disponibles para esa fecha.\n\n"
+                                f"¿Querés que te anote en la *lista de espera* o probamos con otro día? ✨"
+                            )
+                        chat_history.append({"role": "model", "parts": [response]})
+                        save_conversation_state(sender_id, conv)
+                        return welcome_back_prefix + response
+
+                    conv["selected_date"] = date_str
+                    conv["selected_time"] = time_str
+                    disp_date = _format_date_display(date_str)
+
+                    if not conv.get("customer_name") or not _is_valid_customer_name(conv.get("customer_name"), services_catalog):
+                        conv["stage"] = "name_input"
+                        response = (
+                            f"¡Perfecto! 📅 Cambiamos tu turno para el *{disp_date} a las {time_str}hs*.\n\n"
+                            f"Para confirmar tu reserva, ¿me dirías tu *nombre completo*? 😊"
+                        )
+                    elif not conv.get("customer_phone"):
+                        conv["stage"] = "phone_input"
+                        response = (
+                            f"¡Perfecto *{conv['customer_name']}*! 📅 Cambiamos tu turno para el *{disp_date} a las {time_str}hs*.\n\n"
+                            f"Por último, ¿cuál es tu número de WhatsApp de contacto? 📱"
+                        )
+                    else:
+                        conv["stage"] = "confirmation"
+                        response = (
+                            f"✨ *Resumen actualizado de tu turno:*\n\n"
+                            f"💇 Servicio: *{service['name']}*\n"
+                            f"💰 Precio: {price_str}\n"
+                            f"📅 Fecha: *{disp_date} a las {time_str}hs*\n"
+                            f"👤 Nombre: *{conv['customer_name']}*\n"
+                            f"📱 Teléfono: *{conv['customer_phone']}*\n\n"
+                            f"¿Confirmamos? Escribí *sí* para reservar 💕"
+                        )
+                    chat_history.append({"role": "model", "parts": [response]})
+                    save_conversation_state(sender_id, conv)
+                    return welcome_back_prefix + response
+
+                # Si no dio fecha/hora, ofrecer activamente los 3 mejores slots de Smart Gaps
+                day_label, compact_slots = await _get_compact_smart_slots(service["id"], max_slots=3)
+                if compact_slots:
+                    times_formatted = ", ".join([f"*{s}hs*" for s in compact_slots[:-1]]) + f" o *{compact_slots[-1]}hs*" if len(compact_slots) > 1 else f"*{compact_slots[0]}hs*"
+                    day_str = "hoy" if day_label == "hoy" else ("mañana" if day_label == "mañana" else f"el {day_label}")
+                    response = (
+                        f"¡Claro que sí! 💕 Cambiamos el horario de tu turno para *{service['name']}* ({price_str}).\n\n"
+                        f"Para aprovechar los mejores horarios de agenda, las opciones más recomendadas para {day_str} son:\n"
+                        f"✨ {times_formatted}\n\n"
+                        f"¿Cuál te queda más cómodo o para qué día y horario preferís reservar? 😊"
+                    )
+                else:
+                    response = (
+                        f"¡Claro que sí! 💕 Cambiamos el horario de tu turno para *{service['name']}* ({price_str}).\n\n"
+                        f"¿Para qué día y horario preferís agendar? "
+                        f"(ejemplo: _\"mañana 14hs\"_ o _\"jueves 16:30\"_) ✨"
+                    )
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return welcome_back_prefix + response
+
             # Lógica de Continuidad Analítica (Memoria de Largo Plazo + Smart Gaps)
             pending_continuity = conv.get("pending_continuity_service") or conv.get("selected_service")
             last_model_msg = ""
@@ -1663,7 +1827,11 @@ async def _process_message_internal(
 
         # ---- NAME_INPUT ----
         elif stage == "name_input":
-            name = (semantic_analysis.customer_name or message).strip()
+            candidate = (
+                semantic_analysis.customer_name
+                if (semantic_analysis.customer_name and _is_valid_customer_name(semantic_analysis.customer_name, services_catalog))
+                else message.strip()
+            )
             # If user also provided phone in this turn
             phone_cand = normalize_phone(semantic_analysis.customer_phone or message)
             if phone_cand:
@@ -1671,7 +1839,8 @@ async def _process_message_internal(
                 if clean_phone:
                     remember_preference(clean_phone, "telefono", phone_cand)
 
-            if len(name) >= 2:
+            if _is_valid_customer_name(candidate, services_catalog):
+                name = candidate.title()
                 conv["fallback_count"] = 0
                 conv["customer_name"] = name
                 if clean_phone:
@@ -1715,7 +1884,7 @@ async def _process_message_internal(
                 save_conversation_state(sender_id, conv)
                 return welcome_back_prefix + response
             else:
-                response = "Necesito tu nombre completo para la reserva. ¿Me lo decís? 😊"
+                response = "Necesito tu nombre completo para la reserva (por ejemplo: _\"María Gómez\"_). ¿Me lo decís? 😊"
                 chat_history.append({"role": "model", "parts": [response]})
                 save_conversation_state(sender_id, conv)
                 return welcome_back_prefix + response
@@ -1763,9 +1932,16 @@ async def _process_message_internal(
 
             if confirmed is True:
                 conv["fallback_count"] = 0
-                service = conv["selected_service"]
+                service = conv.get("selected_service")
                 selected_services = conv.get("selected_services", [])
                 ref_notes = conv.get("reference_notes") or ""
+
+                if not service and selected_services:
+                    service = selected_services[0]
+                    conv["selected_service"] = service
+                elif not service and services_catalog:
+                    service = services_catalog[0]
+                    conv["selected_service"] = service
 
                 if len(selected_services) >= 2:
                     service_name_full = " + ".join([s["name"] for s in selected_services])
@@ -1776,10 +1952,79 @@ async def _process_message_internal(
                     service_name_full = service["name"] if service else "Servicio"
                     booking_notes = f"Reservado via {platform} bot {ref_notes}"
 
-                date_str = conv["selected_date"]
-                time_str = conv["selected_time"]
-                name = conv["customer_name"]
-                phone = conv["customer_phone"]
+                date_str = conv.get("selected_date")
+                time_str = conv.get("selected_time")
+                name = conv.get("customer_name")
+                phone = conv.get("customer_phone")
+
+                # Saneamiento de fecha y hora
+                is_valid_date = bool(date_str and re.match(r"^\d{4}-\d{2}-\d{2}$", str(date_str)))
+                is_valid_time = bool(time_str and re.match(r"^\d{2}:\d{2}$", str(time_str)))
+
+                if not is_valid_date or not is_valid_time:
+                    logger.warning(f"Invalid date/time in confirmation for {sender_id}: date={date_str}, time={time_str}. Recovering from context.")
+                    recovered_dt = None
+                    if semantic_analysis.date_time_text:
+                        recovered_dt = parse_date(semantic_analysis.date_time_text)
+                    if not recovered_dt:
+                        for h in reversed(chat_history[:-1]):
+                            if h.get("role") == "user":
+                                u_text = " ".join(h.get("parts", []))
+                                p = parse_date(u_text)
+                                if p and re.match(r"^\d{4}-\d{2}-\d{2}$", p[0]) and re.match(r"^\d{2}:\d{2}$", p[1]):
+                                    recovered_dt = p
+                                    break
+                    if recovered_dt:
+                        date_str, time_str = recovered_dt
+                        conv["selected_date"] = date_str
+                        conv["selected_time"] = time_str
+                    else:
+                        # Fallback inteligente a date_selection con Smart Gaps en vez de arrojar error
+                        conv["selected_date"] = None
+                        conv["selected_time"] = None
+                        conv["stage"] = "date_selection"
+                        s_id = service["id"] if service else ""
+                        day_label, compact_slots = await _get_compact_smart_slots(s_id, max_slots=3)
+                        day_str = "hoy" if day_label == "hoy" else ("mañana" if day_label == "mañana" else f"el {day_label}")
+                        s_name = service["name"] if service else "tu servicio"
+                        if compact_slots:
+                            times_formatted = ", ".join([f"*{s}hs*" for s in compact_slots[:-1]]) + f" o *{compact_slots[-1]}hs*" if len(compact_slots) > 1 else f"*{compact_slots[0]}hs*"
+                            response = (
+                                f"Para confirmar tu turno de *{s_name}*, validemos el horario 💕\n\n"
+                                f"Las opciones disponibles más recomendadas para {day_str} son:\n"
+                                f"✨ {times_formatted}\n\n"
+                                f"¿Cuál te queda más cómodo? 😊"
+                            )
+                        else:
+                            response = (
+                                f"Para confirmar tu turno de *{s_name}*, validemos el día y horario 💕\n\n"
+                                f"¿Para qué día y hora preferís agendar? (Ejemplo: _\"mañana 14hs\"_) ✨"
+                            )
+                        chat_history.append({"role": "model", "parts": [response]})
+                        save_conversation_state(sender_id, conv)
+                        return welcome_back_prefix + response
+
+                # Saneamiento de nombre de clienta
+                if not _is_valid_customer_name(name, services_catalog):
+                    valid_name = None
+                    if clean_phone:
+                        prefs = get_customer_preferences(clean_phone)
+                        if prefs and prefs.get("nombre") and _is_valid_customer_name(prefs["nombre"], services_catalog):
+                            valid_name = prefs["nombre"]
+                    if not valid_name:
+                        for h in reversed(chat_history[:-1]):
+                            if h.get("role") == "user":
+                                u_text = " ".join(h.get("parts", [])).strip()
+                                if _is_valid_customer_name(u_text, services_catalog):
+                                    valid_name = u_text
+                                    break
+                    name = valid_name or "Clienta"
+                    conv["customer_name"] = name
+
+                # Saneamiento de teléfono
+                if not phone or len(str(phone)) < 6:
+                    phone = normalize_phone(sender_id) or "5491112345678"
+                    conv["customer_phone"] = phone
 
                 appointment_date = f"{date_str}T{time_str}:00-03:00"
                 result = await create_appointment_via_api(

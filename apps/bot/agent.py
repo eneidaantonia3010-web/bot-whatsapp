@@ -33,6 +33,7 @@ from services.database import (
 from services.calendar import (
     create_appointment_via_api,
     get_availability,
+    get_smart_availability,
     get_upcoming_appointments,
     confirm_upcoming_appointment,
     cancel_appointment,
@@ -137,6 +138,8 @@ def get_conversation(sender_id: str) -> dict:
         "rescheduling_apt": None,
         "upcoming_apts": [],
         "reference_notes": None,
+        "awaiting_continuity": False,
+        "pending_continuity_service": None,
     }
     conversations[sender_id] = new_state
     return new_state
@@ -190,6 +193,67 @@ async def _parse_multi_service(message: str, services: list[dict], history: list
     except Exception as e:
         logger.warning(f"Multi-service extraction failed: {e}")
     return {"servicios": [], "fecha": None}
+
+
+async def _get_compact_smart_slots(service_id: str, max_slots: int = 3) -> tuple[str, list[str]]:
+    """
+    Obtiene hasta max_slots horarios optimizados mediante Smart Gaps.
+    Prioriza hoy (si hay disponibilidad antes del cierre) y luego mañana.
+    Retorna (label_dia, lista_horarios), ej: ("hoy", ["14:30", "16:00", "18:30"]).
+    """
+    try:
+        now_ar = datetime.now(TZ_AR)
+        today_str = now_ar.strftime("%Y-%m-%d")
+
+        # 1. Intentar con hoy
+        smart_today = await get_smart_availability(today_str, service_id, limit=max_slots)
+        if smart_today:
+            rec_slots = [
+                s.get("time") for s in smart_today.get("recommendedSlots", [])
+                if isinstance(s, dict) and s.get("time")
+            ]
+            all_avail = [
+                s.get("time") for s in smart_today.get("slots", [])
+                if isinstance(s, dict) and s.get("available") and s.get("time") not in rec_slots
+            ]
+            combined = [t for t in (rec_slots + all_avail) if t][:max_slots]
+            if combined:
+                return ("hoy", combined)
+
+        # 2. Si hoy no hay cupos o ya cerró, intentar con mañana
+        tomorrow_dt = now_ar + timedelta(days=1)
+        tomorrow_str = tomorrow_dt.strftime("%Y-%m-%d")
+        smart_tomorrow = await get_smart_availability(tomorrow_str, service_id, limit=max_slots)
+        if smart_tomorrow:
+            rec_slots = [
+                s.get("time") for s in smart_tomorrow.get("recommendedSlots", [])
+                if isinstance(s, dict) and s.get("time")
+            ]
+            all_avail = [
+                s.get("time") for s in smart_tomorrow.get("slots", [])
+                if isinstance(s, dict) and s.get("available") and s.get("time") not in rec_slots
+            ]
+            combined = [t for t in (rec_slots + all_avail) if t][:max_slots]
+            if combined:
+                return ("mañana", combined)
+
+        # 3. Fallback a get_availability normal
+        avail_today = await get_availability(today_str, service_id)
+        if avail_today:
+            avail_slots = [s["time"] for s in avail_today if s.get("available")][:max_slots]
+            if avail_slots:
+                return ("hoy", avail_slots)
+
+        avail_tom = await get_availability(tomorrow_str, service_id)
+        if avail_tom:
+            avail_slots = [s["time"] for s in avail_tom if s.get("available")][:max_slots]
+            if avail_slots:
+                return ("mañana", avail_slots)
+
+    except Exception as e:
+        logger.warning(f"Error fetching compact smart slots: {e}")
+
+    return ("", [])
 
 
 def _strip_accents(text: str) -> str:
@@ -334,6 +398,7 @@ async def _process_message_internal(
         conv = get_conversation(sender_id)
         chat_history = conv["chat_history"]
         clean_msg = message.strip().lower()
+        clean_msg_strip = message.strip()
 
         # Continuous Language Detection
         lang = conv.get("language", "es")
@@ -367,6 +432,8 @@ async def _process_message_internal(
                     service = conv.get("selected_service")
                     if service and conv["stage"] not in ("greeting", "human_escalated"):
                         welcome_back_prefix = t("welcome_back", lang, service=service.get("name", "tu servicio")) + "\n\n"
+                        conv["awaiting_continuity"] = True
+                        conv["pending_continuity_service"] = service
             except Exception as e:
                 logger.warning(f"Error checking session freshness: {e}")
 
@@ -505,6 +572,195 @@ async def _process_message_internal(
         }
 
         if conv["stage"] in flow_stages:
+            # Lógica de Continuidad Analítica (Memoria de Largo Plazo + Smart Gaps)
+            pending_continuity = conv.get("pending_continuity_service") or conv.get("selected_service")
+            last_model_msg = ""
+            for hist_item in reversed(chat_history[:-1]):
+                if hist_item.get("role") == "model":
+                    last_model_msg = " ".join(hist_item.get("parts", [])).lower()
+                    break
+
+            asked_continuity = bool(
+                conv.get("awaiting_continuity")
+                or "¿seguimos?" in last_model_msg
+                or "habíamos quedado con tu turno" in last_model_msg
+                or "continuamos?" in last_model_msg
+                or "shall we continue?" in last_model_msg
+                or (welcome_back_prefix and "¿seguimos?" in welcome_back_prefix.lower())
+            )
+
+            pending_idx = None
+            if pending_continuity:
+                for idx, s in enumerate(services_catalog, 1):
+                    if s.get("id") == pending_continuity.get("id") or s.get("name", "").strip().lower() == pending_continuity.get("name", "").strip().lower():
+                        pending_idx = idx
+                        break
+
+            opt_match = re.match(r"^(?:opci[oó]n\s*#?|#)?\s*([1-9]\d?)\.?$", clean_msg_strip, re.IGNORECASE)
+            opt_num = int(opt_match.group(1)) if opt_match else None
+
+            user_sent_pending_idx = (
+                pending_idx is not None
+                and (
+                    (opt_num is not None and opt_num == pending_idx)
+                    or clean_msg_strip == str(pending_idx)
+                    or clean_msg in (
+                        f"el {pending_idx}", f"la {pending_idx}", f"opcion {pending_idx}",
+                        f"opción {pending_idx}", f"opcion #{pending_idx}", f"opción #{pending_idx}",
+                        f"#{pending_idx}", f"numero {pending_idx}", f"número {pending_idx}"
+                    )
+                )
+            )
+
+            user_confirmed_continuity = clean_msg in (
+                "si", "sí", "dale", "ok", "así es", "asi es", "continuar", "obvio", "claro",
+                "de una", "vamos", "perfecto", "bueno", "acepto", "confirmar", "confirmo",
+                "seguimos", "sii", "siii", "yes", "yep", "sep"
+            ) or (intent == "CONFIRM_APPOINTMENT" and asked_continuity)
+
+            user_sent_service_name = bool(
+                pending_continuity
+                and pending_continuity.get("name", "").strip().lower() in clean_msg
+            )
+
+            # Caso A: Rechazo explícito de la continuidad
+            if asked_continuity and clean_msg in ("no", "nop", "cancelar", "cambiar", "no quiero", "otro", "otra cosa"):
+                conv["awaiting_continuity"] = False
+                conv["pending_continuity_service"] = None
+                conv["selected_service"] = None
+                conv["selected_services"] = []
+                conv["stage"] = "service_selection"
+                catalog = format_services_catalog(services_catalog)
+                response = (
+                    "¡No hay problema! 💕 Contame qué servicio te gustaría realizarte o elegí una de estas opciones:\n\n"
+                    f"{catalog}"
+                )
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return response
+
+            # Caso B: El usuario eligió otra opción numérica diferente a la pendiente
+            if asked_continuity and opt_num is not None and opt_num != pending_idx:
+                conv["awaiting_continuity"] = False
+                conv["pending_continuity_service"] = None
+                # No retorna; permite que continúe al selector general de servicios
+
+            # Caso C: Continuidad aceptada (por número exacto de opción, afirmación o nombre de servicio)
+            elif (
+                (asked_continuity and (user_sent_pending_idx or user_confirmed_continuity or user_sent_service_name))
+                or (pending_continuity and user_sent_pending_idx and conv.get("stage") in ("greeting", "service_selection", "date_selection"))
+            ):
+                conv["fallback_count"] = 0
+                conv["low_confidence_count"] = 0
+                conv["awaiting_continuity"] = False
+                conv["pending_continuity_service"] = None
+
+                # Mantener el servicio activo sin limpiar la sesión
+                conv["selected_service"] = pending_continuity
+                conv["selected_services"] = [pending_continuity]
+                conv["cross_sell_offered"] = None
+                conv["cancelling_apt"] = None
+                conv["rescheduling_apt"] = None
+                conv["upcoming_apts"] = []
+
+                welcome_back_prefix = ""
+                price_str = _format_price(pending_continuity["price"])
+
+                # ¿El usuario especificó fecha/hora en este mensaje?
+                parsed_dt = parse_date(semantic_analysis.date_time_text or message)
+                if parsed_dt:
+                    date_str, time_str = parsed_dt
+                    availability = await get_availability(date_str, pending_continuity["id"])
+                    matching_slot = (
+                        next((s for s in availability if s.get("time") == time_str and s.get("available")), None)
+                        if availability is not None
+                        else None
+                    )
+
+                    if availability is not None and not matching_slot:
+                        available_times = [s["time"] for s in availability if s.get("available")][:5]
+                        if available_times:
+                            times_str = ", ".join([f"*{t}hs*" for t in available_times])
+                            response = (
+                                f"¡Genial! 💕 Continuamos con *{pending_continuity['name']}* ({price_str}).\n\n"
+                                f"😔 El horario de las *{time_str}hs* para esa fecha ya está ocupado.\n\n"
+                                f"Horarios disponibles: {times_str}\n\n"
+                                f"¿Cuál te queda mejor o preferís otro día y horario? 😊"
+                            )
+                        else:
+                            response = (
+                                f"¡Genial! 💕 Continuamos con *{pending_continuity['name']}* ({price_str}).\n\n"
+                                f"😔 No hay turnos disponibles para ese día.\n\n"
+                                f"¿Querés que te anote en la *lista de espera* o probamos con otra fecha? ✨"
+                            )
+                        conv["stage"] = "date_selection"
+                        chat_history.append({"role": "model", "parts": [response]})
+                        save_conversation_state(sender_id, conv)
+                        return response
+
+                    conv["selected_date"], conv["selected_time"] = parsed_dt
+                    disp_date = _format_date_display(parsed_dt[0])
+
+                    if not conv.get("customer_name"):
+                        conv["stage"] = "name_input"
+                        response = (
+                            f"¡Genial! 💕 Continuamos con *{pending_continuity['name']}* ({price_str}).\n\n"
+                            f"Te agendamos para el *{disp_date} a las {parsed_dt[1]}hs*.\n\n"
+                            f"Para confirmar tu turno, ¿me dirías tu *nombre completo*? 😊"
+                        )
+                    elif not conv.get("customer_phone"):
+                        conv["stage"] = "phone_input"
+                        response = (
+                            f"¡Genial! 💕 Continuamos con *{pending_continuity['name']}* ({price_str}) "
+                            f"para el *{disp_date} a las {parsed_dt[1]}hs*.\n\n"
+                            f"Por último, ¿cuál es tu número de WhatsApp de contacto? 📱"
+                        )
+                    else:
+                        conv["stage"] = "confirmation"
+                        response = (
+                            f"✨ *Resumen de tu turno:*\n\n"
+                            f"💇 Servicio: *{pending_continuity['name']}*\n"
+                            f"💰 Precio: {price_str}\n"
+                            f"📅 Fecha: *{disp_date} a las {parsed_dt[1]}hs*\n"
+                            f"👤 Nombre: *{conv['customer_name']}*\n"
+                            f"📱 Teléfono: *{conv['customer_phone']}*\n\n"
+                            f"¿Confirmamos? Escribí *sí* para reservar 💕"
+                        )
+                    chat_history.append({"role": "model", "parts": [response]})
+                    save_conversation_state(sender_id, conv)
+                    return response
+
+                # Transición inmediata a date_selection ofreciendo los 3 horarios más compactos del optimizador Smart Gaps
+                conv["stage"] = "date_selection"
+                conv["selected_date"] = None
+                conv["selected_time"] = None
+
+                day_label, compact_slots = await _get_compact_smart_slots(pending_continuity["id"], max_slots=3)
+
+                if compact_slots:
+                    times_formatted = ", ".join([f"*{s}hs*" for s in compact_slots[:-1]]) + f" o *{compact_slots[-1]}hs*" if len(compact_slots) > 1 else f"*{compact_slots[0]}hs*"
+                    day_str = "hoy" if day_label == "hoy" else ("mañana" if day_label == "mañana" else f"el {day_label}")
+                    response = (
+                        f"¡Genial! 💕 Continuamos con tu turno de *{pending_continuity['name']}* ({price_str}).\n\n"
+                        f"Para aprovechar los mejores horarios de agenda, las opciones más recomendadas para {day_str} son:\n"
+                        f"✨ {times_formatted}\n\n"
+                        f"¿Cuál te queda más cómodo o preferís otro día y horario? 😊"
+                    )
+                else:
+                    response = (
+                        f"¡Genial! 💕 Continuamos con tu turno de *{pending_continuity['name']}* ({price_str}).\n\n"
+                        f"¿Para qué día y horario te gustaría reservar? "
+                        f"(ejemplo: _\"hoy 16:30\"_, _\"mañana 14hs\"_ o _\"el viernes a las 11\"_) ✨"
+                    )
+
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+
+                gallery = get_gallery_image_for_category(pending_continuity.get("category", ""))
+                if gallery and gallery.get("url"):
+                    return {"response": response, "image_url": gallery["url"]}
+                return response
+
             is_cross_sell_acceptance = (
                 conv.get("stage") == "date_selection"
                 and conv.get("cross_sell_offered")
@@ -514,7 +770,12 @@ async def _process_message_internal(
                 ))
             )
 
-            if intent == "CONFIRM_APPOINTMENT" and not is_cross_sell_acceptance:
+            if (
+                intent == "CONFIRM_APPOINTMENT"
+                and not is_cross_sell_acceptance
+                and not asked_continuity
+                and conv.get("stage") not in ("confirmation", "service_selection")
+            ):
                 conv["fallback_count"] = 0
                 confirmed_apt = await confirm_upcoming_appointment(
                     phone=clean_phone, instagram=sender_id
@@ -796,12 +1057,24 @@ async def _process_message_internal(
                 cross_sell_text = f"\n\n{cross_sell['message_hint']}"
                 conv["cross_sell_offered"] = cross_sell["suggested_treatment"]
 
-            response = (
-                f"¡Excelente elección! 💇 *{catalog_selected_service['name']}* "
-                f"({price_str}, {catalog_selected_service['duration']}min).{cross_sell_text}\n\n"
-                f"¿Para qué día y horario te gustaría reservar? "
-                f"(ejemplo: _\"mañana 14hs\"_, _\"jueves 16:30\"_ o _\"el 15 a las 11\"_) ✨"
-            )
+            day_label, compact_slots = await _get_compact_smart_slots(catalog_selected_service["id"], max_slots=3)
+            if compact_slots:
+                times_formatted = ", ".join([f"*{s}hs*" for s in compact_slots[:-1]]) + f" o *{compact_slots[-1]}hs*" if len(compact_slots) > 1 else f"*{compact_slots[0]}hs*"
+                day_str = "hoy" if day_label == "hoy" else ("mañana" if day_label == "mañana" else f"el {day_label}")
+                response = (
+                    f"¡Excelente elección! 💇 *{catalog_selected_service['name']}* "
+                    f"({price_str}, {catalog_selected_service['duration']}min).{cross_sell_text}\n\n"
+                    f"Para aprovechar los mejores horarios de agenda, las opciones más recomendadas para {day_str} son:\n"
+                    f"✨ {times_formatted}\n\n"
+                    f"¿Cuál te queda más cómodo o para qué día y horario preferís reservar? ✨"
+                )
+            else:
+                response = (
+                    f"¡Excelente elección! 💇 *{catalog_selected_service['name']}* "
+                    f"({price_str}, {catalog_selected_service['duration']}min).{cross_sell_text}\n\n"
+                    f"¿Para qué día y horario te gustaría reservar? "
+                    f"(ejemplo: _\"mañana 14hs\"_, _\"jueves 16:30\"_ o _\"el 15 a las 11\"_) ✨"
+                )
             chat_history.append({"role": "model", "parts": [response]})
             save_conversation_state(sender_id, conv)
 
@@ -1121,12 +1394,24 @@ async def _process_message_internal(
                     cross_sell_text = f"\n\n{cross_sell['message_hint']}"
                     conv["cross_sell_offered"] = cross_sell["suggested_treatment"]
 
-                response = (
-                    f"¡Excelente elección! 💇 *{matched_service['name']}* "
-                    f"({price_str}, {matched_service['duration']}min).{cross_sell_text}\n\n"
-                    f"¿Para qué día y hora te gustaría reservar? "
-                    f"(ejemplo: _\"mañana 14hs\"_, _\"jueves 16:30\"_ o _\"el 15 a las 11\"_) ✨"
-                )
+                day_label, compact_slots = await _get_compact_smart_slots(matched_service["id"], max_slots=3)
+                if compact_slots:
+                    times_formatted = ", ".join([f"*{s}hs*" for s in compact_slots[:-1]]) + f" o *{compact_slots[-1]}hs*" if len(compact_slots) > 1 else f"*{compact_slots[0]}hs*"
+                    day_str = "hoy" if day_label == "hoy" else ("mañana" if day_label == "mañana" else f"el {day_label}")
+                    response = (
+                        f"¡Excelente elección! 💇 *{matched_service['name']}* "
+                        f"({price_str}, {matched_service['duration']}min).{cross_sell_text}\n\n"
+                        f"Para aprovechar los mejores horarios de agenda, las opciones más recomendadas para {day_str} son:\n"
+                        f"✨ {times_formatted}\n\n"
+                        f"¿Cuál te queda más cómodo o para qué día y horario preferís reservar? ✨"
+                    )
+                else:
+                    response = (
+                        f"¡Excelente elección! 💇 *{matched_service['name']}* "
+                        f"({price_str}, {matched_service['duration']}min).{cross_sell_text}\n\n"
+                        f"¿Para qué día y hora te gustaría reservar? "
+                        f"(ejemplo: _\"mañana 14hs\"_, _\"jueves 16:30\"_ o _\"el 15 a las 11\"_) ✨"
+                    )
                 chat_history.append({"role": "model", "parts": [response]})
                 save_conversation_state(sender_id, conv)
 

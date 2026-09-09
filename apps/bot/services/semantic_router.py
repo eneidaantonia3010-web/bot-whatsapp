@@ -112,7 +112,7 @@ def _extract_semantics_rules(
             )
             candidate_name = clean_tokens[0].strip() if clean_tokens else raw_name
             if candidate_name and len(candidate_name) >= 2:
-                if not any(w in candidate_name.lower() for w in ("corte", "uñas", "facial", "masaje", "turno", "hola", "gracias")):
+                if not any(w in candidate_name.lower() for w in ("corte", "uñas", "facial", "masaje", "turno", "hola", "gracias", "este", "mismo", "deja", "usa", "otro")):
                     analysis.customer_name = candidate_name.title()
                     break
 

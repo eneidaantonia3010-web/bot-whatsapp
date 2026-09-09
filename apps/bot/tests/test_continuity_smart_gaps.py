@@ -290,7 +290,94 @@ async def test_name_input_rejects_conversational_sentence():
             reply2 = reply2.get("response", "")
 
         assert conv.get("customer_name") != "no quiero para el martes sino para el miercoles 12"
+        # Explicit schedule change request cleanly transitions back to date_selection
+        await process_message(sender_id, "quiero cambiar el horario")
         assert conv["stage"] == "date_selection"
+
+
+@pytest.mark.anyio
+async def test_strict_name_guardrail_and_interactive_phone_confirmation():
+    """
+    Validates:
+    1. Guardarraíl semántico de nombre propio: descarta frases con conectores de tiempo,
+       negaciones, números o verbos, y lanza el mensaje explícito:
+       "¡Disculpame! Me mareé un poquito con los días. 😅 ¿Me dirías tu nombre y apellido completo para registrar la reserva? 😊"
+    2. Al ingresar un nombre válido, NO asume el teléfono de Baileys automáticamente.
+       Lanza la pregunta interactiva obligatoria:
+       "Perfecto. ¿Este número de WhatsApp es el que querés dejar para recibir los recordatorios automáticos de tus turnos, o preferís registrar otro número? (Pasámelo con el código de área)"
+    3. En phone_input, responder "este mismo" o "sí" adopta el número de WhatsApp de sender_id y avanza a confirmation.
+    """
+    sender_id = "5491178296781"
+    conv = get_conversation(sender_id)
+    conv["stage"] = "name_input"
+    conv["selected_service"] = MOCK_SERVICES[0]
+    conv["selected_date"] = "2026-09-15"
+    conv["selected_time"] = "16:00"
+    conv["customer_name"] = None
+    conv["phone_confirmed"] = False
+
+    with patch("agent.get_services", return_value=MOCK_SERVICES), \
+         patch("agent.save_conversation_state", return_value=True):
+
+        # Paso 1: Enviar frase conversacional con negación y días
+        rep1 = await process_message(sender_id, "no quiero para el martes sino para el miercoles a las 12")
+        if isinstance(rep1, dict):
+            rep1 = rep1.get("response", "")
+
+        assert conv.get("customer_name") is None
+        assert "¡Disculpame! Me mareé un poquito con los días. 😅 ¿Me dirías tu nombre y apellido completo para registrar la reserva? 😊" in rep1
+        assert conv["stage"] in ("name_input", "name_selection")
+
+        # Paso 2: Enviar nombre propio real
+        rep2 = await process_message(sender_id, "Camila Perez")
+        if isinstance(rep2, dict):
+            rep2 = rep2.get("response", "")
+
+        assert conv["customer_name"] == "Camila Perez"
+        assert conv["stage"] == "phone_input"
+        assert conv["phone_confirmed"] is False
+        assert "Perfecto. ¿Este número de WhatsApp es el que querés dejar para recibir los recordatorios automáticos de tus turnos, o preferís registrar otro número? (Pasámelo con el código de área)" in rep2
+
+        # Paso 3: Confirmar con "este mismo"
+        rep3 = await process_message(sender_id, "este mismo")
+        if isinstance(rep3, dict):
+            rep3 = rep3.get("response", "")
+
+        assert conv["phone_confirmed"] is True
+        assert conv["customer_phone"] == "5491178296781"
+        assert conv["stage"] == "confirmation"
+        assert "Resumen de tu turno:" in rep3
+        assert "Camila Perez" in rep3
+        assert "5491178296781" in rep3
+
+
+@pytest.mark.anyio
+async def test_phone_input_allows_different_number():
+    """
+    In phone_input, if the user specifies a different phone number,
+    the bot registers that number and advances to confirmation.
+    """
+    sender_id = "5491178296781"
+    conv = get_conversation(sender_id)
+    conv["stage"] = "phone_input"
+    conv["selected_service"] = MOCK_SERVICES[1]
+    conv["selected_date"] = "2026-09-16"
+    conv["selected_time"] = "11:00"
+    conv["customer_name"] = "Mariana Rossi"
+    conv["phone_confirmed"] = False
+
+    with patch("agent.get_services", return_value=MOCK_SERVICES), \
+         patch("agent.save_conversation_state", return_value=True):
+
+        rep = await process_message(sender_id, "1166496150")
+        if isinstance(rep, dict):
+            rep = rep.get("response", "")
+
+        assert conv["phone_confirmed"] is True
+        assert conv["customer_phone"] == "5491166496150"
+        assert conv["stage"] == "confirmation"
+        assert "Mariana Rossi" in rep
+        assert "5491166496150" in rep
 
 
 @pytest.mark.anyio

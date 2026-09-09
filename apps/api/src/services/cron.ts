@@ -235,7 +235,9 @@ export function initCronJobs() {
               weekday: 'long',
               day: 'numeric',
               month: 'long',
+              timeZone: 'America/Argentina/Buenos_Aires',
             });
+
             const msg = (
               `🎉 *¡Buenas noticias ${nextClient.customer.name}!* 💕\n\n` +
               `Hay un lugar disponible para *${nextClient.service.name}* el *${dateStr}* en *Glow Studio*.\n\n` +

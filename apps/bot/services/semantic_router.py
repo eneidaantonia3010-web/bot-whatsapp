@@ -53,10 +53,19 @@ _PHONE_PATTERN = re.compile(
 )
 
 _DATE_TIME_PATTERNS = [
-    re.compile(r"\b(hoy|mañana|pasado mañana|lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado)\b(?:\s+(?:a\s+las|a)?\s*(\d{1,2}(?::\d{2})?\s*(?:hs|hrs|am|pm)?))?", re.IGNORECASE),
+    re.compile(
+        r"\b(hoy|mañana|pasado\s*mañana|pasadomanana|lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado)\b"
+        r"(?:\s+(?:a\s+las|a)?\s*(\d{1,2}(?::\d{2})?\s*(?:hs|hrs|h|am|pm|de\s+la\s+tarde|de\s+la\s+mañana|de\s+la\s+manana|de\s+la\s+noche)?))?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:a\s+las|a)?\s*(\d{1,2}(?::\d{2})?\s*(?:hs|hrs|h)?\s*(?:de\s+la\s+tarde|de\s+la\s+mañana|de\s+la\s+manana|de\s+la\s+noche|am|pm))\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"\b(?:a\s+las|a)?\s*(\d{1,2}(?::\d{2})?\s*(?:hs|hrs))\b", re.IGNORECASE),
     re.compile(r"\b(\d{1,2}\s+de\s+[a-záéíóúñ]+(?:\s+a\s+las\s+\d{1,2}(?::\d{2})?)?)\b", re.IGNORECASE),
 ]
+
 
 _DIGRESSION_PATTERNS = {
     "precios": re.compile(r"\b(cu[aá]nto sale|cu[aá]nto cuesta|lista de precios|precios? de los servicios|costos? de los servicios)\b", re.IGNORECASE),

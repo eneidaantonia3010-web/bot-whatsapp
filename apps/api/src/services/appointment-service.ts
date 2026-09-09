@@ -688,13 +688,16 @@ export class AppointmentService {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
+      timeZone: 'America/Argentina/Buenos_Aires',
     });
     const timeStr = startDate.toLocaleTimeString('es-AR', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
+      timeZone: 'America/Argentina/Buenos_Aires',
     });
     const dateTimeStr = `${dateStr} a las ${timeStr}hs`;
+
 
     setImmediate(() => {
       void (async () => {
@@ -939,6 +942,36 @@ export class AppointmentService {
   }
 
   /**
+   * Resolve an input string or alias into a YYYY-MM-DD date string strictly in Argentina timezone.
+   * Handles 'today', 'hoy', ISO timestamps with offsets, and plain YYYY-MM-DD.
+   */
+  static getArgentinaDateString(input: string): string {
+    if (!input) return '';
+    const clean = input.trim().toLowerCase();
+    if (clean === 'today' || clean === 'hoy') {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+      return clean;
+    }
+    const parsed = new Date(input);
+    if (!isNaN(parsed.getTime())) {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(parsed);
+    }
+    return input.split('T')[0];
+  }
+
+  /**
    * Calculate 30-minute slot availability for a given date and service,
    * enriched with predictive Smart Gaps scoring and optional compact filtering.
    */
@@ -951,13 +984,14 @@ export class AppointmentService {
     const service = await AppointmentService.resolveService(serviceId);
     if (!service) return null;
 
-    const dateStr = date.split('T')[0];
+    const dateStr = AppointmentService.getArgentinaDateString(date);
     const [year, month, day] = dateStr.split('-').map(Number);
     if (!year || !month || !day) return null;
 
     // Argentina is UTC-3 fixed (ART). 09:00 ART = 12:00 UTC, 19:00 ART = 22:00 UTC.
     const dayStart = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
     const dayEnd = new Date(Date.UTC(year, month - 1, day, 22, 0, 0, 0));
+
 
     const existing = await prisma.appointment.findMany({
       where: {
@@ -1046,7 +1080,8 @@ export class AppointmentService {
     const service = await AppointmentService.resolveService(serviceId);
     if (!service) return null;
 
-    const slots = await AppointmentService.getAvailability(date, serviceId, options?.staffId, {
+    const normalizedDateStr = AppointmentService.getArgentinaDateString(date);
+    const slots = await AppointmentService.getAvailability(normalizedDateStr, serviceId, options?.staffId, {
       ...options,
       compactOnly: false,
     });
@@ -1062,7 +1097,7 @@ export class AppointmentService {
       }));
 
     return {
-      date: date.split('T')[0],
+      date: normalizedDateStr,
       serviceId: service.id,
       serviceDuration: service.duration,
       totalSlots: slots.length,
@@ -1070,5 +1105,6 @@ export class AppointmentService {
       recommendedSlots: recommended,
       slots,
     };
+
   }
 }

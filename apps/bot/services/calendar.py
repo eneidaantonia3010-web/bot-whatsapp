@@ -3,10 +3,14 @@
 # ============================================
 
 import os
+import re
 import logging
+from datetime import datetime
+import pytz
 import httpx
 
 logger = logging.getLogger("glow_bot.calendar")
+TZ_AR = pytz.timezone("America/Argentina/Buenos_Aires")
 
 try:
     from config import API_URL, API_SECRET_KEY
@@ -48,12 +52,16 @@ async def create_appointment_via_api(
 ) -> dict | None:
     """Create an appointment via the Express API (which handles Calendar + DB)."""
     try:
+        clean_date = date.strip()
+        if "T" in clean_date and not re.search(r"[+-]\d{2}:\d{2}$|Z$", clean_date):
+            clean_date = f"{clean_date}-03:00"
+
         client = _get_client()
         response = await client.post(
             f"{API_URL}/api/appointments",
             headers=_get_auth_headers(),
             json={
-                "date": date,
+                "date": clean_date,
                 "serviceId": service_id,
                 "customerName": customer_name,
                 "customerPhone": customer_phone,
@@ -62,6 +70,7 @@ async def create_appointment_via_api(
             },
             timeout=30.0,
         )
+
         if response.status_code in (200, 201):
             logger.info(f"Appointment created/confirmed successfully via API: status={response.status_code}")
             return response.json()
@@ -93,6 +102,26 @@ async def get_availability(date: str, service_id: str) -> list[dict] | None:
     except Exception as e:
         logger.exception(f"Availability check error: {e}")
         return None
+
+
+async def get_smart_availability(date: str, service_id: str, limit: int = 4) -> dict | None:
+    """Get full Smart Gaps availability analysis from Express API."""
+    try:
+        client = _get_client()
+        response = await client.get(
+            f"{API_URL}/api/appointments/smart-availability",
+            headers=_get_auth_headers(),
+            params={"date": date, "serviceId": service_id, "limit": limit},
+            timeout=10.0,
+        )
+        if response.status_code == 200:
+            return response.json()
+        logger.warning(f"Smart availability check non-200 status: {response.status_code}")
+        return None
+    except Exception as e:
+        logger.exception(f"Smart availability check error: {e}")
+        return None
+
 
 
 async def get_upcoming_appointments(phone: str = None, instagram: str = None) -> list[dict]:

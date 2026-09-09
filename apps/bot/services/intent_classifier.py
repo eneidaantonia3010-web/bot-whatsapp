@@ -119,10 +119,10 @@ _PAYMENT_KEYWORDS = frozenset({
 _CANCELACION_POLICIA_KEYWORDS = frozenset({
     "política de cancelación", "politica de cancelacion",
     "políticas de cancelación", "politicas de cancelacion",
-    "con cuánto tiempo", "con cuanto tiempo", "aviso",
+    "con cuánto tiempo", "con cuanto tiempo", "aviso de cancelación",
     "tolerancia", "tolerancia de tiempo", "cuánto esperan",
     "cuanto esperan", "si llego tarde", "llego tarde",
-    "atraso", "retraso", "demora", "tardé", "tarde",
+    "atraso", "retraso", "demora", "llegar tarde", "voy tarde",
 })
 
 _HUMAN_ESCALATION_KEYWORDS = frozenset({

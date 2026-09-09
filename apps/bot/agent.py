@@ -203,35 +203,15 @@ def _strip_accents(text: str) -> str:
 def parse_date(text: str) -> tuple[str, str] | None:
     """Parse human date/time from Spanish text into (YYYY-MM-DD, HH:MM)."""
     norm_text = _strip_accents(text.strip())
-    today = datetime.now(TZ_AR).date()
+    now_ar = datetime.now(TZ_AR)
+    today = now_ar.date()
 
     day_map = {
         "lunes": 0, "martes": 1, "miercoles": 2,
         "jueves": 3, "viernes": 4, "sabado": 5,
     }
 
-    target_date = None
-
-    # 1. First check explicit days of the week (e.g. lunes, martes)
-    for day_name, day_num in day_map.items():
-        if re.search(rf"\b{day_name}\b", norm_text):
-            days_ahead = day_num - today.weekday()
-            if days_ahead <= 0:
-                days_ahead += 7
-            target_date = today + timedelta(days=days_ahead)
-            break
-
-    # 2. Check relative keywords only if no explicit day of the week
-    if not target_date:
-        if re.search(r"pasado\s*ma.?ana", norm_text) or "pasadomanana" in norm_text:
-            target_date = today + timedelta(days=2)
-        # Ensure 'manana' is not preceded by 'de la' or 'por la' (which indicates morning time qualifier)
-        elif re.search(r"(?<!de la\s)(?<!por la\s)\bma.?ana\b", norm_text) or "tomorrow" in norm_text:
-            target_date = today + timedelta(days=1)
-        elif re.search(r"\bhoy\b", norm_text) or "today" in norm_text:
-            target_date = today
-
-    # 3. Extract time (e.g. "a las 11", "a las 11 de la manana", "14hs", "16:30", "3 de la tarde", "10am")
+    # 1. Extract time (e.g. "a las 11", "a las 11 de la manana", "14hs", "16:30", "6 de la tarde", "10am")
     hour = None
     minute = 0
 
@@ -245,6 +225,8 @@ def parse_date(text: str) -> tuple[str, str] | None:
     if colon_match:
         hour = int(colon_match.group(1))
         minute = int(colon_match.group(2))
+        if 1 <= hour <= 11 and any(w in norm_text for w in ("tarde", "noche", "pm")):
+            hour += 12
     elif period_match:
         raw_h = int(period_match.group(1))
         qualifier = period_match.group(2).strip()
@@ -257,6 +239,39 @@ def parse_date(text: str) -> tuple[str, str] | None:
     elif unit_match:
         raw_h = int(unit_match.group(1) or unit_match.group(2))
         hour = raw_h + 12 if 1 <= raw_h <= 7 else raw_h
+
+    target_date = None
+
+    is_hoy = bool(re.search(r"\bhoy\b", norm_text) or "today" in norm_text)
+    is_pasado_manana = bool(re.search(r"pasado\s*ma.?ana", norm_text) or "pasadomanana" in norm_text)
+    is_manana = bool(not is_pasado_manana and (re.search(r"(?<!de la\s)(?<!por la\s)\bma.?ana\b", norm_text) or "tomorrow" in norm_text))
+
+    matched_day_num = None
+    for day_name, day_num in day_map.items():
+        if re.search(rf"\b{day_name}\b", norm_text):
+            matched_day_num = day_num
+            break
+
+    if is_hoy:
+        target_date = today
+    elif is_pasado_manana:
+        target_date = today + timedelta(days=2)
+    elif is_manana:
+        target_date = today + timedelta(days=1)
+    elif matched_day_num is not None:
+        if matched_day_num == today.weekday():
+            # Current day of the week requested: if hour is later today, it's today
+            if hour is not None and (hour, minute) > (now_ar.hour, now_ar.minute):
+                target_date = today
+            else:
+                target_date = today + timedelta(days=7)
+        elif matched_day_num > today.weekday():
+            days_ahead = matched_day_num - today.weekday()
+            target_date = today + timedelta(days=days_ahead)
+        else:
+            days_ahead = (matched_day_num - today.weekday()) + 7
+            target_date = today + timedelta(days=days_ahead)
+
 
     if target_date and hour is not None:
         if target_date.weekday() == 6:  # Sunday
@@ -657,13 +672,16 @@ async def _process_message_internal(
         )
 
         catalog_selected_service = None
-        if not is_cancelling_apt_pick and clean_msg not in (
+        digits_only = "".join(filter(str.isdigit, clean_msg_strip))
+        is_phone_number = len(digits_only) >= 7
+
+        if not is_cancelling_apt_pick and not is_phone_number and clean_msg not in (
             "hola", "buenas", "buen día", "buen dia", "buenas tardes", "buenas noches",
             "inicio", "reset", "menu", "menú", "empieza", "empezar de nuevo",
             "si", "sí", "no", "nop", "cancelar"
         ):
             opt_match = re.match(r"^(?:opci[oó]n\s*#?|#)?\s*([1-9]\d?)\.?$", clean_msg_strip, re.IGNORECASE)
-            opt_with_text = re.match(r"^(?:opci[oó]n\s*#?|#)?\s*([1-9]\d?)\s+(.+)$", clean_msg_strip, re.IGNORECASE)
+            opt_with_text = re.match(r"^(?:opci[oó]n\s*#?|#)\s*([1-9]\d?)\s+(.+)$", clean_msg_strip, re.IGNORECASE)
 
             if opt_match:
                 opt_idx = int(opt_match.group(1))
@@ -705,8 +723,38 @@ async def _process_message_internal(
             # Did the user also provide date/time in the same message?
             parsed_dt = parse_date(semantic_analysis.date_time_text or message)
             if parsed_dt:
+                date_str, time_str = parsed_dt
+                availability = await get_availability(date_str, catalog_selected_service["id"])
+                matching_slot = (
+                    next((s for s in availability if s.get("time") == time_str and s.get("available")), None)
+                    if availability is not None
+                    else None
+                )
+
+                if availability is not None and not matching_slot:
+                    available_times = [s["time"] for s in availability if s.get("available")][:5]
+                    if available_times:
+                        times_str = ", ".join([f"*{t}hs*" for t in available_times])
+                        response = (
+                            f"¡Excelente elección! 💇 *{catalog_selected_service['name']}* ({price_str}).\n\n"
+                            f"😔 El horario de las *{time_str}hs* para esa fecha ya está ocupado.\n\n"
+                            f"Horarios disponibles: {times_str}\n\n"
+                            f"¿Cuál te queda mejor? 😊"
+                        )
+                    else:
+                        response = (
+                            f"¡Excelente elección! 💇 *{catalog_selected_service['name']}* ({price_str}).\n\n"
+                            f"😔 No hay turnos disponibles para ese día.\n\n"
+                            f"¿Querés que te anote en la *lista de espera* o probamos con otra fecha? ✨"
+                        )
+                    conv["stage"] = "date_selection"
+                    chat_history.append({"role": "model", "parts": [response]})
+                    save_conversation_state(sender_id, conv)
+                    return welcome_back_prefix + response
+
                 conv["selected_date"], conv["selected_time"] = parsed_dt
                 disp_date = _format_date_display(parsed_dt[0])
+
 
                 if not conv.get("customer_name"):
                     conv["stage"] = "name_input"
@@ -846,9 +894,38 @@ async def _process_message_internal(
             if greet_service and parsed_greet_date:
                 conv["selected_service"] = greet_service
                 conv["selected_services"] = [greet_service]
+                date_str, time_str = parsed_greet_date
+                price_str = _format_price(greet_service["price"])
+
+                availability = await get_availability(date_str, greet_service["id"])
+                matching_slot = (
+                    next((s for s in availability if s.get("time") == time_str and s.get("available")), None)
+                    if availability is not None
+                    else None
+                )
+                if availability is not None and not matching_slot:
+                    available_times = [s["time"] for s in availability if s.get("available")][:5]
+                    if available_times:
+                        times_str = ", ".join([f"*{t}hs*" for t in available_times])
+                        response = (
+                            f"¡Hola, hermosa! 💕 *{greet_service['name']}* ({price_str}).\n\n"
+                            f"😔 El horario de las *{time_str}hs* para esa fecha ya está ocupado.\n\n"
+                            f"Horarios disponibles: {times_str}\n\n"
+                            f"¿Cuál te queda mejor? 😊"
+                        )
+                    else:
+                        response = (
+                            f"¡Hola, hermosa! 💕 *{greet_service['name']}* ({price_str}).\n\n"
+                            f"😔 No hay turnos disponibles para ese día.\n\n"
+                            f"¿Querés que te anote en la *lista de espera* o probamos con otra fecha? ✨"
+                        )
+                    conv["stage"] = "date_selection"
+                    chat_history.append({"role": "model", "parts": [response]})
+                    save_conversation_state(sender_id, conv)
+                    return welcome_back_prefix + response
+
                 conv["selected_date"], conv["selected_time"] = parsed_greet_date
                 disp_date = _format_date_display(parsed_greet_date[0])
-                price_str = _format_price(greet_service["price"])
 
                 if not conv.get("customer_name"):
                     conv["stage"] = "name_input"
@@ -893,6 +970,20 @@ async def _process_message_internal(
                 chat_history.append({"role": "model", "parts": [response]})
                 save_conversation_state(sender_id, conv)
                 return welcome_back_prefix + response
+
+            elif parsed_greet_date and not greet_service:
+                conv["selected_date"], conv["selected_time"] = parsed_greet_date
+                disp_date = _format_date_display(parsed_greet_date[0])
+                response = (
+                    f"¡Hola, hermosa! 💕 ¡Qué lindo que nos escribas! Con gusto te agendamos para el *{disp_date} a las {parsed_greet_date[1]}hs*.\n\n"
+                    f"¿Qué servicio te gustaría realizarte? ✨\n\n"
+                    f"{catalog}"
+                )
+                conv["stage"] = "service_selection"
+                chat_history.append({"role": "model", "parts": [response]})
+                save_conversation_state(sender_id, conv)
+                return welcome_back_prefix + response
+
 
             if intent == "BOOKING" and len(message.split()) > 3:
                 multi = await _parse_multi_service(message, services, chat_history)
@@ -952,9 +1043,41 @@ async def _process_message_internal(
                 conv["selected_services"] = [matched_service]
                 price_str = _format_price(matched_service["price"])
 
-                # Check if date was also provided in the same turn
+                # Check if date was also provided in the same turn or preserved from greeting
                 parsed_dt = parse_date(semantic_analysis.date_time_text or message)
+                if not parsed_dt and conv.get("selected_date") and conv.get("selected_time"):
+                    parsed_dt = (conv["selected_date"], conv["selected_time"])
+
                 if parsed_dt:
+                    date_str, time_str = parsed_dt
+                    availability = await get_availability(date_str, matched_service["id"])
+                    matching_slot = (
+                        next((s for s in availability if s.get("time") == time_str and s.get("available")), None)
+                        if availability is not None
+                        else None
+                    )
+
+                    if availability is not None and not matching_slot:
+                        available_times = [s["time"] for s in availability if s.get("available")][:5]
+                        if available_times:
+                            times_str = ", ".join([f"*{t}hs*" for t in available_times])
+                            response = (
+                                f"¡Excelente elección! 💇 *{matched_service['name']}* ({price_str}).\n\n"
+                                f"😔 El horario de las *{time_str}hs* para esa fecha ya está ocupado.\n\n"
+                                f"Horarios disponibles: {times_str}\n\n"
+                                f"¿Cuál te queda mejor? 😊"
+                            )
+                        else:
+                            response = (
+                                f"¡Excelente elección! 💇 *{matched_service['name']}* ({price_str}).\n\n"
+                                f"😔 No hay turnos disponibles para ese día.\n\n"
+                                f"¿Querés que te anote en la *lista de espera* o probamos con otra fecha? ✨"
+                            )
+                        conv["stage"] = "date_selection"
+                        chat_history.append({"role": "model", "parts": [response]})
+                        save_conversation_state(sender_id, conv)
+                        return welcome_back_prefix + response
+
                     conv["selected_date"], conv["selected_time"] = parsed_dt
                     disp_date = _format_date_display(parsed_dt[0])
 
@@ -986,6 +1109,7 @@ async def _process_message_internal(
                     chat_history.append({"role": "model", "parts": [response]})
                     save_conversation_state(sender_id, conv)
                     return welcome_back_prefix + response
+
 
                 conv["stage"] = "date_selection"
 

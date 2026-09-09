@@ -85,9 +85,15 @@ from services.semantic_router import (
 logger = logging.getLogger("glow_bot.agent")
 TZ_AR = pytz.timezone("America/Argentina/Buenos_Aires")
 
+RIOPLATENSE_GREETING_PROMPT = (
+    "\n[Instrucción de Saludo Rioplatense: Tu saludo inicial debe ser sumamente cálido, cariñoso, dulce y cercano en auténtico español rioplatense "
+    "(ej: '¡Hola, hermosa! 💕 ¡Qué lindo que nos escribas! Bienvenida a Glow Studio ✨'). Hacé sentir a cada clienta única, mimada y bienvenida con la mayor calidez porteña.]"
+)
+
 # In-memory conversation state cache and per-sender locks
 conversations: dict[str, dict] = {}
 _sender_locks: dict[str, asyncio.Lock] = {}
+
 
 
 def _get_sender_lock(sender_id: str) -> asyncio.Lock:
@@ -370,7 +376,11 @@ async def _process_message_internal(
         if clean_phone:
             extract_and_remember_preferences(clean_phone, message)
         memory_context = format_memory_system_context(clean_phone)
-        system_personality = SYSTEM_PERSONALITY_MAP.get(lang, SYSTEM_PERSONALITY_MAP["es"]) + memory_context
+        system_personality = (
+            SYSTEM_PERSONALITY_MAP.get(lang, SYSTEM_PERSONALITY_MAP["es"])
+            + memory_context
+            + (RIOPLATENSE_GREETING_PROMPT if conv.get("stage") == "greeting" else "")
+        )
 
         # STEP 1: Intent Classification with Confidence Scoring (Non-blocking async)
         intent, confidence = await classify_intent_with_confidence_async(message)
@@ -843,14 +853,14 @@ async def _process_message_internal(
                 if not conv.get("customer_name"):
                     conv["stage"] = "name_input"
                     response = (
-                        f"¡Hola! 💕 ¡Qué lindo tenerte por acá! Agendamos *{greet_service['name']}* ({price_str}) "
+                        f"¡Hola, hermosa! 💕 ¡Qué lindo que nos escribas! Agendamos *{greet_service['name']}* ({price_str}) "
                         f"para el *{disp_date} a las {parsed_greet_date[1]}hs*.\n\n"
                         f"Para confirmar tu turno, ¿me dirías tu *nombre completo*? 😊"
                     )
                 elif not conv.get("customer_phone"):
                     conv["stage"] = "phone_input"
                     response = (
-                        f"¡Hola *{conv['customer_name']}*! 💕 Te agendamos *{greet_service['name']}* ({price_str}) "
+                        f"¡Hola, hermosa *{conv['customer_name']}*! 💕 Te agendamos *{greet_service['name']}* ({price_str}) "
                         f"para el *{disp_date} a las {parsed_greet_date[1]}hs*.\n\n"
                         f"Por último, ¿cuál es tu número de WhatsApp de contacto? 📱"
                     )

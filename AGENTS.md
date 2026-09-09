@@ -15,7 +15,18 @@ El proyecto utiliza **3 cuentas gratuitas independientes de Render**, cada una a
 2. **SIEMPRE** pedir confirmación explícita al usuario indicando el correo y el servicio correspondiente antes de ejecutar cualquier acción de navegación, login, o despliegue en Render.
 3. Consultar siempre la memoria ([MEMORY.md](file:///c:/Users/herct/Desktop/mi-bot-whatsapp/MEMORY.md) y `agent-memory`) ante cualquier duda sobre despliegues o infraestructura.
 
+## 📝 Protocolo Obligatorio de Historial de Git e Informes en Español (100% Requerido)
+
+A partir de este momento, **todos los agentes** tienen la obligación estricta de:
+1. **Redactar todos los mensajes de commit convencionales 100% en español**:
+   - Usar los tipos convencionales en español o prefijos válidos: `arreglo:` o `correccion:` (fix), `mejora:` o `caracteristica:` (feat), `refactorizacion:` (refactor), `prueba:` o `test:` (test), `documentacion:` o `docs:` (docs), `estilo:` (style), `mantenimiento:` o `ajuste:` (chore/build).
+   - Estructura: `<tipo>(<ámbito>): <descripción concisa en español>`
+   - Ejemplo: `mejora(bot): hacer más cálido el saludo inicial en español rioplatense`
+   - Ejemplo: `arreglo(api): corregir cálculo de zona horaria en notificaciones`
+2. **Redactar todos los informes de despliegue, resúmenes operativos y notas de versión 100% en español**.
+
 ## Project Structure & Context
+
 
 - `apps/web`: Next.js 16 + React 19 web application (frontend + salon booking wizard).
 - `apps/api`: Express + TypeScript backend REST API (Prisma ORM, Baileys WhatsApp integration).

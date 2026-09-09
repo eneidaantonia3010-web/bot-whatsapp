@@ -71,28 +71,26 @@ gitGraph
 
 ## 2. Convención de Commits (Conventional Commits)
 
-Seguimos la especificación formal de [Conventional Commits v1.0.0](https://www.conventionalcommits.org/). Todos los mensajes deben estar redactados en idioma inglés o español consistente y seguir la estructura:
+Seguimos la especificación de [Conventional Commits](https://www.conventionalcommits.org/). **Regla de Historial Obligatoria:** Todos los mensajes de commit y resúmenes de despliegue deben redactarse **100% en español**, utilizando la siguiente estructura:
 
 ```text
-<tipo>(<ámbito opcional>): <descripción concisa en imperativo>
+<tipo>(<ámbito opcional>): <descripción concisa en español>
 
-[cuerpo explicativo opcional: contexto del problema y por qué se tomó la solución]
+[cuerpo explicativo opcional en español: contexto del problema y solución aplicada]
 
-[pie de página opcional: referencias a tickets o BREAKING CHANGE]
+[pie de página opcional: referencias a tickets o advertencias]
 ```
 
-### 2.1 Tipos Permitidos
+### 2.1 Tipos y Prefijos Permitidos (100% en Español)
 
-- **`feat`**: Una nueva funcionalidad para el usuario o sistema (ej. nuevo endpoint, componente UI).
-- **`fix`**: Corrección de un bug o fallo en producción o pruebas.
-- **`docs`**: Cambios exclusivos en documentación (`README.md`, `API.md`, comentarios JSDoc/Docstrings).
-- **`style`**: Formateo de código, punto y coma faltante, indentación (sin impacto en lógica).
-- **`refactor`**: Refactorización de código sin añadir funcionalidades ni corregir bugs.
-- **`perf`**: Cambio de código orientado a mejorar el rendimiento o latencia.
-- **`test`**: Creación o modificación de suites de pruebas unitarias o de integración.
-- **`build`**: Modificaciones en el sistema de compilación, dependencias o configuración del monorepo (`package.json`, `pnpm-workspace.yaml`, `tsconfig.json`).
-- **`ci`**: Cambios en workflows de CI/CD (GitHub Actions, Render Blueprints).
-- **`chore`**: Tareas rutinarias de mantenimiento, actualización de `.gitignore`, scripts auxiliares.
+- **`mejora:`** o **`caracteristica:`** (o `feat:`): Una nueva funcionalidad para el usuario o sistema (ej. nuevo endpoint, componente UI).
+- **`arreglo:`** o **`correccion:`** (o `fix:`): Corrección de un bug o fallo en producción o pruebas.
+- **`refactorizacion:`** (o `refactor:`): Refactorización de código sin añadir funcionalidades ni corregir bugs.
+- **`prueba:`** (o `test:`): Creación o modificación de suites de pruebas unitarias o de integración.
+- **`documentacion:`** (o `docs:`): Cambios exclusivos en documentación (`README.md`, `API.md`, comentarios).
+- **`estilo:`** (o `style:`): Formateo de código, punto y coma faltante, indentación (sin impacto en lógica).
+- **`mantenimiento:`** o **`ajuste:`** (o `chore:`, `build:`, `ci:`): Tareas de mantenimiento, dependencias o workflows.
+
 
 ### 2.2 Ámbitos (Scopes) Recomendados
 

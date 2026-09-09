@@ -61,7 +61,7 @@ def detect_language(text: str) -> LanguageCode:
 I18N = {
     "es": {
         "greeting": (
-            "¡Hola! Bienvenida a *Glow Studio by Sofia* ✨\n\n"
+            "¡Hola, hermosa! 💕 ¡Qué lindo que nos escribas! Bienvenida a *Glow Studio by Sofia* ✨\n\n"
             "{catalog}"
         ),
         "select_service": "Escribí el número o nombre del servicio que te interesa 😊",
